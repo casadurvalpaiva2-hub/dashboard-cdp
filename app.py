@@ -3,9 +3,46 @@ import sqlite3
 import pandas as pd
 import os
 from datetime import datetime
+import streamlit as st
 
+# 1. Defina sua senha (ou busque de um banco de dados/secrets)
+SENHA_MESTRA = "CDP2026" # Altere para uma senha forte
+
+def verificar_login():
+    if "autenticado" not in st.session_state:
+        st.session_state.autenticado = False
+
+    if not st.session_state.autenticado:
+        st.markdown("<h1 style='text-align: center;'> Sistema interno - CDP (DI)</h1>", unsafe_allow_html=True)
+        
+        # Centraliza a caixa de login
+        _, col_login, _ = st.columns([1, 2, 1])
+        with col_login:
+            senha = st.text_input("Insira a senha de acesso:", type="password")
+            if st.button("Entrar", use_container_width=True):
+                if senha == "CDP2026": # Substitua pela sua senha
+                    st.session_state.autenticado = True
+                    st.rerun()
+                else:
+                    st.error("Senha incorreta!")
+        
+        # O PULO DO GATO: Para a execução aqui se não estiver logado
+        st.stop() 
+
+# Chama a função logo no início do código
+verificar_login()
+
+
+
+# --- EXECUÇÃO ---
+if verificar_login():
+    # AQUI VAI TODO O SEU CÓDIGO ATUAL (Menu, Dashboard, etc.)
+    # Se o usuário não estiver logado, ele nunca chegará aqui.
+    st.sidebar.button("Sair", on_click=lambda: st.session_state.update({"autenticado": False}))
+    
+    # ... resto do seu código ...
 # 1. Configuração de Página e Identidade Visual
-st.set_page_config(page_title="Gestão Casa Durval Paiva", layout="wide", page_icon="🏥")
+st.set_page_config(page_title="GESTÃO DI", layout="wide", page_icon="🏠")
 
 st.markdown("""
     <style>
@@ -73,6 +110,7 @@ def run_insert(query, params=()):
             conn.commit()
     except Exception as e:
         st.error(f"Erro ao salvar: {e}")
+        
 
 # --- NAVEGAÇÃO ---
 st.sidebar.title("**MENU GESTÃO**")
@@ -142,48 +180,62 @@ if menu == "📊 **PAINEL GERAL**":
 
 # --- 2. PARCEIROS E PROJETOS ---
 elif menu == "🏢 **PARCEIROS/PROJETOS**":
-    st.title("Gestão de Parceiros e Projetos")
-    tab1, tab2 = st.tabs(["🏢 Parceiros", "🚀 Projetos"])
+    st.title("**Gestão de parceiros e projetos**")
+    tab1, tab2 = st.tabs(["🏢 **Parceiros**", "📃 **Projetos**"])
     
     with tab1:
-        st.subheader("🏢 Gestão de Parceiros")
-        
-        # 1. Exibição da Tabela Atual
-        df_p = run_query("SELECT * FROM Parceiro")
+
+        # 1. BUSCA DE DADOS SIMPLIFICADA
+        # Se o erro 'subcategory' persistir, o try/except abaixo vai ignorar e rodar o resto
+        try:
+            query = """
+                SELECT p.*, c.nome_categoria 
+                FROM Parceiro p 
+                LEFT JOIN Categoria_Parceiro c ON p.id_categoria = c.id_categoria
+            """
+            df_p = run_query(query)
+        except:
+            df_p = run_query("SELECT * FROM Parceiro")
+
+        # Filtro de Busca
+        busca = st.text_input("🔍 Pesquisar parceiro:")
+        if busca and not df_p.empty:
+            df_p = df_p[df_p['nome_instituicao'].str.contains(busca, case=False)]
+
+        # Exibição da Tabela
         st.dataframe(df_p, use_container_width=True, hide_index=True)
-        
-        # 2. Formulário de Cadastro de Novo Parceiro
-        with st.expander("➕ Cadastrar Novo Parceiro / Instituição"):
-            with st.form("form_novo_parceiro", clear_on_submit=True):
-                # Pegamos as colunas reais para evitar erro de nome
-                colunas_p = df_p.columns.tolist()
-                
-                # Mapeando campos (ajuste conforme os nomes que aparecem na sua tabela)
-                # Geralmente: [0] id, [1] nome/empresa, [2] tipo/contato...
-                label_nome = colunas_p[1] if len(colunas_p) > 1 else "Nome"
-                
-                novo_nome = st.text_input(f"Nome da Instituição ({label_nome})")
-                
-                # Se houver mais colunas, criamos campos extras dinamicamente
-                extra_campos = {}
-                for col in colunas_p[2:]: # Pula o ID e o Nome
-                    extra_campos[col] = st.text_input(f"Informação: {col}")
-                
-                if st.form_submit_button("Salvar Parceiro"):
-                    if novo_nome:
-                        # Montando a Query Dinâmica
-                        cols_sql = [label_nome] + list(extra_campos.keys())
-                        placeholders = ", ".join(["?"] * len(cols_sql))
-                        nomes_cols = ", ".join(cols_sql)
-                        valores = [novo_nome] + list(extra_campos.values())
+
+        st.markdown("---")
+
+        # 2. SEÇÃO DE CADASTRO
+        with st.expander("**CADASTRAR NOVO PARCEIRO**"):
+            # Busca categorias para o menu
+            df_cat_list = run_query("SELECT id_categoria, nome_categoria FROM Categoria_Parceiro")
+            opcoes_cat = dict(zip(df_cat_list['nome_categoria'], df_cat_list['id_categoria']))
+            
+            with st.form("form_novo_p", clear_on_submit=True):
+                col1, col2 = st.columns(2)
+                with col1:
+                    nome = st.text_input("Nome da Instituição")
+                    data = st.date_input("Data de Adesão")
+                with col2:
+                    status = st.selectbox("Status", ["Ativo", "Inativo"])
+                    cat_nome = st.selectbox("Categoria Principal", options=list(opcoes_cat.keys()))
+                    sub_txt = st.text_input("Subcategoria / Detalhe")
+
+                if st.form_submit_button("Salvar"):
+                    if nome:
+                        id_cat = opcoes_cat[cat_nome]
+                        # SQL seguro: se a coluna 'subcategory' não existir, ele salva apenas o básico
+                        try:
+                            ins = "INSERT INTO Parceiro (nome_instituicao, data_adesao, status, id_categoria, subcategory) VALUES (?,?,?,?,?)"
+                            run_insert(ins, (nome, data.strftime('%Y-%m-%d'), status, id_cat, sub_txt))
+                        except:
+                            ins = "INSERT INTO Parceiro (nome_instituicao, data_adesao, status, id_categoria) VALUES (?,?,?,?)"
+                            run_insert(ins, (nome, data.strftime('%Y-%m-%d'), status, id_cat))
                         
-                        query_insert = f"INSERT INTO Parceiro ({nomes_cols}) VALUES ({placeholders})"
-                        
-                        if run_insert(query_insert, valores, f"Cadastrou Parceiro: {novo_nome}"):
-                            st.success(f"Parceiro '{novo_nome}' adicionado com sucesso!")
-                            st.rerun()
-                    else:
-                        st.warning("O nome da instituição é obrigatório.")
+                        st.success("Cadastrado!")
+                        st.rerun()
 
 # --- 3. REGISTRAR DOAÇÃO ---
 elif menu == "💰 **REGISTRAR DOAÇÃO**":
@@ -252,3 +304,10 @@ elif menu == "📞 **CONTATOS**":
                         st.error("O nome do contato é obrigatório.")
         else:
             st.warning("Cadastre um Parceiro antes de adicionar contatos.")
+
+            # --- TUDO O QUE JÁ EXISTE NA SIDEBAR FICA ACIMA ---
+
+# 3. O botão de sair
+if st.sidebar.button("Sair", use_container_width=True):
+    st.session_state.clear()
+    st.rerun()
