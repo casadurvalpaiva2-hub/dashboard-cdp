@@ -7,40 +7,68 @@ from datetime import datetime
 # 1. Configuração de Página e Identidade Visual
 st.set_page_config(page_title="Gestão Casa Durval Paiva", layout="wide", page_icon="🏥")
 
-# --- INJEÇÃO DE CSS PARA IDENTIDADE VISUAL ---
+# --- INJEÇÃO DE CSS: IDENTIDADE VISUAL E MOBILE APP ---
 st.markdown("""
     <style>
-    /* Cor de fundo da página principal */
-    .stApp { background-color: #ffffff; }
+    /* Fundo geral do site (Branco) */
+    .stApp { background-color: #FFFFFF !important; }
     
-    /* Barra Lateral (Preto com texto Branco) */
+    /* Barra Lateral (Preta) */
     [data-testid="stSidebar"] {
-        background-color: #1a1a1a;
-        color: white;
-    }
-    [data-testid="stSidebar"] * { color: white !important; }
-    
-    /* Títulos e Métricas (Vermelho Durval Paiva) */
-    h1, h2, h3, [data-testid="stMetricValue"] {
-        color: #E63946 !important;
+        background-color: #1A1A1A !important;
     }
     
-    /* Botões (Vermelho com texto Branco) */
+    /* Forçar texto da barra lateral a ser branco */
+    [data-testid="stSidebar"] * {
+        color: white !important;
+    }
+
+    /* Títulos e textos gerais */
+    h1, h2, h3, p, span, [data-testid="stMarkdownContainer"] p {
+        color: #1A1A1A; 
+    }
+    
+    /* Destaques em Vermelho Durval Paiva */
+    h1, h2, [data-testid="stMetricValue"] {
+        color: #E31D24 !important; 
+    }
+
+    /* Transformar as Métricas em CARTÕES (Cards) - Ótimo para celular! */
+    [data-testid="stMetric"] {
+        background-color: #F9F9F9;
+        border: 1px solid #EAEAEA;
+        border-radius: 12px;
+        padding: 15px;
+        box-shadow: 2px 2px 10px rgba(0,0,0,0.05);
+        text-align: center;
+    }
+
+    /* Botões: Vermelho/Amarelo */
     .stButton>button {
-        background-color: #E63946;
-        color: white;
-        border-radius: 8px;
-        border: none;
+        background-color: #FFF200 !important;
+        color: #1A1A1A !important;
         font-weight: bold;
+        border: 1px solid #1A1A1A;
+        border-radius: 8px;
+        width: 100%; /* No celular, o botão ocupa a tela toda */
     }
     .stButton>button:hover {
-        background-color: #ffb703; /* Amarelo ao passar o mouse */
-        color: #1a1a1a;
+        background-color: #E31D24 !important;
+        color: white !important;
     }
-    
-    /* Input fields e Alertas (Borda Amarela) */
-    .stTextInput>div>div>input, .stSelectbox>div>div>div {
-        border-bottom: 2px solid #ffb703 !important;
+
+    /* AJUSTES ESPECÍFICOS PARA CELULARES */
+    @media (max-width: 768px) {
+        /* Reduz os espaços laterais e no topo para ganhar área útil */
+        .block-container {
+            padding-top: 2rem !important;
+            padding-left: 1rem !important;
+            padding-right: 1rem !important;
+        }
+        /* Diminui um pouco a fonte dos números gigantes para não quebrar a tela */
+        [data-testid="stMetricValue"] {
+            font-size: 1.8rem !important;
+        }
     }
     </style>
     """, unsafe_allow_html=True)
