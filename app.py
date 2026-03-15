@@ -90,6 +90,10 @@ st.sidebar.markdown("---")
 pasta_atual = os.path.dirname(os.path.abspath(__file__))
 db_path = os.path.join(pasta_atual, 'MeusContatos.db')
 st.sidebar.code(f"Banco atual: {os.path.abspath(db_path)}")
+# Teste de leitura direta do banco
+with sqlite3.connect(db_path) as test_conn:
+    res = test_conn.execute("SELECT COUNT(*) FROM Contato_Direto").fetchone()
+    st.sidebar.write(f"Total de contatos no arquivo: {res[0]}")
 
 def run_query(query, params=()):
     try:
@@ -340,7 +344,37 @@ elif menu == "**CONTATOS**":
 
             # --- TUDO O QUE JÁ EXISTE NA SIDEBAR FICA ACIMA ---
 
+st.sidebar.subheader("Extrair dados")
+
+# 1. Download do Banco de Dados Completo (para abrir no DB Browser)
+with open(db_path, "rb") as f:
+    st.sidebar.download_button(
+        label="Baixar arquivo .db",
+        data=f,
+        file_name="MeusContatos_Nuvem.db",
+        mime="application/octet-stream"
+    )
+
+# 2. Download em Excel (mais fácil para relatórios)
+import pandas as pd
+from io import BytesIO
+
+if st.sidebar.button("Gerar planilha Excel"):
+    df_excel = run_query("SELECT * FROM Contato_Direto")
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        df_excel.to_excel(writer, index=False, sheet_name='Contatos')
+    
+    st.sidebar.download_button(
+        label="Clique para baixar Excel",
+        data=output.getvalue(),
+        file_name="contatos_extraidos.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+
 # 3. O botão de sair
 if st.sidebar.button("Sair", use_container_width=True):
     st.session_state.clear()
     st.rerun()
+
+    st.sidebar.markdown("---")
