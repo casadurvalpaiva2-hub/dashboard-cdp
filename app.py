@@ -10,63 +10,66 @@ st.set_page_config(page_title="Gestão Casa Durval Paiva", layout="wide", page_i
 # --- CSS LIMPO E MODERNO (Sem o preto) ---
 st.markdown("""
     <style>
-    /* 1. Fundo e Texto Geral */
+    /* 1. Reset Total para Mobile (Força fundo Branco) */
     .stApp {
         background-color: #FFFFFF !important;
     }
-    
-    /* 2. Barra Lateral Branca e Clean */
+
+    /* 2. Barra Lateral Clean (Cinza bem clarinho) */
     [data-testid="stSidebar"] {
-        background-color: #F8F9FA !important; /* Cinza clarinho quase branco */
-        border-right: 1px solid #E0E0E0;
+        background-color: #F8F9FA !important;
+        border-right: 1px solid #EEEEEE;
     }
-    
-    /* Texto da barra lateral em cinza escuro para ler bem */
-    [data-testid="stSidebar"] section, [data-testid="stSidebar"] span, [data-testid="stSidebar"] p {
+    [data-testid="stSidebar"] * {
         color: #333333 !important;
     }
 
-    /* 3. Títulos em Vermelho Institucional */
+    /* 3. Títulos e Subtítulos */
     h1, h2, h3 {
-        color: #E31D24 !important;
-        font-weight: 800 !important;
+        color: #E31D24 !important; /* Vermelho para destaque */
+        font-family: 'sans-serif';
     }
 
-    /* 4. Cartões de Métricas (Brancos com Sombra Leve) */
+    /* 4. CARTÕES DE MÉTRICA (Estilo Mobile Moderno) */
+    /* Isso cria blocos brancos com sombra, fáceis de ler no celular */
     [data-testid="stMetric"] {
         background-color: #FFFFFF !important;
+        border-radius: 12px !important;
+        padding: 15px !important;
         border: 1px solid #F0F0F0 !important;
-        border-radius: 15px !important;
-        padding: 20px !important;
-        box-shadow: 0px 4px 20px rgba(0, 0, 0, 0.05) !important;
+        box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.05) !important;
+        margin-bottom: 15px !important;
     }
     
-    /* Valores das métricas em Vermelho */
+    /* Cor do número dentro do cartão */
     [data-testid="stMetricValue"] {
         color: #E31D24 !important;
-        font-weight: bold !important;
+        font-size: 1.8rem !important;
     }
 
-    /* 5. Botões em Amarelo (Destaque de ação) */
+    /* 5. BOTÕES GRANDES (Fáceis de clicar com o polegar) */
     .stButton>button {
-        background-color: #FFF200 !important;
+        width: 100% !important;
+        height: 50px !important;
+        background-color: #FFF200 !important; /* Amarelo */
         color: #000000 !important;
-        border: none !important;
         border-radius: 10px !important;
+        border: none !important;
         font-weight: bold !important;
-        padding: 0.5rem 1rem !important;
-        transition: 0.3s;
-    }
-    
-    .stButton>button:hover {
-        background-color: #E31D24 !important;
-        color: #FFFFFF !important;
+        font-size: 1rem !important;
+        margin-top: 10px !important;
     }
 
-    /* Ajuste para Celular */
+    /* 6. GRÁFICOS (Garante que o fundo seja claro) */
+    .stPlotlyChart, .stChart {
+        background-color: #FFFFFF !important;
+        border-radius: 12px;
+    }
+
+    /* Ajuste de Margens para Celular */
     @media (max-width: 640px) {
         .block-container {
-            padding: 1.5rem 1rem !important;
+            padding: 1rem !important;
         }
     }
     </style>
