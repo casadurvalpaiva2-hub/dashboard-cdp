@@ -111,6 +111,16 @@ def run_insert(query, params=()):
     except Exception as e:
         st.error(f"Erro ao salvar: {e}")
         
+# --- AJUSTE DEFINITIVO DO BANCO ---
+try:
+    with sqlite3.connect(db_path) as conn:
+        # Tenta adicionar a coluna email se ela não existir
+        try:
+            conn.execute("ALTER TABLE Contato_Direto ADD COLUMN email TEXT")
+        except:
+            pass # Se já existir, ele pula
+except Exception as e:
+    st.error(f"Erro ao atualizar banco: {e}")
 
 # --- NAVEGAÇÃO ---
 st.sidebar.title("**MENU GESTÃO**")
@@ -266,44 +276,66 @@ elif menu == "**REGISTRAR DOAÇÃO**":
     else:
         st.error("Cadastre um parceiro na tabela 'Parceiro' antes de continuar.")
 
-# --- 4. CONTATOS DIRETOS ---
+# --- 4. CONTATOS DIRETO ---
 elif menu == "**CONTATOS**":
-    st.title("Agenda de Contatos Diretos")
-    
-    # 1. Exibição da Tabela
-    df_contatos = run_query("SELECT * FROM Contato_Direto")
-    st.dataframe(df_contatos, use_container_width=True, hide_index=True)
-    
-    # 2. Formulário com Vínculo
-    with st.expander("➕ Adicionar Novo Contato"):
-        # Buscamos os parceiros para o usuário selecionar pelo nome
-        df_p_contatos = run_query("SELECT id_parceiro, nome_instituicao FROM Parceiro")
-        
-        if not df_p_contatos.empty:
-            with st.form("form_contato_direto", clear_on_submit=True):
-                nome_c = st.text_input("Nome do Contato")
-                cargo = st.text_input("Cargo")
-                telefone = st.text_input("Telefone/WhatsApp")
-                
-                # Seleção do Parceiro (O pulo do gato!)
-                parceiro_nome = st.selectbox("Vincular ao Parceiro/Instituição", df_p_contatos['nome_instituicao'].tolist())
-                
-                if st.form_submit_button("Salvar Contato"):
-                    if nome_c:
-                        # Recupera o ID do parceiro selecionado
-                        id_venculado = df_p_contatos[df_p_contatos['nome_instituicao'] == parceiro_nome]['id_parceiro'].values[0]
-                        
-                        # Ajuste os nomes das colunas abaixo conforme seu banco (ex: id_parceiro, nome_contato, etc)
-                        query_c = "INSERT INTO Contato_Direto (id_parceiro, nome_contato, cargo, telefone) VALUES (?,?,?,?)"
-                        params_c = (int(id_venculado), nome_c, cargo, telefone)
-                        
-                        if run_insert(query_c, params_c, f"Cadastrou contato: {nome_c} para {parceiro_nome}"):
-                            st.success(f"Contato {nome_c} vinculado a {parceiro_nome} com sucesso!")
-                            st.rerun()
-                    else:
-                        st.error("O nome do contato é obrigatório.")
+    st.title("👤 Agenda de Contatos Diretos")
+
+    # 1. BUSCA DE DADOS (Usando o nome correto: nome_pessoa)
+    query_view = """
+        SELECT p.nome_instituicao as Empresa, 
+               c.nome_pessoa as Nome, 
+               c.cargo as Cargo, 
+               c.telefone as WhatsApp, 
+               c.email as [E-mail]
+        FROM Contato_Direto c
+        LEFT JOIN Parceiro p ON c.id_parceiro = p.id_parceiro
+    """
+    try:
+        df_contatos = run_query(query_view)
+        if not df_contatos.empty:
+            st.dataframe(df_contatos, use_container_width=True, hide_index=True)
         else:
-            st.warning("Cadastre um Parceiro antes de adicionar contatos.")
+            st.info("Nenhum contato cadastrado ainda.")
+    except Exception as e:
+        st.error(f"Erro ao carregar tabela: {e}")
+
+    st.markdown("---")
+
+    # 2. FORMULÁRIO DE CADASTRO
+    with st.expander("➕ Adicionar Novo Contato"):
+        df_p_contatos = run_query("SELECT id_parceiro, nome_instituicao FROM Parceiro")
+
+        if not df_p_contatos.empty:
+            with st.form("form_contato_final", clear_on_submit=True):
+                c1, c2 = st.columns(2)
+                with c1:
+                    nome_f = st.text_input("Nome da Pessoa")
+                    email_f = st.text_input("E-mail")
+                with c2:
+                    cargo_f = st.text_input("Cargo")
+                    tel_f = st.text_input("Telefone")
+                
+                parceiro_nome = st.selectbox("Vincular à Instituição", 
+                                           options=df_p_contatos['nome_instituicao'].tolist())
+
+                if st.form_submit_button("Salvar Contato"):
+                    if nome_f:
+                        try:
+                            # Pega o ID do parceiro selecionado
+                            id_p = df_p_contatos[df_p_contatos['nome_instituicao'] == parceiro_nome]['id_parceiro'].values[0]
+                            
+                            # SQL usando 'nome_pessoa' (confirmado no seu DB Browser)
+                            sql = "INSERT INTO Contato_Direto (id_parceiro, nome_pessoa, cargo, telefone, email) VALUES (?, ?, ?, ?, ?)"
+                            run_insert(sql, (int(id_p), nome_f, cargo_f, tel_f, email_f))
+                            
+                            st.success(f"✅ {nome_f} cadastrado com sucesso!")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Erro ao salvar: {e}")
+                    else:
+                        st.warning("Por favor, digite o nome da pessoa.")
+        else:
+            st.warning("⚠️ Você precisa cadastrar um Parceiro antes de adicionar contatos.")
 
             # --- TUDO O QUE JÁ EXISTE NA SIDEBAR FICA ACIMA ---
 
