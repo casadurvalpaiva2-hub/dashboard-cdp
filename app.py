@@ -89,6 +89,7 @@ st.sidebar.markdown("---")
 # Caminho do banco
 pasta_atual = os.path.dirname(os.path.abspath(__file__))
 db_path = os.path.join(pasta_atual, 'MeusContatos.db')
+st.sidebar.code(f"Banco atual: {os.path.abspath(db_path)}")
 
 def run_query(query, params=()):
     try:
