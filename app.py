@@ -207,20 +207,7 @@ elif menu == "🏢 **PARCEIROS/PROJETOS**":
 
         st.markdown("---")
 
-        # 2. SEÇÃO DE CADASTRO
-        with st.expander("**CADASTRAR NOVO PARCEIRO**"):
-            # Busca categorias para o menu
-            df_cat_list = run_query("SELECT id_categoria, nome_categoria FROM Categoria_Parceiro")
-            opcoes_cat = dict(zip(df_cat_list['nome_categoria'], df_cat_list['id_categoria']))
-            
-            with st.form("form_novo_p", clear_on_submit=True):
-                col1, col2 = st.columns(2)
-                with col1:
-                    nome = st.text_input("Nome da Instituição")
-                    data = st.date_input("Data de Adesão")
-                with col2:
-                    status = st.selectbox("Status", ["Ativo", "Inativo"])
-                    cat_nome = st.selectbox("Categoria Principal", options=list(opcoes_cat.keys()))
+        
                     sub_txt = st.text_input("Subcategoria / Detalhe")
 
                 if st.form_submit_button("Salvar"):
