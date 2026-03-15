@@ -9,36 +9,43 @@ st.set_page_config(page_title="Gestão Casa Durval Paiva", layout="wide", page_i
 
 st.markdown("""
     <style>
-    /* Transforma a área da seta lateral em um botão flutuante visível */
-    [data-testid="stSidebarCollapsedControl"] {
-        background-color: #E31D24 !important; /* Vermelho institucional */
-        border-radius: 0 10px 10px 0 !important; /* Arredonda as bordas direitas */
+    /* 1. Alvo direto no botão de abrir o menu (setinha) */
+    button[kind="header"] {
+        background-color: #E31D24 !important; /* Vermelho Casa Durval Paiva */
+        color: white !important;
+        border-radius: 50% !important; /* Deixa redondo como um botão de app */
         width: 50px !important;
         height: 50px !important;
-        top: 10px !important;
+        position: fixed !important;
+        top: 15px !important;
+        left: 15px !important;
+        z-index: 999999;
+        box-shadow: 0px 4px 10px rgba(0,0,0,0.3) !important;
         display: flex !important;
         align-items: center !important;
         justify-content: center !important;
-        box-shadow: 2px 2px 10px rgba(0,0,0,0.2) !important;
     }
 
-    /* Muda a cor da setinha (>>) para branco para contrastar com o vermelho */
-    [data-testid="stSidebarCollapsedControl"] svg {
+    /* 2. Garante que o ícone dentro do botão fique branco e visível */
+    button[kind="header"] svg {
         fill: white !important;
-        color: white !important;
+        stroke: white !important;
         width: 30px !important;
         height: 30px !important;
     }
-    
-    /* Ajuste para o conteúdo não ficar colado no topo no celular */
-    @media (max-width: 640px) {
-        .block-container {
-            padding-top: 4rem !important;
-        }
+
+    /* 3. Ajuste para o título não ficar "atrás" do botão no celular */
+    .main .block-container {
+        padding-top: 5rem !important;
+    }
+
+    /* 4. Remove a barra cinza chata do topo para ficar mais limpo */
+    header[data-testid="stHeader"] {
+        background: transparent !important;
     }
     </style>
     """, unsafe_allow_html=True)
-    
+
 # --- INSERÇÃO DA LOGO ---
 # Opção A: Se você tiver o link da imagem na internet
 logo_url = "https://casadurvalpaiva.org.br/wp-content/themes/durvalpaiva/dist/img/header/logo.png" # Verifique se este link está ativo ou use o seu
