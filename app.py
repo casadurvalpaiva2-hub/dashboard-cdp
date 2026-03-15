@@ -4,8 +4,52 @@ import pandas as pd
 import os
 from datetime import datetime
 
-# Configuração de Página
-st.set_page_config(page_title="Sistema Integrado CDP", layout="wide")
+# 1. Configuração de Página e Identidade Visual
+st.set_page_config(page_title="Gestão Casa Durval Paiva", layout="wide", page_icon="🏥")
+
+# --- INJEÇÃO DE CSS PARA IDENTIDADE VISUAL ---
+st.markdown("""
+    <style>
+    /* Cor de fundo da página principal */
+    .stApp { background-color: #ffffff; }
+    
+    /* Barra Lateral (Preto com texto Branco) */
+    [data-testid="stSidebar"] {
+        background-color: #1a1a1a;
+        color: white;
+    }
+    [data-testid="stSidebar"] * { color: white !important; }
+    
+    /* Títulos e Métricas (Vermelho Durval Paiva) */
+    h1, h2, h3, [data-testid="stMetricValue"] {
+        color: #E63946 !important;
+    }
+    
+    /* Botões (Vermelho com texto Branco) */
+    .stButton>button {
+        background-color: #E63946;
+        color: white;
+        border-radius: 8px;
+        border: none;
+        font-weight: bold;
+    }
+    .stButton>button:hover {
+        background-color: #ffb703; /* Amarelo ao passar o mouse */
+        color: #1a1a1a;
+    }
+    
+    /* Input fields e Alertas (Borda Amarela) */
+    .stTextInput>div>div>input, .stSelectbox>div>div>div {
+        border-bottom: 2px solid #ffb703 !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+# --- INSERÇÃO DA LOGO ---
+# Opção A: Se você tiver o link da imagem na internet
+logo_url = "https://casadurvalpaiva.org.br/wp-content/themes/durvalpaiva/dist/img/header/logo.png" # Verifique se este link está ativo ou use o seu
+st.sidebar.image(logo_url, width=150) # Ajuste o número 150 até ficar do tamanho que você gosta
+st.sidebar.markdown("---")
 
 # Caminho do banco
 pasta_atual = os.path.dirname(os.path.abspath(__file__))
@@ -41,19 +85,65 @@ menu = st.sidebar.radio("Ir para:", [
     "📞 Contatos Diretos"
 ])
 
-# --- 1. PAINEL GERAL ---
-if menu == "📊 Painel Geral":
+# --- 1. DASHBOARD GERAL ---
+if menu == "📊 Painel Geral" or menu == "📊 Dashboard Geral":
     st.title("Dashboard DI 💻")
+    st.markdown("---")
+    
+    # Carrega os dados
     df_doacoes = run_query("SELECT * FROM Doacao")
     
-    m1, m2, m3 = st.columns(3)
-    m1.metric("Arrecadação Total", f"R$ {df_doacoes['valor_estimado'].sum():,.2f}")
-    m2.metric("Total de Doações", len(df_doacoes))
-    m3.metric("Média por Doação", f"R$ {df_doacoes['valor_estimado'].mean():,.2f}" if len(df_doacoes)>0 else "0")
+    if not df_doacoes.empty:
+        # BLINDAGEM: Garante que os valores são números e datas são datas, evitando tela branca!
+        df_doacoes['valor_estimado'] = pd.to_numeric(df_doacoes['valor_estimado'], errors='coerce').fillna(0)
+        df_doacoes['data_doacao'] = pd.to_datetime(df_doacoes['data_doacao'], errors='coerce')
+        
+        # --- LINHA 1: MÉTRICAS (Cards no topo) ---
+        col1, col2, col3 = st.columns(3)
+        
+        total = df_doacoes['valor_estimado'].sum()
+        qtd = len(df_doacoes)
+        media = total / qtd if qtd > 0 else 0
+        
+        with col1:
+            st.metric("💰 Arrecadação Total", f"R$ {total:,.2f}")
+        with col2:
+            st.metric("📦 Total de Doações", f"{qtd}")
+        with col3:
+            st.metric("📈 Média por Doação", f"R$ {media:,.2f}")
 
-    st.markdown("---")
-    st.subheader("Visualização por Categoria")
-    st.bar_chart(df_doacoes, x='tipo_doacao', y='valor_estimado')
+        st.markdown("---")
+
+        # --- LINHA 2: GRÁFICOS LADO A LADO ---
+        c1, c2 = st.columns(2)
+        
+        with c1:
+            st.markdown("#### 📊 Distribuição por Categoria")
+            # Agrupa os dados e colore de Vermelho Institucional
+            dados_cat = df_doacoes.groupby('tipo_doacao')['valor_estimado'].sum().reset_index()
+            dados_cat = dados_cat.set_index('tipo_doacao')
+            st.bar_chart(dados_cat, color="#E31D24") 
+
+        with c2:
+            st.markdown("#### 📅 Evolução Mensal")
+            # Remove datas vazias para não quebrar o gráfico e colore de Amarelo
+            df_temporal = df_doacoes.dropna(subset=['data_doacao']).copy()
+            if not df_temporal.empty:
+                df_temporal['Mes'] = df_temporal['data_doacao'].dt.strftime('%m/%Y')
+                dados_tempo = df_temporal.groupby('Mes')['valor_estimado'].sum().reset_index()
+                dados_tempo = dados_tempo.set_index('Mes')
+                st.line_chart(dados_tempo, color="#FFF200")
+            else:
+                st.info("Datas não cadastradas para exibir evolução.")
+
+        st.markdown("---")
+
+        # --- LINHA 3: TABELA OCULTA ---
+        with st.expander("🔍 Ver Lista Detalhada de Lançamentos"):
+            st.dataframe(df_doacoes.sort_values(by='data_doacao', ascending=False), use_container_width=True, hide_index=True)
+
+    else:
+        st.info("Nenhum dado cadastrado ainda.")
 
 # --- 2. PARCEIROS E PROJETOS ---
 elif menu == "🏢 Parceiros e Projetos":
