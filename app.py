@@ -9,29 +9,40 @@ st.set_page_config(page_title="Gestão Casa Durval Paiva", layout="wide", page_i
 
 st.markdown("""
     <style>
-    /* Alveja apenas o controle de colapso da barra lateral esquerda */
+    /* 1. Transforma a área da seta em um botão retangular com a palavra MENU */
     [data-testid="stSidebarCollapsedControl"] {
         background-color: #E31D24 !important;
-        border-radius: 50% !important;
-        width: 45px !important;
+        border-radius: 0 20px 20px 0 !important;
+        width: 80px !important; /* Mais largo para caber o texto */
         height: 45px !important;
-        top: 10px !important;
-        left: 10px !important;
+        top: 15px !important;
         display: flex !important;
-        justify-content: center !important;
         align-items: center !important;
-        box-shadow: 0px 4px 10px rgba(0,0,0,0.3) !important;
+        justify-content: center !important;
+        box-shadow: 4px 4px 10px rgba(0,0,0,0.2) !important;
+    }
+
+    /* 2. Esconde a seta original do Streamlit */
+    [data-testid="stSidebarCollapsedControl"] svg {
+        display: none !important;
+    }
+
+    /* 3. Injeta a palavra "MENU" no lugar da seta */
+    [data-testid="stSidebarCollapsedControl"]::before {
+        content: "☰ MENU" !important;
+        color: white !important;
+        font-weight: bold !important;
+        font-size: 14px !important;
+        font-family: sans-serif !important;
     }
     
-    /* Garante que a seta interna seja branca */
-    [data-testid="stSidebarCollapsedControl"] svg {
-        fill: white !important;
-        width: 25px !important;
-        height: 25px !important;
+    /* 4. Ajuste para o conteúdo não subir demais */
+    .main .block-container {
+        padding-top: 5rem !important;
     }
     </style>
     """, unsafe_allow_html=True)
-    
+
 # --- INSERÇÃO DA LOGO ---
 # Opção A: Se você tiver o link da imagem na internet
 logo_url = "https://casadurvalpaiva.org.br/wp-content/themes/durvalpaiva/dist/img/header/logo.png" # Verifique se este link está ativo ou use o seu
