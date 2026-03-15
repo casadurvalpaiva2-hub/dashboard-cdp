@@ -14,7 +14,7 @@ st.markdown("""
 st.title("🏥 Sistema de Monitoramento - Casa Durval Paiva")
 st.markdown("---")
 
-caminho_banco = r"C:\Users\User\Desktop\PROJETO CDP\MeusContatos.db"
+caminho_banco = 'MeusContatos.db'
 
 try:
     conn = sqlite3.connect(caminho_banco)
@@ -64,7 +64,7 @@ try:
 except Exception as e:
     st.error(f"Erro ao carregar o dashboard: {e}")
     st.info("Verifique se os nomes das colunas estão corretos.")
-    
+
     st.markdown("---")
 st.subheader("📥 Exportar Relatório")
 
