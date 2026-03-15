@@ -10,64 +10,55 @@ st.set_page_config(page_title="Gestão Casa Durval Paiva", layout="wide", page_i
 # --- INJEÇÃO DE CSS: IDENTIDADE VISUAL E MOBILE APP ---
 st.markdown("""
     <style>
-    /* Fundo geral do site (Branco) */
-    .stApp { background-color: #FFFFFF !important; }
-    
-    /* Barra Lateral (Preta) */
+    /* 1. Trava o fundo de todo o site como Branco Sólido */
+    .stApp {
+        background-color: #FFFFFF !important;
+    }
+
+    /* 2. Barra Lateral: Preto Sólido (sem transparência de celular) */
     [data-testid="stSidebar"] {
         background-color: #1A1A1A !important;
-    }
-    
-    /* Forçar texto da barra lateral a ser branco */
-    [data-testid="stSidebar"] * {
-        color: white !important;
+        background-image: none !important; /* Remove gradientes do mobile */
     }
 
-    /* Títulos e textos gerais */
-    h1, h2, h3, p, span, [data-testid="stMarkdownContainer"] p {
-        color: #1A1A1A; 
-    }
-    
-    /* Destaques em Vermelho Durval Paiva */
-    h1, h2, [data-testid="stMetricValue"] {
-        color: #E31D24 !important; 
+    /* 3. Garante que o texto da barra lateral seja sempre branco */
+    [data-testid="stSidebar"] section, [data-testid="stSidebar"] span, [data-testid="stSidebar"] p {
+        color: #FFFFFF !important;
     }
 
-    /* Transformar as Métricas em CARTÕES (Cards) - Ótimo para celular! */
+    /* 4. Cartões de Métricas (Branco com borda vermelha para destacar no celular) */
     [data-testid="stMetric"] {
-        background-color: #F9F9F9;
-        border: 1px solid #EAEAEA;
-        border-radius: 12px;
-        padding: 15px;
-        box-shadow: 2px 2px 10px rgba(0,0,0,0.05);
-        text-align: center;
+        background-color: #FFFFFF !important;
+        border-left: 5px solid #E31D24 !important; /* Detalhe em vermelho na lateral */
+        border-radius: 10px !important;
+        padding: 15px !important;
+        box-shadow: 0px 4px 12px rgba(0, 0, 0, 0.1) !important;
+        margin-bottom: 10px !important;
     }
 
-    /* Botões: Vermelho/Amarelo */
+    /* 5. Forçar cor dos títulos e números das métricas (Preto e Vermelho) */
+    [data-testid="stMetricLabel"] { color: #555555 !important; }
+    [data-testid="stMetricValue"] { color: #E31D24 !important; }
+    h1, h2, h3, p { color: #1A1A1A !important; }
+
+    /* 6. Botões (Amarelo com texto Preto) */
     .stButton>button {
         background-color: #FFF200 !important;
         color: #1A1A1A !important;
-        font-weight: bold;
-        border: 1px solid #1A1A1A;
-        border-radius: 8px;
-        width: 100%; /* No celular, o botão ocupa a tela toda */
-    }
-    .stButton>button:hover {
-        background-color: #E31D24 !important;
-        color: white !important;
+        border: 2px solid #1A1A1A !important;
+        border-radius: 8px !important;
+        font-weight: bold !important;
+        height: 3em !important;
+        width: 100% !important;
     }
 
-    /* AJUSTES ESPECÍFICOS PARA CELULARES */
-    @media (max-width: 768px) {
-        /* Reduz os espaços laterais e no topo para ganhar área útil */
+    /* Ajuste para telas pequenas (Celular) */
+    @media (max-width: 640px) {
         .block-container {
-            padding-top: 2rem !important;
-            padding-left: 1rem !important;
-            padding-right: 1rem !important;
+            padding: 1rem !important;
         }
-        /* Diminui um pouco a fonte dos números gigantes para não quebrar a tela */
         [data-testid="stMetricValue"] {
-            font-size: 1.8rem !important;
+            font-size: 1.5rem !important;
         }
     }
     </style>
