@@ -115,14 +115,14 @@ def run_insert(query, params=()):
 # --- NAVEGAÇÃO ---
 st.sidebar.title("**MENU GESTÃO**")
 menu = st.sidebar.radio("Ir para:", [
-    "📊 **PAINEL GERAL**", 
-    "🏢 **PARCEIROS/PROJETOS**", 
-    "💰 **REGISTRAR DOAÇÃO**", 
-    "📞 **CONTATOS**"
+    "**PAINEL GERAL**", 
+    "**PARCEIROS/PROJETOS**", 
+    "**REGISTRAR DOAÇÃO**", 
+    "**CONTATOS**"
 ])
 
 # --- 1. DASHBOARD GERAL ---
-if menu == "📊 **PAINEL GERAL**":
+if menu == "**PAINEL GERAL**":
     st.title("DASHBBOARD DI")
     
     df_doacoes = run_query("SELECT * FROM Doacao")
@@ -179,7 +179,7 @@ if menu == "📊 **PAINEL GERAL**":
         st.info("Nenhum dado encontrado no banco de dados.")
 
 # --- 2. PARCEIROS E PROJETOS ---
-elif menu == "🏢 **PARCEIROS/PROJETOS**":
+elif menu == "**PARCEIROS/PROJETOS**":
     st.title("**Gestão de parceiros e projetos**")
     tab1, tab2 = st.tabs(["🏢 **Parceiros**", "📃 **Projetos**"])
     
@@ -207,7 +207,20 @@ elif menu == "🏢 **PARCEIROS/PROJETOS**":
 
         st.markdown("---")
 
-        
+        # 2. SEÇÃO DE CADASTRO
+        with st.expander("**CADASTRAR NOVO PARCEIRO**"):
+            # Busca categorias para o menu
+            df_cat_list = run_query("SELECT id_categoria, nome_categoria FROM Categoria_Parceiro")
+            opcoes_cat = dict(zip(df_cat_list['nome_categoria'], df_cat_list['id_categoria']))
+            
+            with st.form("form_novo_p", clear_on_submit=True):
+                col1, col2 = st.columns(2)
+                with col1:
+                    nome = st.text_input("Nome da Instituição")
+                    data = st.date_input("Data de Adesão")
+                with col2:
+                    status = st.selectbox("Status", ["Ativo", "Inativo"])
+                    cat_nome = st.selectbox("Categoria Principal", options=list(opcoes_cat.keys()))
                     sub_txt = st.text_input("Subcategoria / Detalhe")
 
                 if st.form_submit_button("Salvar"):
@@ -225,7 +238,7 @@ elif menu == "🏢 **PARCEIROS/PROJETOS**":
                         st.rerun()
 
 # --- 3. REGISTRAR DOAÇÃO ---
-elif menu == "💰 **REGISTRAR DOAÇÃO**":
+elif menu == "**REGISTRAR DOAÇÃO**":
     st.title("Entrada de Recursos")
     
     # Buscamos os nomes para o usuário escolher, mas guardamos o ID
@@ -254,7 +267,7 @@ elif menu == "💰 **REGISTRAR DOAÇÃO**":
         st.error("Cadastre um parceiro na tabela 'Parceiro' antes de continuar.")
 
 # --- 4. CONTATOS DIRETOS ---
-elif menu == "📞 **CONTATOS**":
+elif menu == "**CONTATOS**":
     st.title("Agenda de Contatos Diretos")
     
     # 1. Exibição da Tabela
