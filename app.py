@@ -75,76 +75,73 @@ def run_insert(query, params=()):
         st.error(f"Erro ao salvar: {e}")
 
 # --- NAVEGAÇÃO ---
-st.sidebar.title("MENU GESTÃO")
+st.sidebar.title("**MENU GESTÃO**")
 menu = st.sidebar.radio("Ir para:", [
-    "📊 Painel Geral", 
-    "🏢 Parceiros e Projetos", 
-    "💰 Registrar Doação", 
-    "📞 Contatos Diretos"
+    "📊 **PAINEL GERAL**", 
+    "🏢 **PARCEIROS/PROJETOS**", 
+    "💰 **REGISTRAR DOAÇÃO**", 
+    "📞 **CONTATOS**"
 ])
 
 # --- 1. DASHBOARD GERAL ---
-if menu == "📊 Painel Geral" or menu == "📊 Dashboard Geral":
-    st.title("Dashboard DI 💻")
-    st.markdown("---")
+if menu == "📊 **PAINEL GERAL**":
+    st.title("DASHBBOARD DI")
     
-    # Carrega os dados
     df_doacoes = run_query("SELECT * FROM Doacao")
     
     if not df_doacoes.empty:
-        # BLINDAGEM: Garante que os valores são números e datas são datas, evitando tela branca!
-        df_doacoes['valor_estimado'] = pd.to_numeric(df_doacoes['valor_estimado'], errors='coerce').fillna(0)
-        df_doacoes['data_doacao'] = pd.to_datetime(df_doacoes['data_doacao'], errors='coerce')
+        # Tratamento de dados
+        df_doacoes['data_doacao'] = pd.to_datetime(df_doacoes['data_doacao'])
         
-        # --- LINHA 1: MÉTRICAS (Cards no topo) ---
-        col1, col2, col3 = st.columns(3)
+        # Filtro de Ano
+        anos = sorted(df_doacoes['data_doacao'].dt.year.unique(), reverse=True)
+        ano_sel = st.selectbox("**Selecione o ano para análise:**", anos)
         
-        total = df_doacoes['valor_estimado'].sum()
-        qtd = len(df_doacoes)
+        # --- A MÁGICA ACONTECE AQUI ---
+        # Criamos um NOVO dataframe que contém APENAS os dados do ano escolhido
+        df_final = df_doacoes[df_doacoes['data_doacao'].dt.year == ano_sel]
+        
+        
+
+        # 1. MÉTRICAS (Usando df_final)
+        c1, c2, c3 = st.columns(3)
+        total = df_final['valor_estimado'].sum()
+        qtd = len(df_final)
         media = total / qtd if qtd > 0 else 0
         
-        with col1:
-            st.metric("💰 Arrecadação Total", f"R$ {total:,.2f}")
-        with col2:
-            st.metric("📦 Total de Doações", f"{qtd}")
-        with col3:
-            st.metric("📈 Média por Doação", f"R$ {media:,.2f}")
+        c1.metric("**Arrecadação no ano**", f"R$ {total:,.2f}")
+        c2.metric("**Doações no ano**", f"{qtd}")
+        c3.metric("**Média do período**", f"R$ {media:,.2f}")
 
         st.markdown("---")
 
-        # --- LINHA 2: GRÁFICOS LADO A LADO ---
-        c1, c2 = st.columns(2)
+        # 2. GRÁFICOS (Também usando df_final)
+        col_esq, col_dir = st.columns(2)
         
-        with c1:
-            st.markdown("#### 📊 Distribuição por Categoria")
-            # Agrupa os dados e colore de Vermelho Institucional
-            dados_cat = df_doacoes.groupby('tipo_doacao')['valor_estimado'].sum().reset_index()
-            dados_cat = dados_cat.set_index('tipo_doacao')
-            st.bar_chart(dados_cat, color="#E31D24") 
+        with col_esq:
+            st.subheader("📊 Por categoria")
+            dados_cat = df_final.groupby('tipo_doacao')['valor_estimado'].sum()
+            st.bar_chart(dados_cat, color="#E31D24") # Vermelho Institucional
 
-        with c2:
-            st.markdown("#### 📅 Evolução Mensal")
-            # Remove datas vazias para não quebrar o gráfico e colore de Amarelo
-            df_temporal = df_doacoes.dropna(subset=['data_doacao']).copy()
-            if not df_temporal.empty:
-                df_temporal['Mes'] = df_temporal['data_doacao'].dt.strftime('%m/%Y')
-                dados_tempo = df_temporal.groupby('Mes')['valor_estimado'].sum().reset_index()
-                dados_tempo = dados_tempo.set_index('Mes')
-                st.line_chart(dados_tempo, color="#FFF200")
-            else:
-                st.info("Datas não cadastradas para exibir evolução.")
+        with col_dir:
+            st.subheader("📈 Evolução mensal")
+            # Agrupa por mês dentro do ano selecionado
+            df_final['Mes'] = df_final['data_doacao'].dt.strftime('%m - %b')
+            dados_mes = df_final.groupby('Mes')['valor_estimado'].sum()
+            st.line_chart(dados_mes, color="#FFF200") # Amarelo Institucional
 
         st.markdown("---")
 
-        # --- LINHA 3: TABELA OCULTA ---
-        with st.expander("🔍 Ver Lista Detalhada de Lançamentos"):
-            st.dataframe(df_doacoes.sort_values(by='data_doacao', ascending=False), use_container_width=True, hide_index=True)
+        # 3. TABELA (Apenas o que foi filtrado)
+        with st.expander(f"**VER TODOS OS LANÇAMENTOS DE {ano_sel} 🔍**"):
+            st.dataframe(df_final.sort_values(by='data_doacao', ascending=False), 
+                         use_container_width=True, hide_index=True)
 
     else:
-        st.info("Nenhum dado cadastrado ainda.")
+        st.info("Nenhum dado encontrado no banco de dados.")
 
 # --- 2. PARCEIROS E PROJETOS ---
-elif menu == "🏢 Parceiros e Projetos":
+elif menu == "🏢 **PARCEIROS/PROJETOS**":
     st.title("Gestão de Parceiros e Projetos")
     tab1, tab2 = st.tabs(["🏢 Parceiros", "🚀 Projetos"])
     
@@ -189,7 +186,7 @@ elif menu == "🏢 Parceiros e Projetos":
                         st.warning("O nome da instituição é obrigatório.")
 
 # --- 3. REGISTRAR DOAÇÃO ---
-elif menu == "💰 Registrar Doação":
+elif menu == "💰 **REGISTRAR DOAÇÃO**":
     st.title("Entrada de Recursos")
     
     # Buscamos os nomes para o usuário escolher, mas guardamos o ID
@@ -218,7 +215,7 @@ elif menu == "💰 Registrar Doação":
         st.error("Cadastre um parceiro na tabela 'Parceiro' antes de continuar.")
 
 # --- 4. CONTATOS DIRETOS ---
-elif menu == "📞 Contatos Diretos":
+elif menu == "📞 **CONTATOS**":
     st.title("Agenda de Contatos Diretos")
     
     # 1. Exibição da Tabela
