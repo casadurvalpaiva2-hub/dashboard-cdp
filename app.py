@@ -9,43 +9,29 @@ st.set_page_config(page_title="Gestão Casa Durval Paiva", layout="wide", page_i
 
 st.markdown("""
     <style>
-    /* 1. Alvo direto no botão de abrir o menu (setinha) */
-    button[kind="header"] {
-        background-color: #E31D24 !important; /* Vermelho Casa Durval Paiva */
-        color: white !important;
-        border-radius: 50% !important; /* Deixa redondo como um botão de app */
-        width: 50px !important;
-        height: 50px !important;
-        position: fixed !important;
-        top: 15px !important;
-        left: 15px !important;
-        z-index: 999999;
-        box-shadow: 0px 4px 10px rgba(0,0,0,0.3) !important;
+    /* Alveja apenas o controle de colapso da barra lateral esquerda */
+    [data-testid="stSidebarCollapsedControl"] {
+        background-color: #E31D24 !important;
+        border-radius: 50% !important;
+        width: 45px !important;
+        height: 45px !important;
+        top: 10px !important;
+        left: 10px !important;
         display: flex !important;
-        align-items: center !important;
         justify-content: center !important;
+        align-items: center !important;
+        box-shadow: 0px 4px 10px rgba(0,0,0,0.3) !important;
     }
-
-    /* 2. Garante que o ícone dentro do botão fique branco e visível */
-    button[kind="header"] svg {
+    
+    /* Garante que a seta interna seja branca */
+    [data-testid="stSidebarCollapsedControl"] svg {
         fill: white !important;
-        stroke: white !important;
-        width: 30px !important;
-        height: 30px !important;
-    }
-
-    /* 3. Ajuste para o título não ficar "atrás" do botão no celular */
-    .main .block-container {
-        padding-top: 5rem !important;
-    }
-
-    /* 4. Remove a barra cinza chata do topo para ficar mais limpo */
-    header[data-testid="stHeader"] {
-        background: transparent !important;
+        width: 25px !important;
+        height: 25px !important;
     }
     </style>
     """, unsafe_allow_html=True)
-
+    
 # --- INSERÇÃO DA LOGO ---
 # Opção A: Se você tiver o link da imagem na internet
 logo_url = "https://casadurvalpaiva.org.br/wp-content/themes/durvalpaiva/dist/img/header/logo.png" # Verifique se este link está ativo ou use o seu
