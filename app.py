@@ -7,6 +7,38 @@ from datetime import datetime
 # 1. Configuração de Página e Identidade Visual
 st.set_page_config(page_title="Gestão Casa Durval Paiva", layout="wide", page_icon="🏥")
 
+st.markdown("""
+    <style>
+    /* Transforma a área da seta lateral em um botão flutuante visível */
+    [data-testid="stSidebarCollapsedControl"] {
+        background-color: #E31D24 !important; /* Vermelho institucional */
+        border-radius: 0 10px 10px 0 !important; /* Arredonda as bordas direitas */
+        width: 50px !important;
+        height: 50px !important;
+        top: 10px !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        box-shadow: 2px 2px 10px rgba(0,0,0,0.2) !important;
+    }
+
+    /* Muda a cor da setinha (>>) para branco para contrastar com o vermelho */
+    [data-testid="stSidebarCollapsedControl"] svg {
+        fill: white !important;
+        color: white !important;
+        width: 30px !important;
+        height: 30px !important;
+    }
+    
+    /* Ajuste para o conteúdo não ficar colado no topo no celular */
+    @media (max-width: 640px) {
+        .block-container {
+            padding-top: 4rem !important;
+        }
+    }
+    </style>
+    """, unsafe_allow_html=True)
+    
 # --- INSERÇÃO DA LOGO ---
 # Opção A: Se você tiver o link da imagem na internet
 logo_url = "https://casadurvalpaiva.org.br/wp-content/themes/durvalpaiva/dist/img/header/logo.png" # Verifique se este link está ativo ou use o seu
