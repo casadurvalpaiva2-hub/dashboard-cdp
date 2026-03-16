@@ -242,31 +242,20 @@ elif menu == "**PARCEIROS/PROJETOS**":
                     cat_nome = st.selectbox("Categoria principal", options=list(opcoes_cat.keys()))
                     sub_txt = st.text_input("Subcategoria / Detalhe")
 
-                # Botão Salvar com destaque
                 if st.form_submit_button("Salvar", type="primary"):
                     if nome:
                         id_cat = opcoes_cat[cat_nome]
-                        
-                        # Define o que vai para o banco
+                        # Se o checkbox estiver marcado, data_final será None (vazio no SQL)
                         data_final = None if sem_data else data_input.strftime('%Y-%m-%d')
                         
-                        # Tenta inserir e reporta o erro caso falhe
                         try:
-                            # Tentativa 1: Com a coluna subcategory
-                            sql = "INSERT INTO Parceiro (nome_instituicao, data_adesao, status, id_categoria, subcategory) VALUES (?,?,?,?,?)"
-                            run_insert(sql, (nome, data_final, status, id_cat, sub_txt))
-                            st.success(f"✅ '{nome}' cadastrado com sucesso!")
-                            st.rerun()
+                            # Removi a coluna subcategory que causava o erro
+                            sql = "INSERT INTO Parceiro (nome_instituicao, status, id_categoria) VALUES (?, ?, ?)"
+                            run_insert(sql, (nome, status, id_cat))
+                            st.success(f"✅ {nome} cadastrado com sucesso!")
+                            st.rerun() # Isso força a tabela a atualizar na hora
                         except Exception as e:
-                            # Tentativa 2: Sem subcategory (caso a coluna não exista no banco)
-                            try:
-                                sql = "INSERT INTO Parceiro (nome_instituicao, data_adesao, status, id_categoria) VALUES (?,?,?,?)"
-                                run_insert(sql, (nome, data_final, status, id_cat))
-                                st.success(f"✅ '{nome}' cadastrado com sucesso!")
-                                st.rerun()
-                            except Exception as e_final:
-                                # SE CHEGAR AQUI, O ERRO APARECERÁ EM VERMELHO NA TELA
-                                st.error(f"Erro técnico ao salvar: {e_final}")
+                            st.error(f"Erro técnico ao salvar: {e}")
                     else:
                         st.warning("⚠️ O nome da instituição é obrigatório.")
 
@@ -298,6 +287,36 @@ elif menu == "**REGISTRAR DOAÇÃO**":
                 st.balloons()
     else:
         st.error("Cadastre um parceiro na tabela 'Parceiro' antes de continuar.")
+        # --- SEÇÃO DE VISUALIZAÇÃO (ABAIXO DO FORMULÁRIO) ---
+        st.write("---")
+        st.subheader("📋 Parceiros Cadastrados")
+
+        # 1. O Filtro agora tem a opção "Todos"
+        status_filtro = st.selectbox("Filtrar por Status", ["Todos", "Ativo", "Inativo", "Prospecção"])
+
+        # 2. Query melhorada com LEFT JOIN (para garantir que nada suma)
+        query_base = """
+            SELECT 
+                p.id_parceiro as ID,
+                p.nome_instituicao as Nome,
+                p.data_adesao as 'Data Adesão',
+                p.status as Status,
+                c.nome_categoria as Categoria
+            FROM Parceiro p
+            LEFT JOIN Categoria_Parceiro c ON p.id_categoria = c.id_categoria
+        """
+
+        # 3. Lógica que aplica o filtro ou mostra tudo
+        if status_filtro != "Todos":
+            df_parceiros = run_query(query_base + f" WHERE p.status = '{status_filtro}'")
+        else:
+            df_parceiros = run_query(query_base)
+
+        # 4. Exibição final da tabela
+        if not df_parceiros.empty:
+            st.dataframe(df_parceiros, use_container_width=True)
+        else:
+            st.info(f"Nenhum parceiro encontrado com o status: {status_filtro}")
 
 # --- 4. CONTATOS DIRETO ---
 elif menu == "**CONTATOS**":
