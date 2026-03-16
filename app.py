@@ -249,15 +249,20 @@ elif menu == "**PARCEIROS/PROJETOS**":
                         data_final = None if sem_data else data_input.strftime('%Y-%m-%d')
                         
                         try:
-                            # Removi a coluna subcategory que causava o erro
-                            sql = "INSERT INTO Parceiro (nome_instituicao, status, id_categoria) VALUES (?, ?, ?)"
-                            run_insert(sql, (nome, status, id_cat))
+                            # 1. SQL com as 5 colunas EXATAS do seu banco (image_9f9400.png)
+                            sql = """
+                                INSERT INTO Parceiro (nome_instituicao, status, id_categoria, data_adesao, subcategoria) 
+                                VALUES (?, ?, ?, ?, ?)
+                            """
+                            
+                            # 2. Enviando as 5 variáveis na ordem correta
+                            # Note que usamos 'sub_txt' que é o nome da sua variável na linha 231
+                            run_insert(sql, (nome, status, id_cat, data_final, sub_txt))
+                            
                             st.success(f"✅ {nome} cadastrado com sucesso!")
-                            st.rerun() # Isso força a tabela a atualizar na hora
+                            st.rerun() 
                         except Exception as e:
                             st.error(f"Erro técnico ao salvar: {e}")
-                    else:
-                        st.warning("⚠️ O nome da instituição é obrigatório.")
 
 # --- 3. REGISTRAR DOAÇÃO ---
 elif menu == "**REGISTRAR DOAÇÃO**":
