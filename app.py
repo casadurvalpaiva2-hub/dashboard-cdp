@@ -13,7 +13,7 @@ def verificar_login():
         st.session_state.autenticado = False
 
     if not st.session_state.autenticado:
-        st.markdown("<h1 style='text-align: center;'> Sistema interno - CDP (DI)</h1>", unsafe_allow_html=True)
+        st.markdown("<h1 style='text-align: center;'> Sistema interno - Desenvolvimento Institucional</h1>", unsafe_allow_html=True)
         
         # Centraliza a caixa de login
         _, col_login, _ = st.columns([1, 2, 1])
@@ -172,12 +172,12 @@ if menu == "**PAINEL GERAL**":
         col_esq, col_dir = st.columns(2)
         
         with col_esq:
-            st.subheader("📊 Por categoria")
+            st.subheader("Por categoria")
             dados_cat = df_final.groupby('tipo_doacao')['valor_estimado'].sum()
             st.bar_chart(dados_cat, color="#E31D24") # Vermelho Institucional
 
         with col_dir:
-            st.subheader("📈 Evolução mensal")
+            st.subheader("Evolução mensal")
             # Agrupa por mês dentro do ano selecionado
             df_final['Mes'] = df_final['data_doacao'].dt.strftime('%m - %b')
             dados_mes = df_final.groupby('Mes')['valor_estimado'].sum()
@@ -186,7 +186,7 @@ if menu == "**PAINEL GERAL**":
         st.markdown("---")
 
         # 3. TABELA (Apenas o que foi filtrado)
-        with st.expander(f"**VER TODOS OS LANÇAMENTOS DE {ano_sel} 🔍**"):
+        with st.expander(f"**VER TODOS OS LANÇAMENTOS DE {ano_sel}**"):
             st.dataframe(df_final.sort_values(by='data_doacao', ascending=False), 
                          use_container_width=True, hide_index=True)
 
@@ -195,7 +195,7 @@ if menu == "**PAINEL GERAL**":
 
 # --- 2. PARCEIROS E PROJETOS ---
 elif menu == "**PARCEIROS/PROJETOS**":
-    st.title("**Gestão de parceiros e projetos**")
+    st.title("**GESTÃO DE PARCEIROS E PROJETOS**")
     tab1, tab2 = st.tabs(["🏢 **Parceiros**", "📃 **Projetos**"])
     
     with tab1:
@@ -231,11 +231,11 @@ elif menu == "**PARCEIROS/PROJETOS**":
             with st.form("form_novo_p", clear_on_submit=True):
                 col1, col2 = st.columns(2)
                 with col1:
-                    nome = st.text_input("Nome da Instituição")
-                    data = st.date_input("Data de Adesão")
+                    nome = st.text_input("Nome da instituição")
+                    data = st.date_input("Data de adesão")
                 with col2:
                     status = st.selectbox("Status", ["Ativo", "Inativo"])
-                    cat_nome = st.selectbox("Categoria Principal", options=list(opcoes_cat.keys()))
+                    cat_nome = st.selectbox("Categoria principal", options=list(opcoes_cat.keys()))
                     sub_txt = st.text_input("Subcategoria / Detalhe")
 
                 if st.form_submit_button("Salvar"):
@@ -254,7 +254,7 @@ elif menu == "**PARCEIROS/PROJETOS**":
 
 # --- 3. REGISTRAR DOAÇÃO ---
 elif menu == "**REGISTRAR DOAÇÃO**":
-    st.title("Entrada de Recursos")
+    st.title("ENTRADA DE RECURSOS")
     
     # Buscamos os nomes para o usuário escolher, mas guardamos o ID
     df_p = run_query("SELECT id_parceiro, nome_instituicao FROM Parceiro")
@@ -262,8 +262,8 @@ elif menu == "**REGISTRAR DOAÇÃO**":
     if not df_p.empty:
         with st.form("nova_doacao"):
             # O usuário vê o nome
-            nome_sel = st.selectbox("Selecione o Parceiro", df_p['nome_instituicao'].tolist())
-            valor = st.number_input("Valor Estimado", min_value=0.0)
+            nome_sel = st.selectbox("Selecione o parceiro", df_p['nome_instituicao'].tolist())
+            valor = st.number_input("Valor estimado", min_value=0.0)
             tipo = st.selectbox("Tipo", ["Financeira", "Vestuário", "Alimentos", "Serviços"])
             data = st.date_input("Data", datetime.now())
             desc = st.text_area("Descrição")
@@ -271,7 +271,7 @@ elif menu == "**REGISTRAR DOAÇÃO**":
             # O sistema recupera o ID correto para o SQL
             id_p = df_p[df_p['nome_instituicao'] == nome_sel]['id_parceiro'].values[0]
             
-            if st.form_submit_button("Confirmar Doação"):
+            if st.form_submit_button("Confirmar doação"):
                 run_insert("""
                     INSERT INTO Doacao (id_parceiro, valor_estimado, tipo_doacao, data_doacao, descricao) 
                     VALUES (?,?,?,?,?)""", 
@@ -283,7 +283,7 @@ elif menu == "**REGISTRAR DOAÇÃO**":
 
 # --- 4. CONTATOS DIRETO ---
 elif menu == "**CONTATOS**":
-    st.title("👤 Agenda de Contatos Diretos")
+    st.title("**AGENDA**")
 
     # 1. BUSCA DE DADOS (Usando o nome correto: nome_pessoa)
     query_view = """
@@ -307,7 +307,7 @@ elif menu == "**CONTATOS**":
     st.markdown("---")
 
     # 2. FORMULÁRIO DE CADASTRO
-    with st.expander("➕ Adicionar Novo Contato"):
+    with st.expander("NOVO CONTATO"):
         df_p_contatos = run_query("SELECT id_parceiro, nome_instituicao FROM Parceiro")
 
         if not df_p_contatos.empty:
@@ -320,10 +320,10 @@ elif menu == "**CONTATOS**":
                     cargo_f = st.text_input("Cargo")
                     tel_f = st.text_input("Telefone")
                 
-                parceiro_nome = st.selectbox("Vincular à Instituição", 
+                parceiro_nome = st.selectbox("Vincular à instituição", 
                                            options=df_p_contatos['nome_instituicao'].tolist())
 
-                if st.form_submit_button("Salvar Contato"):
+                if st.form_submit_button("Salvar contato"):
                     if nome_f:
                         try:
                             # Pega o ID do parceiro selecionado
