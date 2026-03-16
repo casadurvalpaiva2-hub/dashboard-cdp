@@ -232,25 +232,43 @@ elif menu == "**PARCEIROS/PROJETOS**":
                 col1, col2 = st.columns(2)
                 with col1:
                     nome = st.text_input("Nome da instituição")
-                    data = st.date_input("Data de adesão")
+                    # Calendário aparece sempre por padrão
+                    data_input = st.date_input("Data de adesão")
+                    # Checkbox para ignorar a data
+                    sem_data = st.checkbox("Não possuo a data de adesão")
+                    
                 with col2:
-                    status = st.selectbox("Status", ["Ativo", "Inativo"])
+                    status = st.selectbox("Status", ["Ativo", "Inativo", "Prospecção"])
                     cat_nome = st.selectbox("Categoria principal", options=list(opcoes_cat.keys()))
                     sub_txt = st.text_input("Subcategoria / Detalhe")
 
-                if st.form_submit_button("Salvar"):
+                # Botão Salvar com destaque
+                if st.form_submit_button("Salvar", type="primary"):
                     if nome:
                         id_cat = opcoes_cat[cat_nome]
-                        # SQL seguro: se a coluna 'subcategory' não existir, ele salva apenas o básico
-                        try:
-                            ins = "INSERT INTO Parceiro (nome_instituicao, data_adesao, status, id_categoria, subcategory) VALUES (?,?,?,?,?)"
-                            run_insert(ins, (nome, data.strftime('%Y-%m-%d'), status, id_cat, sub_txt))
-                        except:
-                            ins = "INSERT INTO Parceiro (nome_instituicao, data_adesao, status, id_categoria) VALUES (?,?,?,?)"
-                            run_insert(ins, (nome, data.strftime('%Y-%m-%d'), status, id_cat))
                         
-                        st.success("Cadastrado!")
-                        st.rerun()
+                        # Define o que vai para o banco
+                        data_final = None if sem_data else data_input.strftime('%Y-%m-%d')
+                        
+                        # Tenta inserir e reporta o erro caso falhe
+                        try:
+                            # Tentativa 1: Com a coluna subcategory
+                            sql = "INSERT INTO Parceiro (nome_instituicao, data_adesao, status, id_categoria, subcategory) VALUES (?,?,?,?,?)"
+                            run_insert(sql, (nome, data_final, status, id_cat, sub_txt))
+                            st.success(f"✅ '{nome}' cadastrado com sucesso!")
+                            st.rerun()
+                        except Exception as e:
+                            # Tentativa 2: Sem subcategory (caso a coluna não exista no banco)
+                            try:
+                                sql = "INSERT INTO Parceiro (nome_instituicao, data_adesao, status, id_categoria) VALUES (?,?,?,?)"
+                                run_insert(sql, (nome, data_final, status, id_cat))
+                                st.success(f"✅ '{nome}' cadastrado com sucesso!")
+                                st.rerun()
+                            except Exception as e_final:
+                                # SE CHEGAR AQUI, O ERRO APARECERÁ EM VERMELHO NA TELA
+                                st.error(f"Erro técnico ao salvar: {e_final}")
+                    else:
+                        st.warning("⚠️ O nome da instituição é obrigatório.")
 
 # --- 3. REGISTRAR DOAÇÃO ---
 elif menu == "**REGISTRAR DOAÇÃO**":
@@ -264,7 +282,7 @@ elif menu == "**REGISTRAR DOAÇÃO**":
             # O usuário vê o nome
             nome_sel = st.selectbox("Selecione o parceiro", df_p['nome_instituicao'].tolist())
             valor = st.number_input("Valor estimado", min_value=0.0)
-            tipo = st.selectbox("Tipo", ["Financeira", "Vestuário", "Alimentos", "Serviços"])
+            tipo = st.selectbox("Tipo", ["Financeira", "Vestuário", "Alimentos", "Serviços", "Midiática", "Projetos"])
             data = st.date_input("Data", datetime.now())
             desc = st.text_area("Descrição")
             
@@ -309,6 +327,7 @@ elif menu == "**CONTATOS**":
     # 2. FORMULÁRIO DE CADASTRO
     with st.expander("NOVO CONTATO"):
         df_p_contatos = run_query("SELECT id_parceiro, nome_instituicao FROM Parceiro")
+        
 
         if not df_p_contatos.empty:
             with st.form("form_contato_final", clear_on_submit=True):
