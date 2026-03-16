@@ -89,11 +89,11 @@ st.sidebar.markdown("---")
 # Caminho do banco
 pasta_atual = os.path.dirname(os.path.abspath(__file__))
 db_path = os.path.join(pasta_atual, 'MeusContatos.db')
-st.sidebar.code(f"Banco atual: {os.path.abspath(db_path)}")
+
 # Teste de leitura direta do banco
 with sqlite3.connect(db_path) as test_conn:
     res = test_conn.execute("SELECT COUNT(*) FROM Contato_Direto").fetchone()
-    st.sidebar.write(f"Total de contatos no arquivo: {res[0]}")
+   
 
 def run_query(query, params=()):
     try:
