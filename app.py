@@ -267,64 +267,121 @@ elif menu == "**PARCEIROS/PROJETOS**":
                         except Exception as e:
                             st.error(f"Erro técnico ao salvar: {e}")
 
+# --- ABA DE PROJETOS ---
+    with tab2:
+        st.subheader("📅 Histórico Financeiro por Projeto e Ano")
+        
+        # Query que agrupa por Nome do Projeto e Ano da Doação
+        query_projetos = """
+            SELECT 
+                UPPER(nome_projeto) as Projeto,
+                strftime('%Y', data_doacao) as Ano,
+                COUNT(*) as 'Qtd Repasses',
+                SUM(valor_estimado) as Total
+            FROM Doacao
+            WHERE nome_projeto IS NOT NULL AND nome_projeto != ''
+            GROUP BY Projeto, Ano
+            ORDER BY Ano DESC, Total DESC
+        """
+        df_proj = run_query(query_projetos)
+        
+        if not df_proj.empty:
+            # Filtro de Ano para facilitar a busca
+            anos_lista = ["Todos"] + sorted(df_proj['Ano'].unique().tolist(), reverse=True)
+            ano_escolhido = st.selectbox("Filtrar por ano de recebimento:", anos_lista)
+            
+            if ano_escolhido != "Todos":
+                df_exibir = df_proj[df_proj['Ano'] == ano_escolhido].copy()
+            else:
+                df_exibir = df_proj.copy()
+
+            # Formatação para o padrão brasileiro R$ 1.234,56
+            df_exibir['Total'] = df_exibir['Total'].apply(
+                lambda x: f"R$ {x:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+            )
+            
+            # Exibição da tabela organizada
+            st.dataframe(df_exibir, use_container_width=True, hide_index=True)
+            
+            # Resumo rápido para o usuário
+            total_geral = df_proj['Total'].sum()
+            total_formatado = f"R$ {total_geral:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+            st.info(f"💰 **Captação Total Acumulada (Todos os anos):** {total_formatado}")
+            
+        else:
+            st.info("Ainda não existem doações vinculadas a projetos específicos.")
+
+# --- 3. REGISTRAR DOAÇÃO ---
 # --- 3. REGISTRAR DOAÇÃO ---
 elif menu == "**REGISTRAR DOAÇÃO**":
     st.title("ENTRADA DE RECURSOS")
     
-    # Buscamos os nomes para o usuário escolher, mas guardamos o ID
-    df_p = run_query("SELECT id_parceiro, nome_instituicao FROM Parceiro")
+    # Buscamos os nomes para o usuário escolher
+    df_p_list = run_query("SELECT id_parceiro, nome_instituicao FROM Parceiro")
     
-    if not df_p.empty:
-        with st.form("nova_doacao"):
-            # O usuário vê o nome
-            nome_sel = st.selectbox("Selecione o parceiro", df_p['nome_instituicao'].tolist())
-            valor = st.number_input("Valor estimado", min_value=0.0)
-            tipo = st.selectbox("Tipo", ["Financeira", "Vestuário", "Alimentos", "Serviços", "Midiática", "Projetos"])
-            data = st.date_input("Data", datetime.now())
-            desc = st.text_area("Descrição")
+    if not df_p_list.empty:
+        with st.form("nova_doacao", clear_on_submit=True):
+            col_a, col_b = st.columns(2)
             
-            # O sistema recupera o ID correto para o SQL
-            id_p = df_p[df_p['nome_instituicao'] == nome_sel]['id_parceiro'].values[0]
+            with col_a:
+                nome_sel = st.selectbox("Selecione o parceiro/fonte", df_p_list['nome_instituicao'].tolist())
+                valor = st.number_input("Valor estimado (R$)", min_value=0.0)
+                data = st.date_input("Data", datetime.now())
+
+            with col_b:
+                # NOVO CAMPO: Aqui você organiza as Emendas e Projetos (COMDICA, PRONON, etc)
+                projeto = st.text_input("Nome do Projeto / Emenda", placeholder="Ex: COMDICA 2024")
+                tipo = st.selectbox("Tipo", ["Financeira", "Vestuário", "Alimentos", "Serviços", "Midiática", "Projetos"])
             
-            if st.form_submit_button("Confirmar doação"):
-                run_insert("""
-                    INSERT INTO Doacao (id_parceiro, valor_estimado, tipo_doacao, data_doacao, descricao) 
-                    VALUES (?,?,?,?,?)""", 
-                    (int(id_p), valor, tipo, data.strftime('%Y-%m-%d'), desc))
-                st.success(f"Doação de {nome_sel} registrada!")
+            desc = st.text_area("Descrição/Observações")
+            
+            # Recupera o ID do parceiro para o SQL
+            id_p = df_p_list[df_p_list['nome_instituicao'] == nome_sel]['id_parceiro'].values[0]
+            
+            if st.form_submit_button("Confirmar doação", type="primary"):
+                # SQL ATUALIZADO: Agora com 6 colunas (incluindo nome_projeto)
+                sql_ins = """
+                    INSERT INTO Doacao (id_parceiro, valor_estimado, tipo_doacao, data_doacao, descricao, nome_projeto) 
+                    VALUES (?,?,?,?,?,?)
+                """
+                # Salvamos o projeto em MAIÚSCULO para manter o padrão
+                run_insert(sql_ins, (int(id_p), valor, tipo, data.strftime('%Y-%m-%d'), desc, projeto.upper()))
+                
+                st.success(f"✅ Doação de {nome_sel} para o projeto {projeto.upper()} registrada!")
                 st.balloons()
     else:
-        st.error("Cadastre um parceiro na tabela 'Parceiro' antes de continuar.")
-        # --- SEÇÃO DE VISUALIZAÇÃO (ABAIXO DO FORMULÁRIO) ---
-        st.write("---")
-        st.subheader("📋 Parceiros Cadastrados")
+        st.error("⚠️ Cadastre um parceiro na aba 'PARCEIROS' antes de registrar uma doação.")
 
-        # 1. O Filtro agora tem a opção "Todos"
-        status_filtro = st.selectbox("Filtrar por Status", ["Todos", "Ativo", "Inativo", "Prospecção"])
+    # --- SEÇÃO DE VISUALIZAÇÃO DE PARCEIROS (MANTIDA IGUAL À SUA) ---
+    st.write("---")
+    st.subheader("📋 Parceiros Cadastrados")
 
-        # 2. Query melhorada com LEFT JOIN (para garantir que nada suma)
-        query_base = """
-            SELECT 
-                p.id_parceiro as ID,
-                p.nome_instituicao as Nome,
-                p.data_adesao as 'Data Adesão',
-                p.status as Status,
-                c.nome_categoria as Categoria
-            FROM Parceiro p
-            LEFT JOIN Categoria_Parceiro c ON p.id_categoria = c.id_categoria
-        """
+    # 1. Filtro de Status
+    status_filtro = st.selectbox("Filtrar por Status", ["Todos", "Ativo", "Inativo", "Prospecção"])
 
-        # 3. Lógica que aplica o filtro ou mostra tudo
-        if status_filtro != "Todos":
-            df_parceiros = run_query(query_base + f" WHERE p.status = '{status_filtro}'")
-        else:
-            df_parceiros = run_query(query_base)
+    # 2. Query com LEFT JOIN
+    query_base = """
+        SELECT 
+            p.id_parceiro as ID,
+            p.nome_instituicao as Nome,
+            p.data_adesao as 'Data Adesão',
+            p.status as Status,
+            c.nome_categoria as Categoria
+        FROM Parceiro p
+        LEFT JOIN Categoria_Parceiro c ON p.id_categoria = c.id_categoria
+    """
 
-        # 4. Exibição final da tabela
-        if not df_parceiros.empty:
-            st.dataframe(df_parceiros, use_container_width=True)
-        else:
-            st.info(f"Nenhum parceiro encontrado com o status: {status_filtro}")
+    # 3. Aplica o filtro
+    if status_filtro != "Todos":
+        df_viz = run_query(query_base + f" WHERE p.status = '{status_filtro}'")
+    else:
+        df_viz = run_query(query_base)
+
+    # 4. Exibição da tabela
+    if not df_viz.empty:
+        st.dataframe(df_viz, use_container_width=True)
+    else:
+        st.info(f"Nenhum parceiro encontrado com o status: {status_filtro}")
 
 # --- 4. CONTATOS DIRETO ---
 elif menu == "**CONTATOS**":
