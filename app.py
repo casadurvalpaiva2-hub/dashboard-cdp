@@ -5,6 +5,9 @@ import os
 from datetime import datetime
 import streamlit as st
 
+def format_br(valor):
+    return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
 # 1. Defina sua senha (ou busque de um banco de dados/secrets)
 SENHA_MESTRA = "CDP2026" # Altere para uma senha forte
 
@@ -162,9 +165,9 @@ if menu == "**PAINEL GERAL**":
         qtd = len(df_final)
         media = total / qtd if qtd > 0 else 0
         
-        c1.metric("**Arrecadação no ano**", f"R$ {total:,.2f}")
+        c1.metric("**Arrecadação no ano**", format_br(total))
         c2.metric("**Doações no ano**", f"{qtd}")
-        c3.metric("**Média do período**", f"R$ {media:,.2f}")
+        c3.metric("**Média do período**", format_br(media))
 
         st.markdown("---")
 
