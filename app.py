@@ -373,16 +373,17 @@ elif menu == "**REGISTRAR DOAÇÃO**":
             
             desc = st.text_area("Observações")
             
-            # --- BOTÃO COM VALIDAÇÃO ---
+            # --- BOTÃO COM VALIDAÇÃO AJUSTADA ---
             if st.form_submit_button("Confirmar doação", type="primary"):
-                # TRAVA: Se o usuário não escolheu um parceiro, dá erro e não salva
+                # TRAVA: A única trava obrigatória agora é o Parceiro
                 if nome_sel == "Selecione o parceiro...":
                     st.error("ERRO: Você esqueceu de selecionar o Parceiro!")
                 
-                elif not projeto: # Aproveitamos para validar o projeto também
-                    st.warning("Por favor, informe o nome do Projeto ou Emenda.")
-                
+                # Removido o 'elif not projeto' que barrava o envio
                 else:
+                    # Se o projeto estiver vazio, ele salva como "GERAL" ou "NÃO INFORMADO"
+                    projeto_final = projeto.upper() if projeto else "GERAL"
+                    
                     # Se passou nas travas, salva no banco
                     id_p = df_p[df_p['nome_instituicao'] == nome_sel]['id_parceiro'].values[0]
                     
@@ -390,12 +391,12 @@ elif menu == "**REGISTRAR DOAÇÃO**":
                         INSERT INTO Doacao (id_parceiro, valor_estimado, tipo_doacao, data_doacao, descricao, nome_projeto) 
                         VALUES (?,?,?,?,?,?)
                     """
-                    run_insert(sql, (int(id_p), valor, tipo, data.strftime('%Y-%m-%d'), desc, projeto.upper()))
+                    # Note que usamos 'projeto_final' aqui
+                    run_insert(sql, (int(id_p), valor, tipo, data.strftime('%Y-%m-%d'), desc.upper(), projeto_final))
                     
                     st.success(f"✅ Recurso de '{nome_sel}' registrado com sucesso!")
                     st.balloons()
-    else:
-        st.error("Cadastre um parceiro na aba 'PARCEIROS' antes de registrar uma doação.")
+                    st.rerun() # Adicionei o rerun para limpar o form após o sucesso
 
         # --- NOVO: GERENCIAR LANÇAMENTOS RECENTES ---
     st.write("---")
