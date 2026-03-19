@@ -557,7 +557,7 @@ if st.sidebar.button("Sair", use_container_width=True):
 
 # --- COLOQUE ISSO NO FINAL DO ARQUIVO ---
 elif menu == "**RELACIONAMENTO**":
-    st.title("🤝 RELACIONAMENTO E SAÚDE DA BASE")
+    st.title("RELACIONAMENTO - SAÚDE BD")
     
     # 1. BUSCA OS DADOS DA VIEW
     df_rel = run_query("SELECT * FROM View_Relacionamento_Critico")
@@ -619,7 +619,7 @@ elif menu == "**RELACIONAMENTO**":
     st.divider()
 
     # 2. Formulário para registrar nova conversa
-    st.subheader("**📝 Registrar nova interação**")
+    st.subheader("**Registrar nova interação**")
     # No banco a tabela principal de parceiros usa 'nome_instituicao', então aqui mantemos
     df_p = run_query("SELECT id_parceiro, nome_instituicao FROM Parceiro ORDER BY nome_instituicao")
     
