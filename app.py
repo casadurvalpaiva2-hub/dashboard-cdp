@@ -614,54 +614,60 @@ elif menu == "**RELACIONAMENTO**":
             else:
                 st.error("Por favor, selecione um parceiro.")
 
-# --- NOVO: GRÁFICO DE SAÚDE DA BASE (CRM) ---
-        st.markdown("---")
-        st.subheader("**Saúde da base de doadores**")
-        
-        # 1. Buscamos os dados da sua View de Relacionamento
-        df_saude = run_query("SELECT Status_Relacionamento, COUNT(*) as qtd FROM View_Relacionamento_Critico GROUP BY Status_Relacionamento")
-        
-        if not df_saude.empty:
-            import plotly.express as px
-            
-            # 2. Criamos o gráfico de rosca
-            # Definimos as cores para bater com o que você já usa: Vermelho para Crítico, etc.
-            cores_map = {
-    "🔴 CRÍTICO (+3 meses)": "#FF4B4B", 
-    "🟡 ATENÇÃO (+45 dias)": "#FFA500", 
-    "🟢 EM DIA": "#00CC96"
-}
-            
-            fig = px.pie(
-                df_saude, 
-                values='qtd', 
-                names='Status_Relacionamento',
-                hole=0.5,
-                color='Status_Relacionamento',
-                color_discrete_map=cores_map
-            )
-            
-            fig.update_traces(textposition='inside', textinfo='percent+label')
-            fig.update_layout(showlegend=False, height=350, margin=dict(t=0, b=0, l=0, r=0))
-            
-            # 3. Exibimos o gráfico e um pequeno insight
-            col_graph, col_txt = st.columns([2, 1])
-            with col_graph:
-                st.plotly_chart(fig, use_container_width=True)
-            
-            with col_txt:
-                total_parceiros = df_saude['qtd'].sum()
-                criticos = df_saude[df_saude['Status_Relacionamento'].str.contains("CRÍTICO")]['qtd'].sum() if any("CRÍTICO" in s for s in df_saude['Status_Relacionamento']) else 0
-                percent_critico = (criticos / total_parceiros) * 100
-                
-                st.metric("Parceiros com registro", total_parceiros)
-                st.warning(f"⚠️ {percent_critico:.1f}% da sua base está em estado **CRÍTICO**.")
-                st.write("Isso significa que esses parceiros não recebem contato há mais de 1 ano.")
-        else:
-            st.info("Ainda não há dados de relacionamento para gerar o gráfico.")
-            c1.metric(
-    "**Arrecadação no ano**", 
-    fmt(total_atual), 
-    delta=fmt(diff_valor), 
-    delta_color="normal" # Isso garante que negativo = vermelho/baixo
-)
+# --- 3. GRÁFICO DE RO SCA (ESTILO MODERNO) ---
+st.markdown("---")
+st.subheader("📊 Saúde da Base de Doadores")
+
+# 1. Buscamos os dados da sua View CORRETA
+# Note que usamos 'Status_Relacionamento' que é o nome da coluna no seu SQL
+df_status = run_query("SELECT Status_Relacionamento, COUNT(*) as qtd FROM View_Relacionamento_Critico GROUP BY Status_Relacionamento")
+
+if not df_status.empty:
+    import plotly.graph_objects as go
+    
+    # --- DEFINIÇÃO DE CORES MODERNAS ---
+    # As chaves aqui devem ser EXATAMENTE como aparecem na sua tabela (com as bolinhas)
+    cores_map = {
+        "🔴 CRÍTICO (+3 meses)": "#FF4B4B", 
+        "🟡 ATENÇÃO (+45 dias)": "#FFA500", 
+        "🟢 EM DIA": "#00CC96"
+    }
+    
+    # Criamos as listas de cores baseadas na ordem dos dados
+    cores_lista = [cores_map.get(s, "#808080") for s in df_status['Status_Relacionamento']]
+
+    # --- CRIAÇÃO DO GRÁFICO ---
+    fig = go.Figure(data=[go.Pie(
+        labels=df_status['Status_Relacionamento'], 
+        values=df_status['qtd'], 
+        hole=.6, # Buraco central maior para ficar moderno
+        marker_colors=cores_lista,
+        textinfo='percent',
+        hoverinfo='label+value'
+    )])
+
+    # --- DESIGN E ANOTAÇÃO CENTRAL ---
+    total_p = df_status['qtd'].sum()
+    fig.update_layout(
+        showlegend=True,
+        legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5),
+        margin=dict(t=0, b=50, l=0, r=0),
+        height=400,
+        annotations=[dict(text=f'<b>{total_p}</b><br>Parceiros', x=0.5, y=0.5, font_size=20, showarrow=False)]
+    )
+
+    # Exibe em colunas para o texto de insight ficar ao lado
+    col_g, col_t = st.columns([2, 1])
+    with col_g:
+        st.plotly_chart(fig, use_container_width=True)
+    
+    with col_t:
+        st.write("")
+        st.write("")
+        # Cálculo rápido de urgência
+        criticos = df_status[df_status['Status_Relacionamento'].str.contains("CRÍTICO")]['qtd'].sum()
+        perc = (criticos/total_p)*100
+        st.error(f"**Urgência:**\n\n{perc:.1f}% da base precisa de contato imediato.")
+
+else:
+    st.info("Ainda não há dados suficientes na View para gerar o gráfico.")
