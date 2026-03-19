@@ -133,65 +133,100 @@ except Exception as e:
 # --- NAVEGAÇÃO ---
 st.sidebar.title("**MENU GESTÃO**")
 menu = st.sidebar.radio("Ir para:", [
-    "**PAINEL GERAL**", 
+    "**PAINEL GERAL**",
+    "**RELACIONAMENTO**", 
     "**PARCEIROS/PROJETOS**", 
     "**REGISTRAR DOAÇÃO**", 
     "**CONTATOS**"
-])
+    ])
 
 # --- 1. DASHBOARD GERAL ---
 if menu == "**PAINEL GERAL**":
-    st.title("DASHBBOARD DI")
+    st.title("DASHBOARD DI")
     
     df_doacoes = run_query("SELECT * FROM Doacao")
     
     if not df_doacoes.empty:
-        # Tratamento de dados
+        # 1. Tratamento Inicial
         df_doacoes['data_doacao'] = pd.to_datetime(df_doacoes['data_doacao'])
-        
-        # Filtro de Ano
         anos = sorted(df_doacoes['data_doacao'].dt.year.unique(), reverse=True)
         ano_sel = st.selectbox("**Selecione o ano para análise:**", anos)
         
-        # --- A MÁGICA ACONTECE AQUI ---
-        # Criamos um NOVO dataframe que contém APENAS os dados do ano escolhido
-        df_final = df_doacoes[df_doacoes['data_doacao'].dt.year == ano_sel]
+        # 2. Cálculos dos Dados (Ano Atual vs Ano Anterior)
+        df_atual = df_doacoes[df_doacoes['data_doacao'].dt.year == ano_sel]
+        df_passado = df_doacoes[df_doacoes['data_doacao'].dt.year == (ano_sel - 1)]
         
+        # Valores Totais
+        total_atual = df_atual['valor_estimado'].sum()
+        total_passado = df_passado['valor_estimado'].sum()
         
+        # Quantidades
+        qtd_atual = len(df_atual)
+        qtd_passada = len(df_passado)
+        
+        # Médias
+        media_atual = total_atual / qtd_atual if qtd_atual > 0 else 0
+        media_passada = total_passado / qtd_passada if qtd_passada > 0 else 0
 
-        # 1. MÉTRICAS (Usando df_final)
+       # --- EXIBIÇÃO DAS MÉTRICAS (COLE AQUI) ---
+        
+        # 1. Primeiro definimos a função de formatar moeda
+        def fmt(v): 
+            return f"R$ {v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+            
         c1, c2, c3 = st.columns(3)
-        total = df_final['valor_estimado'].sum()
-        qtd = len(df_final)
-        media = total / qtd if qtd > 0 else 0
         
-        c1.metric("**Arrecadação no ano**", format_br(total))
-        c2.metric("**Doações no ano**", f"{qtd}")
-        c3.metric("**Média do período**", format_br(media))
+        # 2. Depois calculamos as variações
+        diff_valor = total_atual - total_passado
+        diff_qtd = qtd_atual - qtd_passada
 
-        st.markdown("---")
+        # 3. Lógica para a cor do Delta de Arrecadação
+        # Se o valor for negativo, colocamos o sinal de menos ANTES do R$
+        texto_delta_v = fmt(diff_valor)
+        if diff_valor < 0:
+            texto_delta_v = f"- {fmt(abs(diff_valor))}" 
 
-        # 2. GRÁFICOS (Também usando df_final)
+        # 4. Exibimos os cartões (Metrics)
+        # O delta de arrecadação agora ficará VERMELHO se cair
+        c1.metric("**Arrecadação no ano**", fmt(total_atual), 
+                  delta=texto_delta_v if ano_sel-1 in anos else None)
+        
+        # O delta de doações mostrará a quantidade
+        c2.metric("**Doações no ano**", f"{qtd_atual} un", 
+                  delta=f"{diff_qtd} vs ano ant." if ano_sel-1 in anos else None)
+        
+        c3.metric("**Ticket Médio**", fmt(media_atual))
+
+        # --- GRÁFICOS ---
         col_esq, col_dir = st.columns(2)
         
         with col_esq:
             st.subheader("Por categoria")
-            dados_cat = df_final.groupby('tipo_doacao')['valor_estimado'].sum()
-            st.bar_chart(dados_cat, color="#E31D24") # Vermelho Institucional
+            dados_cat = df_atual.groupby('tipo_doacao')['valor_estimado'].sum()
+            st.bar_chart(dados_cat, color="#E31D24") 
 
         with col_dir:
             st.subheader("Evolução mensal")
-            # Agrupa por mês dentro do ano selecionado
-            df_final['Mes'] = df_final['data_doacao'].dt.strftime('%m - %b')
-            dados_mes = df_final.groupby('Mes')['valor_estimado'].sum()
-            st.line_chart(dados_mes, color="#FFF200") # Amarelo Institucional
+            df_atual['Mes'] = df_atual['data_doacao'].dt.strftime('%m - %b')
+            dados_mes = df_atual.groupby('Mes')['valor_estimado'].sum()
+            st.line_chart(dados_mes, color="#FFF200")
 
         st.markdown("---")
 
-        # 3. TABELA (Apenas o que foi filtrado)
-        with st.expander(f"**VER TODOS OS LANÇAMENTOS DE {ano_sel}**"):
-            st.dataframe(df_final.sort_values(by='data_doacao', ascending=False), 
-                         use_container_width=True, hide_index=True)
+        # --- RANKING TOP 5 (Nova Melhoria) ---
+        st.subheader("**Maiores doadores do ano** 🏆😎")
+        # Busca o nome das instituições fazendo um Join
+        query_top = f"""
+            SELECT p.nome_instituicao as Parceiro, SUM(d.valor_estimado) as Total
+            FROM Doacao d
+            JOIN Parceiro p ON d.id_parceiro = p.id_parceiro
+            WHERE strftime('%Y', d.data_doacao) = '{ano_sel}'
+            GROUP BY Parceiro ORDER BY Total DESC LIMIT 5
+        """
+        df_top = run_query(query_top)
+        if not df_top.empty:
+            df_top['Total'] = df_top['Total'].apply(fmt)
+            st.table(df_top)
 
     else:
         st.info("Nenhum dado encontrado no banco de dados.")
@@ -269,7 +304,7 @@ elif menu == "**PARCEIROS/PROJETOS**":
 
 # --- ABA DE PROJETOS ---
     with tab2:
-        st.subheader("📅 Histórico Financeiro por Projeto e Ano")
+        st.subheader("HISTÓRICO FINANCEIRO")
         
         # Query que agrupa por Nome do Projeto e Ano da Doação
         query_projetos = """
@@ -306,7 +341,7 @@ elif menu == "**PARCEIROS/PROJETOS**":
             # Resumo rápido para o usuário
             total_geral = df_proj['Total'].sum()
             total_formatado = f"R$ {total_geral:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-            st.info(f"💰 **Captação Total Acumulada (Todos os anos):** {total_formatado}")
+            st.info(f"**Captação total acumulada (Todos os anos):** {total_formatado}")
             
         else:
             st.info("Ainda não existem doações vinculadas a projetos específicos.")
@@ -316,41 +351,79 @@ elif menu == "**PARCEIROS/PROJETOS**":
 elif menu == "**REGISTRAR DOAÇÃO**":
     st.title("ENTRADA DE RECURSOS")
     
-    # Buscamos os nomes para o usuário escolher
-    df_p_list = run_query("SELECT id_parceiro, nome_instituicao FROM Parceiro")
+    # 1. Buscamos os nomes para o usuário escolher
+    df_p = run_query("SELECT id_parceiro, nome_instituicao FROM Parceiro")
     
-    if not df_p_list.empty:
+    if not df_p.empty:
         with st.form("nova_doacao", clear_on_submit=True):
             col_a, col_b = st.columns(2)
             
             with col_a:
-                nome_sel = st.selectbox("Selecione o parceiro/fonte", df_p_list['nome_instituicao'].tolist())
-                valor = st.number_input("Valor estimado (R$)", min_value=0.0)
-                data = st.date_input("Data", datetime.now())
+                # --- AQUI ESTÁ A MUDANÇA: ADICIONANDO A OPÇÃO NEUTRA ---
+                opcoes_p = ["Selecione o parceiro..."] + df_p['nome_instituicao'].tolist()
+                nome_sel = st.selectbox("Selecione o parceiro/fonte", opcoes_p)
+                
+                valor = st.number_input("Valor do repasse (R$)", min_value=0.0)
+                data = st.date_input("Data do recebimento", datetime.now())
 
             with col_b:
-                # NOVO CAMPO: Aqui você organiza as Emendas e Projetos (COMDICA, PRONON, etc)
-                projeto = st.text_input("Nome do Projeto / Emenda", placeholder="Ex: COMDICA 2024")
-                tipo = st.selectbox("Tipo", ["Financeira", "Vestuário", "Alimentos", "Serviços", "Midiática", "Projetos"])
+                # Campo de projeto que você já usava
+                projeto = st.text_input("Nome do Projeto / Emenda / Finalidade", placeholder="Ex: Projeto Vida")
+                tipo = st.selectbox("Tipo de recurso", ["Financeira", "Vestuário", "Alimentos", "Serviços", "Midiática", "Projetos"])
             
-            desc = st.text_area("Descrição/Observações")
+            desc = st.text_area("Observações")
             
-            # Recupera o ID do parceiro para o SQL
-            id_p = df_p_list[df_p_list['nome_instituicao'] == nome_sel]['id_parceiro'].values[0]
-            
+            # --- BOTÃO COM VALIDAÇÃO ---
             if st.form_submit_button("Confirmar doação", type="primary"):
-                # SQL ATUALIZADO: Agora com 6 colunas (incluindo nome_projeto)
-                sql_ins = """
-                    INSERT INTO Doacao (id_parceiro, valor_estimado, tipo_doacao, data_doacao, descricao, nome_projeto) 
-                    VALUES (?,?,?,?,?,?)
-                """
-                # Salvamos o projeto em MAIÚSCULO para manter o padrão
-                run_insert(sql_ins, (int(id_p), valor, tipo, data.strftime('%Y-%m-%d'), desc, projeto.upper()))
+                # TRAVA: Se o usuário não escolheu um parceiro, dá erro e não salva
+                if nome_sel == "Selecione o parceiro...":
+                    st.error("ERRO: Você esqueceu de selecionar o Parceiro!")
                 
-                st.success(f"✅ Doação de {nome_sel} para o projeto {projeto.upper()} registrada!")
-                st.balloons()
+                elif not projeto: # Aproveitamos para validar o projeto também
+                    st.warning("Por favor, informe o nome do Projeto ou Emenda.")
+                
+                else:
+                    # Se passou nas travas, salva no banco
+                    id_p = df_p[df_p['nome_instituicao'] == nome_sel]['id_parceiro'].values[0]
+                    
+                    sql = """
+                        INSERT INTO Doacao (id_parceiro, valor_estimado, tipo_doacao, data_doacao, descricao, nome_projeto) 
+                        VALUES (?,?,?,?,?,?)
+                    """
+                    run_insert(sql, (int(id_p), valor, tipo, data.strftime('%Y-%m-%d'), desc, projeto.upper()))
+                    
+                    st.success(f"✅ Recurso de '{nome_sel}' registrado com sucesso!")
+                    st.balloons()
     else:
-        st.error("⚠️ Cadastre um parceiro na aba 'PARCEIROS' antes de registrar uma doação.")
+        st.error("Cadastre um parceiro na aba 'PARCEIROS' antes de registrar uma doação.")
+
+        # --- NOVO: GERENCIAR LANÇAMENTOS RECENTES ---
+    st.write("---")
+    st.subheader("**LANÇAMENTOS RECENTES**")
+    
+    # Busca as últimas 5 doações para conferência
+    df_recentes = run_query("""
+        SELECT d.id_doacao, p.nome_instituicao, d.valor_estimado, d.data_doacao, d.nome_projeto
+        FROM Doacao d
+        JOIN Parceiro p ON d.id_parceiro = p.id_parceiro
+        ORDER BY d.id_doacao DESC LIMIT 5
+    """)
+
+    if not df_recentes.empty:
+        for _, row in df_recentes.iterrows():
+            col1, col2, col3 = st.columns([3, 1, 1])
+            with col1:
+                st.write(f"📌 {row['nome_instituicao']} - {row['nome_projeto']} (R$ {row['valor_estimado']:.2f})")
+            with col2:
+                st.write(f"📅 {row['data_doacao']}")
+            with col3:
+                # Botão para excluir o registro específico
+                if st.button(f"Excluir #{row['id_doacao']}", key=f"del_{row['id_doacao']}"):
+                    run_insert("DELETE FROM Doacao WHERE id_doacao = ?", (int(row['id_doacao']),))
+                    st.warning(f"Lançamento #{row['id_doacao']} removido!")
+                    st.rerun()
+    else:
+        st.info("Nenhum lançamento recente encontrado.")
 
     # --- SEÇÃO DE VISUALIZAÇÃO DE PARCEIROS (MANTIDA IGUAL À SUA) ---
     st.write("---")
@@ -481,3 +554,114 @@ if st.sidebar.button("Sair", use_container_width=True):
     st.rerun()
 
     st.sidebar.markdown("---")
+
+# --- COLOGUE ISSO NO FINAL DO ARQUIVO, NA MARGEM ESQUERDA ---
+elif menu == "**RELACIONAMENTO**":
+    st.title("RELACIONAMENTO")
+    
+    # 1. BUSCA OS DADOS DA VIEW
+    df_rel = run_query("SELECT * FROM View_Relacionamento_Critico")
+
+    if not df_rel.empty:
+        # --- FILTRO DE URGÊNCIA (O que evita a repetição) ---
+        st.subheader("**STATUS**")
+        status_filtro = st.radio("Filtrar por urgência:", 
+                                ["Todos", "🔴 CRÍTICO", "🟡 ATENÇÃO", "🟢 EM DIA"], 
+                                horizontal=True)
+        
+        # Lógica para filtrar o DataFrame baseado na bolinha selecionada
+        if status_filtro != "Todos":
+            # Extraímos apenas a palavra (ex: CRÍTICO) para filtrar
+            termo = status_filtro.split(" ")[1] 
+            df_display = df_rel[df_rel['Status_Relacionamento'].str.contains(termo)]
+        else:
+            df_display = df_rel
+        
+        # EXIBE APENAS UMA TABELA
+        st.dataframe(df_display, use_container_width=True, hide_index=True)
+    else:
+        st.success("✅ Todos os contatos estão em dia!")
+
+    st.divider()
+
+
+    # 2. Formulário para registrar nova conversa
+    st.subheader("**Registrar nova interação**")
+    df_p = run_query("SELECT id_parceiro, nome_instituicao FROM Parceiro ORDER BY nome_instituicao")
+    
+    with st.form("form_crm", clear_on_submit=True):
+        col1, col2 = st.columns(2)
+        with col1:
+            # Aqui usamos o nome em maiúsculo como você pediu
+            p_sel = st.selectbox("Parceiro", ["Selecione..."] + df_p['nome_instituicao'].tolist())
+            data_c = st.date_input("Data de contato", datetime.now())
+        with col2:
+            prox_c = st.date_input("Agendar retorno")
+            
+        txt = st.text_area("Descrição da conversa").upper() # Força maiúsculo aqui também
+        
+        if st.form_submit_button("Salvar histórico"):
+            if p_sel != "Selecione...":
+                id_parc = df_p[df_p['nome_instituicao'] == p_sel]['id_parceiro'].values[0]
+                sql = """
+                    INSERT INTO Registro_Relacionamento 
+                    (id_parceiro, data_interacao, descricao_do_que_foi_feito, proxima_acao_data)
+                    VALUES (?, ?, ?, ?)
+                """
+                run_insert(sql, (int(id_parc), data_c.strftime('%Y-%m-%d'), txt, prox_c.strftime('%Y-%m-%d')))
+                st.success("Histórico salvo!")
+                st.rerun()
+            else:
+                st.error("Por favor, selecione um parceiro.")
+
+# --- NOVO: GRÁFICO DE SAÚDE DA BASE (CRM) ---
+        st.markdown("---")
+        st.subheader("**Saúde da base de doadores**")
+        
+        # 1. Buscamos os dados da sua View de Relacionamento
+        df_saude = run_query("SELECT Status_Relacionamento, COUNT(*) as qtd FROM View_Relacionamento_Critico GROUP BY Status_Relacionamento")
+        
+        if not df_saude.empty:
+            import plotly.express as px
+            
+            # 2. Criamos o gráfico de rosca
+            # Definimos as cores para bater com o que você já usa: Vermelho para Crítico, etc.
+            cores_map = {
+    "🔴 CRÍTICO (+3 meses)": "#FF4B4B", 
+    "🟡 ATENÇÃO (+45 dias)": "#FFA500", 
+    "🟢 EM DIA": "#00CC96"
+}
+            
+            fig = px.pie(
+                df_saude, 
+                values='qtd', 
+                names='Status_Relacionamento',
+                hole=0.5,
+                color='Status_Relacionamento',
+                color_discrete_map=cores_map
+            )
+            
+            fig.update_traces(textposition='inside', textinfo='percent+label')
+            fig.update_layout(showlegend=False, height=350, margin=dict(t=0, b=0, l=0, r=0))
+            
+            # 3. Exibimos o gráfico e um pequeno insight
+            col_graph, col_txt = st.columns([2, 1])
+            with col_graph:
+                st.plotly_chart(fig, use_container_width=True)
+            
+            with col_txt:
+                total_parceiros = df_saude['qtd'].sum()
+                criticos = df_saude[df_saude['Status_Relacionamento'].str.contains("CRÍTICO")]['qtd'].sum() if any("CRÍTICO" in s for s in df_saude['Status_Relacionamento']) else 0
+                percent_critico = (criticos / total_parceiros) * 100
+                
+                st.metric("Parceiros com registro", total_parceiros)
+                st.warning(f"⚠️ {percent_critico:.1f}% da sua base está em estado **CRÍTICO**.")
+                st.write("Isso significa que esses parceiros não recebem contato há mais de 1 ano.")
+        else:
+            st.info("Ainda não há dados de relacionamento para gerar o gráfico.")
+            c1.metric(
+    "**Arrecadação no ano**", 
+    fmt(total_atual), 
+    delta=fmt(diff_valor), 
+    delta_color="normal" # Isso garante que negativo = vermelho/baixo
+)
