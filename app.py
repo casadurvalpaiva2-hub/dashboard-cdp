@@ -555,52 +555,85 @@ if st.sidebar.button("Sair", use_container_width=True):
 
     st.sidebar.markdown("---")
 
-# --- COLOGUE ISSO NO FINAL DO ARQUIVO, NA MARGEM ESQUERDA ---
+# --- COLOQUE ISSO NO FINAL DO ARQUIVO ---
 elif menu == "**RELACIONAMENTO**":
-    st.title("RELACIONAMENTO")
+    st.title("🤝 RELACIONAMENTO E SAÚDE DA BASE")
     
     # 1. BUSCA OS DADOS DA VIEW
     df_rel = run_query("SELECT * FROM View_Relacionamento_Critico")
+    
+    # Criamos o resumo para o gráfico
+    df_status = df_rel.groupby('Status_Relacionamento').size().reset_index(name='qtd')
 
-    if not df_rel.empty:
-        # --- FILTRO DE URGÊNCIA (O que evita a repetição) ---
-        st.subheader("**STATUS**")
-        status_filtro = st.radio("Filtrar por urgência:", 
-                                ["Todos", "🔴 CRÍTICO", "🟡 ATENÇÃO", "🟢 EM DIA"], 
-                                horizontal=True)
-        
-        # Lógica para filtrar o DataFrame baseado na bolinha selecionada
-        if status_filtro != "Todos":
-            # Extraímos apenas a palavra (ex: CRÍTICO) para filtrar
-            termo = status_filtro.split(" ")[1] 
-            df_display = df_rel[df_rel['Status_Relacionamento'].str.contains(termo)]
+    # --- LAYOUT EM COLUNAS ---
+    col_grafico, col_tabela = st.columns([1, 1.2])
+
+    with col_grafico:
+        if not df_status.empty:
+            import plotly.graph_objects as go
+            
+            # Cores modernas sincronizadas
+            cores_map = {
+                "🔴 CRÍTICO (+3 meses)": "#FF4B4B", 
+                "🟡 ATENÇÃO (+45 dias)": "#FFA500", 
+                "🟢 EM DIA": "#00CC96"
+            }
+            cores_lista = [cores_map.get(s, "#808080") for s in df_status['Status_Relacionamento']]
+
+            fig = go.Figure(data=[go.Pie(
+                labels=df_status['Status_Relacionamento'], 
+                values=df_status['qtd'], 
+                hole=.6, 
+                marker_colors=cores_lista,
+                textinfo='percent'
+            )])
+
+            total_p = df_status['qtd'].sum()
+            fig.update_layout(
+                showlegend=True,
+                legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5),
+                margin=dict(t=0, b=0, l=0, r=0),
+                height=300,
+                annotations=[dict(text=f'<b>{total_p}</b><br>Parceiros', x=0.5, y=0.5, font_size=18, showarrow=False)]
+            )
+            st.plotly_chart(fig, use_container_width=True)
+
+    with col_tabela:
+        st.subheader("**STATUS ATUAL**")
+        if not df_rel.empty:
+            status_filtro = st.radio("Filtrar urgência:", 
+                                    ["Todos", "🔴 CRÍTICO", "🟡 ATENÇÃO", "🟢 EM DIA"], 
+                                    horizontal=True)
+            
+            if status_filtro != "Todos":
+                termo = status_filtro.split(" ")[1] 
+                df_display = df_rel[df_rel['Status_Relacionamento'].str.contains(termo)]
+            else:
+                df_display = df_rel
+            
+            # AJUSTE AQUI: Mudamos 'nome_instituicao' para 'Empresa' que é o nome real na View
+            st.dataframe(df_display[['Empresa', 'Status_Relacionamento']], height=250, use_container_width=True, hide_index=True)
         else:
-            df_display = df_rel
-        
-        # EXIBE APENAS UMA TABELA
-        st.dataframe(df_display, use_container_width=True, hide_index=True)
-    else:
-        st.success("✅ Todos os contatos estão em dia!")
+            st.success("✅ Todos em dia!")
 
     st.divider()
 
-
     # 2. Formulário para registrar nova conversa
-    st.subheader("**Registrar nova interação**")
+    st.subheader("**📝 Registrar nova interação**")
+    # No banco a tabela principal de parceiros usa 'nome_instituicao', então aqui mantemos
     df_p = run_query("SELECT id_parceiro, nome_instituicao FROM Parceiro ORDER BY nome_instituicao")
     
     with st.form("form_crm", clear_on_submit=True):
-        col1, col2 = st.columns(2)
-        with col1:
-            # Aqui usamos o nome em maiúsculo como você pediu
+        c1, c2 = st.columns(2)
+        with c1:
             p_sel = st.selectbox("Parceiro", ["Selecione..."] + df_p['nome_instituicao'].tolist())
             data_c = st.date_input("Data de contato", datetime.now())
-        with col2:
+        with c2:
             prox_c = st.date_input("Agendar retorno")
             
-        txt = st.text_area("Descrição da conversa").upper() # Força maiúsculo aqui também
+        txt = st.text_area("Descrição da conversa").upper()
         
-        if st.form_submit_button("Salvar histórico"):
+        if st.form_submit_button("Salvar histórico", type="primary"):
             if p_sel != "Selecione...":
                 id_parc = df_p[df_p['nome_instituicao'] == p_sel]['id_parceiro'].values[0]
                 sql = """
@@ -609,65 +642,7 @@ elif menu == "**RELACIONAMENTO**":
                     VALUES (?, ?, ?, ?)
                 """
                 run_insert(sql, (int(id_parc), data_c.strftime('%Y-%m-%d'), txt, prox_c.strftime('%Y-%m-%d')))
-                st.success("Histórico salvo!")
+                st.success("✅ Histórico salvo com sucesso!")
                 st.rerun()
             else:
                 st.error("Por favor, selecione um parceiro.")
-
-# --- 3. GRÁFICO DE RO SCA (ESTILO MODERNO) ---
-st.markdown("---")
-st.subheader("📊 Saúde da Base de Doadores")
-
-# 1. Buscamos os dados da sua View CORRETA
-# Note que usamos 'Status_Relacionamento' que é o nome da coluna no seu SQL
-df_status = run_query("SELECT Status_Relacionamento, COUNT(*) as qtd FROM View_Relacionamento_Critico GROUP BY Status_Relacionamento")
-
-if not df_status.empty:
-    import plotly.graph_objects as go
-    
-    # --- DEFINIÇÃO DE CORES MODERNAS ---
-    # As chaves aqui devem ser EXATAMENTE como aparecem na sua tabela (com as bolinhas)
-    cores_map = {
-        "🔴 CRÍTICO (+3 meses)": "#FF4B4B", 
-        "🟡 ATENÇÃO (+45 dias)": "#FFA500", 
-        "🟢 EM DIA": "#00CC96"
-    }
-    
-    # Criamos as listas de cores baseadas na ordem dos dados
-    cores_lista = [cores_map.get(s, "#808080") for s in df_status['Status_Relacionamento']]
-
-    # --- CRIAÇÃO DO GRÁFICO ---
-    fig = go.Figure(data=[go.Pie(
-        labels=df_status['Status_Relacionamento'], 
-        values=df_status['qtd'], 
-        hole=.6, # Buraco central maior para ficar moderno
-        marker_colors=cores_lista,
-        textinfo='percent',
-        hoverinfo='label+value'
-    )])
-
-    # --- DESIGN E ANOTAÇÃO CENTRAL ---
-    total_p = df_status['qtd'].sum()
-    fig.update_layout(
-        showlegend=True,
-        legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5),
-        margin=dict(t=0, b=50, l=0, r=0),
-        height=400,
-        annotations=[dict(text=f'<b>{total_p}</b><br>Parceiros', x=0.5, y=0.5, font_size=20, showarrow=False)]
-    )
-
-    # Exibe em colunas para o texto de insight ficar ao lado
-    col_g, col_t = st.columns([2, 1])
-    with col_g:
-        st.plotly_chart(fig, use_container_width=True)
-    
-    with col_t:
-        st.write("")
-        st.write("")
-        # Cálculo rápido de urgência
-        criticos = df_status[df_status['Status_Relacionamento'].str.contains("CRÍTICO")]['qtd'].sum()
-        perc = (criticos/total_p)*100
-        st.error(f"**Urgência:**\n\n{perc:.1f}% da base precisa de contato imediato.")
-
-else:
-    st.info("Ainda não há dados suficientes na View para gerar o gráfico.")
