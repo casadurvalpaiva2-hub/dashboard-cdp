@@ -471,9 +471,6 @@ elif menu == "**REGISTRAR DOAÇÃO**":
                 if nome_sel == "Selecione o parceiro...":
                     st.error("ERRO: Você esqueceu de selecionar o Parceiro!")
                 
-                # Nova trava para garantir que o Farol de Desempenho funcione
-                elif origem_sel == "Selecione...":
-                    st.warning("POR FAVOR: Selecione a Origem (Bazar, Troco, etc.) para alimentar o Farol Estratégico.")
                 
                 else:
                     projeto_final = projeto.upper() if projeto else "GERAL"
