@@ -4,6 +4,8 @@ import pandas as pd
 import os
 from datetime import datetime
 import streamlit as st
+import re
+from streamlit_option_menu import option_menu
 
 def format_br(valor):
     return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
@@ -131,18 +133,25 @@ except Exception as e:
     st.error(f"Erro ao atualizar banco: {e}")
 
 # --- NAVEGAÇÃO ---
-st.sidebar.title("**MENU GESTÃO**")
-menu = st.sidebar.radio("Ir para:", [
-    "**PAINEL GERAL**",
-    "**FAROL ESTRATÉGICO**",
-    "**RELACIONAMENTO**", 
-    "**PARCEIROS/PROJETOS**", 
-    "**REGISTRAR DOAÇÃO**", 
-    "**CONTATOS**"
-    ])
+# --- NAVEGAÇÃO PREMIUM (Substitua o radio por isso) ---
+with st.sidebar:
+    # O menu retorna o texto selecionado para a variável 'menu'
+    menu = option_menu(
+        menu_title="MENU", # Título do menu
+        options=["PAINEL GERAL", "PARCERIAS", "CONTATOS", "FAROL ESTRATÉGICO", "REGISTRAR DOAÇÃO","RELACIONAMENTO"],
+        icons=["bar-chart-fill", "building", "person-lines-fill", "stoplights", "cash-coin", "heart-fill",],
+        menu_icon="cast", 
+        default_index=0,
+        styles={
+            "container": {"padding": "5!important", "background-color": "#fafafa"},
+            "icon": {"color": "#E31D24", "font-size": "18px"}, 
+            "nav-link": {"font-size": "14px", "text-align": "left", "margin":"0px", "--hover-color": "#eee"},
+            "nav-link-selected": {"background-color": "#E31D24"},
+        }
+    )
 
 # --- 1. DASHBOARD GERAL ---
-if menu == "**PAINEL GERAL**":
+if menu == "PAINEL GERAL":
     st.title("DASHBOARD DI")
     
     df_doacoes = run_query("SELECT * FROM Doacao")
@@ -238,7 +247,7 @@ if menu == "**PAINEL GERAL**":
             st.table(df_top)
 
 # --- 2. FAROL ESTRATÉGICO (ESTE BLOCO DEVE FICAR COLADO NA ESQUERDA) ---
-elif menu == "**FAROL ESTRATÉGICO**":
+elif menu == "FAROL ESTRATÉGICO":
     st.title("FAROL CAPTAÇÃO/COMUNICAÇÃO")
     
     # 1. Busca dados da Meta
@@ -288,9 +297,9 @@ elif menu == "**FAROL ESTRATÉGICO**":
         st.error("Nenhuma meta estratégica de 2026 encontrada no banco.")
 
 # --- 2. PARCEIROS E PROJETOS ---
-elif menu == "**PARCEIROS/PROJETOS**":
+elif menu == "PARCERIAS":
     st.title("**GESTÃO DE PARCEIROS E PROJETOS**")
-    tab1, tab2 = st.tabs(["🏢 **Parceiros**", "📃 **Projetos**"])
+    tab1, tab2 = st.tabs(["**PARCEIROS**", "**PROJETOS**"])
     
     with tab1:
 
@@ -307,7 +316,7 @@ elif menu == "**PARCEIROS/PROJETOS**":
             df_p = run_query("SELECT * FROM Parceiro")
 
         # Filtro de Busca
-        busca = st.text_input("🔍 Pesquisar parceiro:")
+        busca = st.text_input("Pesquisar parceiro:")
         if busca and not df_p.empty:
             df_p = df_p[df_p['nome_instituicao'].str.contains(busca, case=False)]
 
@@ -439,7 +448,7 @@ elif menu == "**PARCEIROS/PROJETOS**":
 
 # --- 3. REGISTRAR DOAÇÃO ---
 # --- 3. REGISTRAR DOAÇÃO ---
-elif menu == "**REGISTRAR DOAÇÃO**":
+elif menu == "REGISTRAR DOAÇÃO":
     st.title("ENTRADA DE RECURSOS")
     
     # 1. Buscamos os nomes para o usuário escolher
@@ -500,126 +509,200 @@ elif menu == "**REGISTRAR DOAÇÃO**":
                     st.balloons()
                     st.rerun()
 
-        # --- NOVO: GERENCIAR LANÇAMENTOS RECENTES ---
-    st.write("---")
-    st.subheader("**LANÇAMENTOS RECENTES**")
-    
-    # Busca as últimas 5 doações para conferência
-    df_recentes = run_query("""
-        SELECT d.id_doacao, p.nome_instituicao, d.valor_estimado, d.data_doacao, d.nome_projeto
-        FROM Doacao d
-        JOIN Parceiro p ON d.id_parceiro = p.id_parceiro
-        ORDER BY d.id_doacao DESC LIMIT 5
-    """)
+    # --- CENTRAL DE GESTÃO DE LANÇAMENTOS (EXTRATO POR PARCEIRO) ---
+    st.divider()
+    st.subheader("HISTÓRICO E LANÇAMENTOS")
 
-    if not df_recentes.empty:
-        for _, row in df_recentes.iterrows():
-            col1, col2, col3 = st.columns([3, 1, 1])
-            with col1:
-                st.write(f"📌 {row['nome_instituicao']} - {row['nome_projeto']} (R$ {row['valor_estimado']:.2f})")
-            with col2:
-                st.write(f"📅 {row['data_doacao']}")
-            with col3:
-                # Botão para excluir o registro específico
-                if st.button(f"Excluir #{row['id_doacao']}", key=f"del_{row['id_doacao']}"):
-                    run_insert("DELETE FROM Doacao WHERE id_doacao = ?", (int(row['id_doacao']),))
-                    st.warning(f"Lançamento #{row['id_doacao']} removido!")
-                    st.rerun()
+    # 1. Seleção do Parceiro para busca
+    lista_busca = ["Todos"] + df_p['nome_instituicao'].tolist()
+    parceiro_busca = st.selectbox("Filtrar histórico por parceiro:", lista_busca)
+
+    # 2. Query Dinâmica para buscar doações
+    if parceiro_busca == "Todos":
+        query_h = """
+            SELECT d.id_doacao, p.nome_instituicao, d.valor_estimado, d.data_doacao, 
+                   d.nome_projeto, d.descricao, d.tipo_doacao, d.origem_captacao
+            FROM Doacao d
+            JOIN Parceiro p ON d.id_parceiro = p.id_parceiro
+            ORDER BY d.data_doacao DESC LIMIT 20
+        """
+        params_h = ()
     else:
-        st.info("Nenhum lançamento recente encontrado.")
+        query_h = """
+            SELECT d.id_doacao, p.nome_instituicao, d.valor_estimado, d.data_doacao, 
+                   d.nome_projeto, d.descricao, d.tipo_doacao, d.origem_captacao
+            FROM Doacao d
+            JOIN Parceiro p ON d.id_parceiro = p.id_parceiro
+            WHERE p.nome_instituicao = ?
+            ORDER BY d.data_doacao DESC
+        """
+        params_h = (parceiro_busca,)
 
-    # --- SEÇÃO DE VISUALIZAÇÃO DE PARCEIROS (MANTIDA IGUAL À SUA) ---
-    st.write("---")
-    st.subheader("📋 Parceiros Cadastrados")
+    df_h = run_query(query_h, params_h)
 
-    # 1. Filtro de Status
-    status_filtro = st.selectbox("Filtrar por Status", ["Todos", "Ativo", "Inativo", "Prospecção"])
+    if not df_h.empty:
+        st.write(f"Exibindo **{len(df_h)}** lançamentos encontrados:")
+        
+        for _, row in df_h.iterrows():
+            # Card principal usando Expander para não poluir a tela
+            with st.expander(f"{row['data_doacao']} | {row['nome_instituicao']} | {format_br(row['valor_estimado'])}"):
+                
+                # Criamos um mini-formulário de edição dentro do expander
+                with st.form(key=f"edit_form_{row['id_doacao']}"):
+                    st.markdown(f"**Editando Lançamento #{row['id_doacao']}**")
+                    c1, c2, c3 = st.columns(3)
+                    
+                    novo_valor = c1.number_input("Valor (R$)", value=float(row['valor_estimado']), key=f"v_{row['id_doacao']}")
+                    nova_data = c2.date_input("Data", value=datetime.strptime(row['data_doacao'], '%Y-%m-%d'), key=f"d_{row['id_doacao']}")
+                    novo_projeto = c3.text_input("Projeto", value=row['nome_projeto'], key=f"p_{row['id_doacao']}")
+                    
+                    nova_desc = st.text_area("Descrição", value=row['descricao'] or "", key=f"desc_{row['id_doacao']}")
+                    
+                    col_btn1, col_btn2 = st.columns([1, 1])
+                    
+                    if col_btn1.form_submit_button("💾 Salvar alterações", use_container_width=True):
+                        sql_upd = """
+                            UPDATE Doacao SET valor_estimado=?, data_doacao=?, nome_projeto=?, descricao=?
+                            WHERE id_doacao=?
+                        """
+                        run_insert(sql_upd, (novo_valor, str(nova_data), novo_projeto, nova_desc, row['id_doacao']))
+                        st.success("Alterado com sucesso!")
+                        st.rerun()
 
-    # 2. Query com LEFT JOIN
-    query_base = """
-        SELECT 
-            p.id_parceiro as ID,
-            p.nome_instituicao as Nome,
-            p.data_adesao as 'Data Adesão',
-            p.status as Status,
-            c.nome_categoria as Categoria
-        FROM Parceiro p
-        LEFT JOIN Categoria_Parceiro c ON p.id_categoria = c.id_categoria
-    """
-
-    # 3. Aplica o filtro
-    if status_filtro != "Todos":
-        df_viz = run_query(query_base + f" WHERE p.status = '{status_filtro}'")
+                    if col_btn2.form_submit_button("🗑️ Excluir registro", type="secondary", use_container_width=True):
+                        run_insert("DELETE FROM Doacao WHERE id_doacao = ?", (row['id_doacao'],))
+                        st.warning("Registro excluído.")
+                        st.rerun()
     else:
-        df_viz = run_query(query_base)
+        st.info("Nenhum lançamento encontrado para os critérios selecionados.")
 
-    # 4. Exibição da tabela
-    if not df_viz.empty:
-        st.dataframe(df_viz, use_container_width=True)
-    else:
-        st.info(f"Nenhum parceiro encontrado com o status: {status_filtro}")
+elif menu == "CONTATOS":
+    st.title("AGENDA")
+    st.markdown("Gerencie sua rede de contatos, parceiros e tomadores de decisão.")
 
-# --- 4. CONTATOS DIRETO ---
-elif menu == "**CONTATOS**":
-    st.title("**AGENDA**")
-
-    # 1. BUSCA DE DADOS (Usando o nome correto: nome_pessoa)
+    # Busca os dados no banco
     query_view = """
-        SELECT p.nome_instituicao as Empresa, 
-               c.nome_pessoa as Nome, 
-               c.cargo as Cargo, 
-               c.telefone as WhatsApp, 
-               c.email as [E-mail]
+        SELECT c.id_contato, p.nome_instituicao as Empresa, c.nome_pessoa as Nome, 
+               c.cargo as Cargo, c.telefone as WhatsApp, c.email as Email
         FROM Contato_Direto c
         LEFT JOIN Parceiro p ON c.id_parceiro = p.id_parceiro
+        ORDER BY c.nome_pessoa ASC
     """
-    try:
-        df_contatos = run_query(query_view)
+    df_contatos = run_query(query_view)
+
+    # --- NAVEGAÇÃO POR ABAS (Design Limpo) ---
+    tab_lista, tab_novo, tab_gerir = st.tabs(["CONTATOS", "ADICIONAR NOVO", "GERENCIAR"])
+
+    # ==========================================
+    # ABA 1: VISUALIZAÇÃO ELEGANTE
+    # ==========================================
+    with tab_lista:
         if not df_contatos.empty:
-            st.dataframe(df_contatos, use_container_width=True, hide_index=True)
+            # 1. Métricas de Resumo
+            c1, c2, c3 = st.columns(3)
+            c1.metric("**Total de contatos**", len(df_contatos))
+            c2.metric("**Empresas vinculadas**", df_contatos['Empresa'].nunique())
+            
+            st.divider()
+
+            # 2. Barra de Busca
+            busca = st.text_input("Buscar contato por nome, empresa ou cargo...", placeholder="Digite para filtrar a tabela abaixo...")
+            
+            # Filtra o dataframe se houver busca
+            if busca:
+                df_filtrado = df_contatos[
+                    df_contatos['Nome'].str.contains(busca, case=False, na=False) | 
+                    df_contatos['Empresa'].str.contains(busca, case=False, na=False) |
+                    df_contatos['Cargo'].str.contains(busca, case=False, na=False)
+                ].copy()
+            else:
+                df_filtrado = df_contatos.copy()
+
+            # 3. Tratamento de Dados para a Tabela Interativa
+            # Cria links clicáveis para WhatsApp e Email direto na tabela
+            if not df_filtrado.empty:
+                df_filtrado['Ação_WA'] = df_filtrado['WhatsApp'].apply(
+                    lambda x: f"https://wa.me/55{re.sub(r'[^0-9]', '', str(x))}" if pd.notnull(x) and x != "" else None
+                )
+                df_filtrado['Ação_Email'] = df_filtrado['Email'].apply(
+                    lambda x: f"mailto:{x}" if pd.notnull(x) and x != "" else None
+                )
+
+                # 4. Exibição da Tabela com Column Config (O visual fica incrível)
+                st.dataframe(
+                    df_filtrado,
+                    column_config={
+                        "id_contato": None, # Esconde o ID para ficar limpo
+                        "Empresa": st.column_config.TextColumn("🏢 Empresa", width="medium"),
+                        "Nome": st.column_config.TextColumn("👤 Nome", width="medium"),
+                        "Cargo": st.column_config.TextColumn("💼 Cargo/Função"),
+                        "WhatsApp": st.column_config.TextColumn("📱 Telefone"),
+                        "Ação_WA": st.column_config.LinkColumn("💬 WhatsApp", display_text="Abrir Conversa"),
+                        "Email": None, # Esconde o texto puro do email
+                        "Ação_Email": st.column_config.LinkColumn("📧 E-mail", display_text="Enviar E-mail")
+                    },
+                    hide_index=True,
+                    use_container_width=True
+                )
+            else:
+                st.warning("Nenhum contato encontrado na busca.")
         else:
-            st.info("Nenhum contato cadastrado ainda.")
-    except Exception as e:
-        st.error(f"Erro ao carregar tabela: {e}")
+            st.info("Sua agenda está vazia. Vá na aba 'Adicionar novo' para começar.")
 
-    st.markdown("---")
-
-    # 2. FORMULÁRIO DE CADASTRO
-    with st.expander("NOVO CONTATO"):
-        df_p_contatos = run_query("SELECT id_parceiro, nome_instituicao FROM Parceiro")
+    # ==========================================
+    # ABA 2: FORMULÁRIO LIMPO
+    # ==========================================
+    with tab_novo:
+        st.subheader("Cadastrar contato")
+        df_p_contatos = run_query("SELECT id_parceiro, nome_instituicao FROM Parceiro ORDER BY nome_instituicao")
         
-
         if not df_p_contatos.empty:
-            with st.form("form_contato_final", clear_on_submit=True):
-                c1, c2 = st.columns(2)
-                with c1:
-                    nome_f = st.text_input("Nome da Pessoa")
-                    email_f = st.text_input("E-mail")
-                with c2:
-                    cargo_f = st.text_input("Cargo")
-                    tel_f = st.text_input("Telefone")
+            with st.form("form_novo_contato", clear_on_submit=True, border=False):
+                col1, col2 = st.columns(2)
+                nome_f = col1.text_input("Nome*")
+                cargo_f = col2.text_input("Cargo/Função")
+                email_f = col1.text_input("Endereço de E-mail")
+                tel_f = col2.text_input("WhatsApp (com DDD) *")
                 
-                parceiro_nome = st.selectbox("Vincular à instituição", 
-                                           options=df_p_contatos['nome_instituicao'].tolist())
-
-                if st.form_submit_button("Salvar contato"):
-                    if nome_f:
-                        try:
-                            # Pega o ID do parceiro selecionado
-                            id_p = df_p_contatos[df_p_contatos['nome_instituicao'] == parceiro_nome]['id_parceiro'].values[0]
-                            
-                            # SQL usando 'nome_pessoa' (confirmado no seu DB Browser)
-                            sql = "INSERT INTO Contato_Direto (id_parceiro, nome_pessoa, cargo, telefone, email) VALUES (?, ?, ?, ?, ?)"
-                            run_insert(sql, (int(id_p), nome_f, cargo_f, tel_f, email_f))
-                            
-                            st.success(f"✅ {nome_f} cadastrado com sucesso!")
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"Erro ao salvar: {e}")
+                parceiro_nome = st.selectbox("Instituição Vinculada *", options=df_p_contatos['nome_instituicao'].tolist())
+                
+                submit_btn = st.form_submit_button("Salvar contato", type="primary")
+                
+                if submit_btn:
+                    if nome_f and tel_f:
+                        id_p = df_p_contatos[df_p_contatos['nome_instituicao'] == parceiro_nome]['id_parceiro'].values[0]
+                        sql = "INSERT INTO Contato_Direto (id_parceiro, nome_pessoa, cargo, telefone, email) VALUES (?, ?, ?, ?, ?)"
+                        run_insert(sql, (int(id_p), nome_f, cargo_f, tel_f, email_f))
+                        st.success(f"Contato **{nome_f}** adicionado à agenda!")
+                        st.rerun()
                     else:
-                        st.warning("Por favor, digite o nome da pessoa.")
+                        st.error("Por favor, preencha o Nome e o WhatsApp.")
         else:
-            st.warning("⚠️ Você precisa cadastrar um Parceiro antes de adicionar contatos.")
+            st.warning("É necessário cadastrar um Parceiro na aba 'Parceiros/Projetos' primeiro.")
+
+    # ==========================================
+    # ABA 3: GERENCIAMENTO DE DADOS (Exclusão)
+    # ==========================================
+    with tab_gerir:
+        st.subheader("Gerenciar Cadastros")
+        if not df_contatos.empty:
+            st.write("Selecione um contato abaixo para remover do sistema.")
+            
+            # Cria uma lista formatada para o selectbox
+            opcoes_exclusao = df_contatos.apply(lambda row: f"{row['Nome']} ({row['Empresa']}) - ID: {row['id_contato']}", axis=1).tolist()
+            contato_selecionado = st.selectbox("Selecionar contato para exclusão:", [""] + opcoes_exclusao)
+            
+            if contato_selecionado != "":
+                # Extrai o ID do texto do selectbox
+                id_para_excluir = int(contato_selecionado.split("ID: ")[-1])
+                
+                st.error("⚠️ Atenção: Esta ação não pode ser desfeita.")
+                if st.button("🗑️ Confirmar Exclusão", use_container_width=True):
+                    run_insert("DELETE FROM Contato_Direto WHERE id_contato = ?", (id_para_excluir,))
+                    st.success("Contato excluído com sucesso!")
+                    st.rerun()
+        else:
+            st.info("Não há contatos para gerenciar.")
 
             # --- TUDO O QUE JÁ EXISTE NA SIDEBAR FICA ACIMA ---
 
@@ -659,7 +742,7 @@ if st.sidebar.button("Sair", use_container_width=True):
     st.sidebar.markdown("---")
 
 # --- COLOQUE ISSO NO FINAL DO ARQUIVO ---
-elif menu == "**RELACIONAMENTO**":
+elif menu == "RELACIONAMENTO":
     st.title("SAÚDE BD")
     
     # 1. BUSCA OS DADOS DA VIEW
