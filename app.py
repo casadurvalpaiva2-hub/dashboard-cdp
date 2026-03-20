@@ -303,10 +303,11 @@ elif menu == "**PARCEIROS/PROJETOS**":
                             st.error(f"Erro técnico ao salvar: {e}")
 
 # --- ABA DE PROJETOS ---
+    # --- ABA DE PROJETOS ---
     with tab2:
-        st.subheader("HISTÓRICO FINANCEIRO")
         
-        # Query que agrupa por Nome do Projeto e Ano da Doação
+        
+        # 1. Query para a TABELA (Filtra 'GERAL' e vazios)
         query_projetos = """
             SELECT 
                 UPPER(nome_projeto) as Projeto,
@@ -314,35 +315,41 @@ elif menu == "**PARCEIROS/PROJETOS**":
                 COUNT(*) as 'Qtd Repasses',
                 SUM(valor_estimado) as Total
             FROM Doacao
-            WHERE nome_projeto IS NOT NULL AND nome_projeto != ''
+            WHERE nome_projeto IS NOT NULL 
+              AND nome_projeto != '' 
+              AND UPPER(nome_projeto) != 'GERAL'
             GROUP BY Projeto, Ano
             ORDER BY Ano DESC, Total DESC
         """
         df_proj = run_query(query_projetos)
         
-        if not df_proj.empty:
-            # Filtro de Ano para facilitar a busca
-            anos_lista = ["Todos"] + sorted(df_proj['Ano'].unique().tolist(), reverse=True)
-            ano_escolhido = st.selectbox("Filtrar por ano de recebimento:", anos_lista)
-            
-            if ano_escolhido != "Todos":
-                df_exibir = df_proj[df_proj['Ano'] == ano_escolhido].copy()
-            else:
-                df_exibir = df_proj.copy()
+        # 2. Cálculos de Totais para os Cartões
+        total_projetos = df_proj['Total'].sum() if not df_proj.empty else 0
+        
+        # Criamos duas métricas no topo
+        m1, m2 = st.columns(2)
+        with m1:
+            st.metric("Total em projetos", format_br(total_projetos))
+        with m2:
+            qtd_projetos = df_proj['Projeto'].nunique() if not df_proj.empty else 0
+            st.metric("Total de projetos feitos", f"{qtd_projetos}")
 
-            # Formatação para o padrão brasileiro R$ 1.234,56
-            df_exibir['Total'] = df_exibir['Total'].apply(
-                lambda x: f"R$ {x:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-            )
+        st.divider()
+        
+        if not df_proj.empty:
+            # Filtro de Ano
+            anos_lista = ["Todos"] + sorted(df_proj['Ano'].unique().tolist(), reverse=True)
+            ano_escolhido = st.selectbox("Filtrar por ano de recebimento:", anos_lista, key="filtro_proj_ano")
             
-            # Exibição da tabela organizada
-            st.dataframe(df_exibir, use_container_width=True, hide_index=True)
+            df_exibir = df_proj.copy()
+            if ano_escolhido != "Todos":
+                df_exibir = df_exibir[df_exibir['Ano'] == ano_escolhido]
+
+            # Formatação para exibição na tabela
+            df_exibir_copy = df_exibir.copy()
+            df_exibir_copy['Total'] = df_exibir_copy['Total'].apply(format_br)
             
-            # Resumo rápido para o usuário
-            total_geral = df_proj['Total'].sum()
-            total_formatado = f"R$ {total_geral:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-            st.info(f"**Captação total acumulada (Todos os anos):** {total_formatado}")
-            
+            st.dataframe(df_exibir_copy, use_container_width=True, hide_index=True)
         else:
             st.info("Ainda não existem doações vinculadas a projetos específicos.")
 
