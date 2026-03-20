@@ -134,6 +134,7 @@ except Exception as e:
 st.sidebar.title("**MENU GESTÃO**")
 menu = st.sidebar.radio("Ir para:", [
     "**PAINEL GERAL**",
+    "**FAROL ESTRATÉGICO**",
     "**RELACIONAMENTO**", 
     "**PARCEIROS/PROJETOS**", 
     "**REGISTRAR DOAÇÃO**", 
@@ -231,6 +232,61 @@ if menu == "**PAINEL GERAL**":
     else:
         st.info("Nenhum dado encontrado no banco de dados.")
 
+# ... final do código do PAINEL GERAL ...
+        if not df_top.empty:
+            df_top['Total'] = df_top['Total'].apply(fmt)
+            st.table(df_top)
+
+# --- 2. FAROL ESTRATÉGICO (ESTE BLOCO DEVE FICAR COLADO NA ESQUERDA) ---
+elif menu == "**FAROL ESTRATÉGICO**":
+    st.title("FAROL CAPTAÇÃO/COMUNICAÇÃO")
+    
+    # 1. Busca dados da Meta
+    df_meta_sql = run_query("SELECT objetivo, valor_meta FROM Metas_Estrategicas WHERE ano = 2026")
+    
+    if not df_meta_sql.empty:
+        objetivo_txt = df_meta_sql.iloc[0,0]
+        v_meta = df_meta_sql.iloc[0,1]
+        
+        # 2. Busca Realizado Financeiro
+        v_real = run_query("""
+            SELECT SUM(valor_estimado) FROM Doacao 
+            WHERE strftime('%Y', data_doacao) = '2026' AND tipo_doacao = 'Financeira'
+        """).iloc[0,0] or 0.0
+
+        percentual = (v_real / v_meta) * 100
+        restante = max(0, v_meta - v_real)
+        
+        # Definição de Cores e Status
+        if percentual >= 100:
+            cor_fundo, status = "#28a745", "ALCANÇADO"
+        elif percentual >= 70:
+            cor_fundo, status = "#ffc107", "EM ATENÇÃO"
+        else:
+            cor_fundo, status = "#dc3545", "CRÍTICO"
+
+        # --- ESTILIZAÇÃO DOS CARDS ---
+        st.markdown(f"""
+            <div style="background-color: {cor_fundo}; padding: 20px; border-radius: 10px; color: white; text-align: center; margin-bottom: 25px;">
+                <h3 style="margin:0;">STATUS: {status}</h3>
+                <h1 style="margin:0; font-size: 45px;">{percentual:.1f}%</h1>
+                <p style="margin:0;">Objetivo: {objetivo_txt}</p>
+            </div>
+        """, unsafe_allow_html=True)
+
+        # Métrica em Colunas com Design Limpo
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            st.markdown(f"**META ANUAL**<br><h2 style='color: #555;'>{format_br(v_meta)}</h2>", unsafe_allow_html=True)
+        with c2:
+            st.markdown(f"**REALIZADO**<br><h2 style='color: #28a745;'>{format_br(v_real)}</h2>", unsafe_allow_html=True)
+        with c3:
+            st.markdown(f"**GAP (FALTA)**<br><h2 style='color: #dc3545;'>{format_br(restante)}</h2>", unsafe_allow_html=True)
+
+        st.divider()
+    else:
+        st.error("Nenhuma meta estratégica de 2026 encontrada no banco.")
+
 # --- 2. PARCEIROS E PROJETOS ---
 elif menu == "**PARCEIROS/PROJETOS**":
     st.title("**GESTÃO DE PARCEIROS E PROJETOS**")
@@ -258,6 +314,34 @@ elif menu == "**PARCEIROS/PROJETOS**":
         # Exibição da Tabela
         st.dataframe(df_p, use_container_width=True, hide_index=True)
 
+        st.markdown("---")
+
+        st.markdown("---")
+        st.subheader("Fichas")
+        
+        # Cria uma lista de nomes para o selectbox
+        lista_nomes = df_p['nome_instituicao'].tolist()
+        parceiro_selecionado = st.selectbox("Selecione um parceiro para ver os contatos:", ["Selecione..."] + lista_nomes)
+
+        if parceiro_selecionado != "Selecione...":
+            # Descobre o ID do parceiro escolhido
+            id_selecionado = df_p[df_p['nome_instituicao'] == parceiro_selecionado]['id_parceiro'].values[0]
+            
+            # Busca os contatos específicos desse ID
+            query_contatos = f"""
+                SELECT nome_pessoa as Nome, cargo as Cargo, telefone as WhatsApp, email as Email 
+                FROM Contato_Direto 
+                WHERE id_parceiro = {id_selecionado}
+            """
+            df_contatos_parceiro = run_query(query_contatos)
+            
+            # Exibe a tabela de contatos
+            if not df_contatos_parceiro.empty:
+                st.write(f"**Pessoas de contato em {parceiro_selecionado}:**")
+                st.dataframe(df_contatos_parceiro, hide_index=True, use_container_width=True)
+            else:
+                st.info(f"Ainda não há contatos cadastrados para {parceiro_selecionado}.")
+        
         st.markdown("---")
 
         # 2. SEÇÃO DE CADASTRO
@@ -366,7 +450,6 @@ elif menu == "**REGISTRAR DOAÇÃO**":
             col_a, col_b = st.columns(2)
             
             with col_a:
-                # --- AQUI ESTÁ A MUDANÇA: ADICIONANDO A OPÇÃO NEUTRA ---
                 opcoes_p = ["Selecione o parceiro..."] + df_p['nome_instituicao'].tolist()
                 nome_sel = st.selectbox("Selecione o parceiro/fonte", opcoes_p)
                 
@@ -374,36 +457,51 @@ elif menu == "**REGISTRAR DOAÇÃO**":
                 data = st.date_input("Data do recebimento", datetime.now())
 
             with col_b:
-                # Campo de projeto que você já usava
                 projeto = st.text_input("Nome do Projeto / Emenda / Finalidade", placeholder="Ex: Projeto Vida")
                 tipo = st.selectbox("Tipo de recurso", ["Financeira", "Vestuário", "Alimentos", "Serviços", "Midiática", "Projetos"])
+                
+                # --- NOVIDADE AQUI: Seleção da Estratégia do Plano de Captação ---
+                origens_plano = ["Selecione...", "Bazar do Caquito", "Campanha Troco", "Parcerias", "Nota Potiguar", "Doações Online", "Projetos", "Troco"]
+                origem_sel = st.selectbox("Origem da Captação (Estratégia)", origens_plano)
             
             desc = st.text_area("Observações")
             
             # --- BOTÃO COM VALIDAÇÃO AJUSTADA ---
             if st.form_submit_button("Confirmar doação", type="primary"):
-                # TRAVA: A única trava obrigatória agora é o Parceiro
                 if nome_sel == "Selecione o parceiro...":
                     st.error("ERRO: Você esqueceu de selecionar o Parceiro!")
                 
-                # Removido o 'elif not projeto' que barrava o envio
+                # Nova trava para garantir que o Farol de Desempenho funcione
+                elif origem_sel == "Selecione...":
+                    st.warning("POR FAVOR: Selecione a Origem (Bazar, Troco, etc.) para alimentar o Farol Estratégico.")
+                
                 else:
-                    # Se o projeto estiver vazio, ele salva como "GERAL" ou "NÃO INFORMADO"
                     projeto_final = projeto.upper() if projeto else "GERAL"
-                    
-                    # Se passou nas travas, salva no banco
                     id_p = df_p[df_p['nome_instituicao'] == nome_sel]['id_parceiro'].values[0]
                     
+                    # --- SQL ATUALIZADO: Agora enviamos 7 campos (incluindo origem_captacao) ---
                     sql = """
-                        INSERT INTO Doacao (id_parceiro, valor_estimado, tipo_doacao, data_doacao, descricao, nome_projeto) 
-                        VALUES (?,?,?,?,?,?)
+                        INSERT INTO Doacao (
+                            id_parceiro, valor_estimado, tipo_doacao, 
+                            data_doacao, descricao, nome_projeto, origem_captacao
+                        ) 
+                        VALUES (?,?,?,?,?,?,?)
                     """
-                    # Note que usamos 'projeto_final' aqui
-                    run_insert(sql, (int(id_p), valor, tipo, data.strftime('%Y-%m-%d'), desc.upper(), projeto_final))
+                    
+                    # Enviamos os 7 valores na ordem correta
+                    run_insert(sql, (
+                        int(id_p), 
+                        valor, 
+                        tipo, 
+                        data.strftime('%Y-%m-%d'), 
+                        desc.upper(), 
+                        projeto_final,
+                        origem_sel  # <--- A nova informação sendo salva!
+                    ))
                     
                     st.success(f"✅ Recurso de '{nome_sel}' registrado com sucesso!")
                     st.balloons()
-                    st.rerun() # Adicionei o rerun para limpar o form após o sucesso
+                    st.rerun()
 
         # --- NOVO: GERENCIAR LANÇAMENTOS RECENTES ---
     st.write("---")
@@ -565,7 +663,7 @@ if st.sidebar.button("Sair", use_container_width=True):
 
 # --- COLOQUE ISSO NO FINAL DO ARQUIVO ---
 elif menu == "**RELACIONAMENTO**":
-    st.title("RELACIONAMENTO - SAÚDE BD")
+    st.title("SAÚDE BD")
     
     # 1. BUSCA OS DADOS DA VIEW
     df_rel = run_query("SELECT * FROM View_Relacionamento_Critico")
