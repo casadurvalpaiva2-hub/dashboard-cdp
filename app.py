@@ -143,10 +143,24 @@ with st.sidebar:
         menu_icon="cast", 
         default_index=0,
         styles={
-            "container": {"padding": "5!important", "background-color": "#fafafa"},
-            "icon": {"color": "#E31D24", "font-size": "18px"}, 
-            "nav-link": {"font-size": "14px", "text-align": "left", "margin":"0px", "--hover-color": "#eee"},
-            "nav-link-selected": {"background-color": "#E31D24"},
+            "container": {
+                "padding": "5!important", 
+                "background-color": "transparent" # Remove o fundo branco fixo
+            },
+            "icon": {
+                "color": "#E31D24", 
+                "font-size": "18px"
+            }, 
+            "nav-link": {
+                "font-size": "14px", 
+                "text-align": "left", 
+                "margin":"0px", 
+                # Removemos cores fixas de texto para o Streamlit decidir conforme o tema
+            },
+            "nav-link-selected": {
+                "background-color": "#E31D24", # Mantém o destaque vermelho da Casa Durval Paiva
+                "color": "white" # Garante que o texto no botão selecionado seja branco
+            },
         }
     )
 
