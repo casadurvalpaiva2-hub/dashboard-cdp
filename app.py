@@ -132,14 +132,50 @@ try:
 except Exception as e:
     st.error(f"Erro ao atualizar banco: {e}")
 
-# --- NAVEGAÇÃO ---
+# --- AJUSTE DEFINITIVO DO BANCO ---
+try:
+    with sqlite3.connect(db_path) as conn:
+        # Tenta adicionar a coluna email se ela não existir
+        try:
+            conn.execute("ALTER TABLE Contato_Direto ADD COLUMN email TEXT")
+        except:
+            pass # Se já existir, ele pula
+except Exception as e:
+    st.error(f"Erro ao atualizar banco: {e}")
+
+# ==========================================
+# COLE O CÓDIGO AQUI VVVVVVV
+# ==========================================
+# --- CRIAÇÃO DA TABELA DE EVENTOS ---
+try:
+    run_insert("""
+        CREATE TABLE IF NOT EXISTS Convidados_Almoco (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            mes_referencia TEXT,
+            segmento TEXT,
+            nome TEXT,
+            empresa TEXT,
+            cargo TEXT,
+            telefone TEXT,
+            contato_1 BOOLEAN DEFAULT 0,
+            contato_2 BOOLEAN DEFAULT 0,
+            contato_3 BOOLEAN DEFAULT 0,
+            contato_4 BOOLEAN DEFAULT 0,
+            confirmado BOOLEAN DEFAULT 0,
+            compareceu BOOLEAN DEFAULT 0,
+            observacoes TEXT
+        )
+    """)
+except Exception as e:
+    st.error(f"Erro ao criar tabela de almoço: {e}")
+
 # --- NAVEGAÇÃO PREMIUM (Substitua o radio por isso) ---
 with st.sidebar:
     # O menu retorna o texto selecionado para a variável 'menu'
     menu = option_menu(
         menu_title="MENU", # Título do menu
-        options=["PAINEL GERAL", "PARCERIAS", "CONTATOS", "FAROL ESTRATÉGICO", "REGISTRAR DOAÇÃO","RELACIONAMENTO"],
-        icons=["bar-chart-fill", "building", "person-lines-fill", "stoplights", "cash-coin", "heart-fill",],
+        options=["PAINEL GERAL", "PARCERIAS", "CONTATOS", "EVENTOS", "FAROL ESTRATÉGICO", "REGISTRAR DOAÇÃO","RELACIONAMENTO"],
+        icons=["bar-chart-fill", "building", "person-lines-fill", "calendar-event", "stoplights", "cash-coin", "heart-fill",],
         menu_icon="cast", 
         default_index=0,
         styles={
@@ -260,6 +296,7 @@ if menu == "PAINEL GERAL":
             df_top['Total'] = df_top['Total'].apply(fmt)
             st.table(df_top)
 
+
 # --- 2. FAROL ESTRATÉGICO (ESTE BLOCO DEVE FICAR COLADO NA ESQUERDA) ---
 elif menu == "FAROL ESTRATÉGICO":
     st.title("FAROL CAPTAÇÃO/COMUNICAÇÃO")
@@ -309,6 +346,120 @@ elif menu == "FAROL ESTRATÉGICO":
         st.divider()
     else:
         st.error("Nenhuma meta estratégica de 2026 encontrada no banco.")
+
+elif menu == "EVENTOS":
+    st.markdown("<h1 style='text-align: center;'>ALMOÇO CDP</h1>", unsafe_allow_html=True)
+    
+    # 1. Definição do Mês de Referência
+    mes_atual = datetime.now().strftime("%m/%Y")
+    mes_ref = st.selectbox("📅 Mês do evento", [mes_atual, "04/2026", "05/2026"], help="Selecione o mês para cadastrar ou consultar convidados")
+    
+    # BUSCA OS DADOS (Certifique-se de que a tabela já tem a coluna 'telefone')
+    df_almoco = run_query("SELECT * FROM Convidados_Almoco WHERE mes_referencia = ?", (mes_ref,))
+    
+    metas = {
+        "Influencers": 3, "Imprensa": 3, "Doadores alto valor": 6, 
+        "Cofrinhos": 2, "Parlamentar": 3, "Parceiros CDP": 12
+    }
+
+    tab_recepcao, tab_planejamento = st.tabs(["CHECK-IN E RECEPÇÃO", "PLANEJAMENTO MENSAL"])
+
+    # ==========================================
+    # ABA 1: RECEPÇÃO (Modo Inteligente)
+    # ==========================================
+    with tab_recepcao:
+        df_conf = df_almoco[df_almoco['confirmado'] == 1].copy() if not df_almoco.empty else pd.DataFrame()
+        pres = len(df_conf[df_conf['compareceu'] == 1]) if not df_conf.empty else 0
+        tot = len(df_conf)
+        
+        c1, c2, c3 = st.columns([1, 2, 1])
+        c1.metric("Confirmados", tot)
+        c2.write(f"**Ocupação Real: {pres} de {tot}**")
+        c2.progress(pres/tot if tot > 0 else 0)
+        c3.metric("Presentes", pres)
+
+        st.divider()
+        col_fila, col_brief = st.columns([1.5, 1])
+
+        with col_fila:
+            busca = st.text_input("🔍 Buscar por nome...", label_visibility="collapsed", placeholder="Buscar na lista...")
+            
+            if not df_conf.empty:
+                df_v = df_conf[df_conf['nome'].str.contains(busca, case=False)] if busca else df_conf
+                for _, row in df_v.iterrows():
+                    with st.container(border=True):
+                        ca, cb = st.columns([3, 1])
+                        ca.markdown(f"**{row['nome']}**")
+                        # Exibe cargo e telefone no card de recepção
+                        ca.markdown(f"<small>{row['cargo']} | {row['empresa']} | 📞 {row['telefone']}</small>", unsafe_allow_html=True)
+                        
+                        label_btn = "Check-in" if not row['compareceu'] else "Anular"
+                        if cb.button(label_btn, key=f"btn_{row['id']}", type="primary" if not row['compareceu'] else "secondary", use_container_width=True):
+                            novo_status = 1 if not row['compareceu'] else 0
+                            run_insert("UPDATE Convidados_Almoco SET compareceu = ? WHERE id = ?", (novo_status, row['id']))
+                            st.rerun()
+
+        with col_brief:
+            st.subheader("Dôssie executivo")
+            df_p = df_conf[df_conf['compareceu'] == 1] if not df_conf.empty else pd.DataFrame()
+            if not df_p.empty:
+                msg = f"*ALMOÇO CDP - {mes_ref}*\n\n"
+                for seg, gp in df_p.groupby('segmento'):
+                    msg += f"✅ *{seg.upper()}*\n"
+                    for _, p in gp.iterrows():
+                        msg += f"• {p['nome']} ({p['cargo']})\n"
+                    msg += "\n"
+                st.code(msg, language="markdown")
+            else:
+                st.info("Aguardando chegadas...")
+
+    # ==========================================
+    # ABA 2: PLANEJAMENTO (AQUI O TELEFONE É EDITÁVEL)
+    # ==========================================
+    with tab_planejamento:
+        st.subheader("Cadastro e Edição")
+        with st.expander("NOVO CONVIDADO"):
+            with st.form("form_planejamento", clear_on_submit=True):
+                c1, c2 = st.columns(2)
+                n_c = c1.text_input("Nome *")
+                f_c = c2.text_input("Cargo/Função *")
+                e_c = c1.text_input("Empresa")
+                t_c = c2.text_input("WhatsApp")
+                s_c = st.selectbox("Segmento", list(metas.keys()))
+                if st.form_submit_button("Salvar na lista"):
+                    if n_c:
+                        run_insert("INSERT INTO Convidados_Almoco (mes_referencia, segmento, nome, cargo, empresa, telefone) VALUES (?,?,?,?,?,?)",
+                                   (mes_ref, s_c, n_c, f_c, e_c, t_c))
+                        st.rerun()
+
+        st.divider()
+        if not df_almoco.empty:
+            df_ed = df_almoco.copy()
+            for col in ['contato_1', 'contato_2', 'confirmado']:
+                df_ed[col] = df_ed[col].astype(bool)
+
+            # TABELA COM TELEFONE APARECENDO E SENDO EDITÁVEL
+            edited = st.data_editor(
+                df_ed[['id', 'nome', 'cargo', 'empresa', 'telefone', 'segmento', 'contato_1', 'contato_2', 'confirmado']],
+                column_config={
+                    "id": None, 
+                    "confirmado": st.column_config.CheckboxColumn("✅ CONFIRMOU"),
+                    "telefone": st.column_config.TextColumn("WhatsApp")
+                },
+                hide_index=True, 
+                use_container_width=True
+            )
+            
+            if st.button("Guardar"):
+                for _, r in edited.iterrows():
+                    # UPDATE INCLUINDO O TELEFONE
+                    run_insert("""
+                        UPDATE Convidados_Almoco 
+                        SET contato_1=?, contato_2=?, confirmado=?, telefone=?, cargo=?, empresa=?, nome=?
+                        WHERE id=?
+                    """, (int(r['contato_1']), int(r['contato_2']), int(r['confirmado']), r['telefone'], r['cargo'], r['empresa'], r['nome'], r['id']))
+                st.success("Dados e Telefones atualizados!")
+                st.rerun()
 
 # --- 2. PARCEIROS E PROJETOS ---
 elif menu == "PARCERIAS":
