@@ -10,6 +10,33 @@ from streamlit_option_menu import option_menu
 def format_br(valor):
     return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
+# --- SISTEMA DE LOGIN ---
+# Podes alterar as senhas aqui
+contas = {
+    "comunicação": {"nome": "Alice/Daniel", "setor": "MARKETING DIGITAL", "senha": "cdp1", "perfil": "operacional"},
+    "imprensa": {"nome": "Michelle Phiffer", "setor": "IMPRENSA", "senha": "cdp2", "perfil": "operacional"},
+    "projetos": {"nome": "Viviane Moura", "setor": "PROJETOS", "senha": "cdp3", "perfil": "operacional"},
+    "gerencia": {"nome": "Helder Coutinho", "setor": "GERÊNCIA", "senha": "Hc!24601", "perfil": "gerencia"}
+}
+
+if 'autenticado' not in st.session_state:
+    st.session_state.autenticado = False
+    st.session_state.user_data = None
+
+if not st.session_state.autenticado:
+    st.title("Desenvolvimento Institucional CDP")
+    with st.form("login"):
+        user_login = st.text_input("Utilizador (ex: helder.mkt)").lower()
+        pass_login = st.text_input("Senha", type="password")
+        if st.form_submit_button("Entrar"):
+            if user_login in contas and contas[user_login]["senha"] == pass_login:
+                st.session_state.autenticado = True
+                st.session_state.user_data = contas[user_login]
+                st.rerun()
+            else:
+                st.error("Utilizador ou senha incorretos.")
+    st.stop() # Bloqueia o resto do app se não estiver logado
+
 # 1. Defina sua senha (ou busque de um banco de dados/secrets)
 SENHA_MESTRA = "CDP2026" # Altere para uma senha forte
 
@@ -174,7 +201,7 @@ with st.sidebar:
     # O menu retorna o texto selecionado para a variável 'menu'
     menu = option_menu(
         menu_title="MENU", # Título do menu
-        options=["PAINEL GERAL", "PARCERIAS", "CONTATOS", "EVENTOS", "FAROL ESTRATÉGICO", "REGISTRAR DOAÇÃO","RELACIONAMENTO"],
+        options=["PAINEL GERAL", "PARCERIAS", "CONTATOS", "EVENTOS", "DEMANDAS", "REGISTRAR DOAÇÃO","RELACIONAMENTO"],
         icons=["bar-chart-fill", "building", "person-lines-fill", "calendar-event", "stoplights", "cash-coin", "heart-fill",],
         menu_icon="cast", 
         default_index=0,
@@ -297,55 +324,124 @@ if menu == "PAINEL GERAL":
             st.table(df_top)
 
 
-# --- 2. FAROL ESTRATÉGICO (ESTE BLOCO DEVE FICAR COLADO NA ESQUERDA) ---
-elif menu == "FAROL ESTRATÉGICO":
-    st.title("FAROL CAPTAÇÃO/COMUNICAÇÃO")
+# --- 2. DEMANDAS (ESTE BLOCO DEVE FICAR COLADO NA ESQUERDA) ---
+# --- COLAR ESTE BLOCO DENTRO DO elif menu == "DEMANDAS": ---
+elif menu == "DEMANDAS":
+    # Captura dados do usuário logado
+    user = st.session_state.user_data
+    eh_gerente = user['perfil'] == 'gerencia'
+    meu_setor = user['setor']
+
+    # 1. DEFINIÇÃO DOS DADOS (PITs)
+    dados_equipe = {
+        "MARKETING DIGITAL": {"Produção de Peças Avulsas": 2, "Edição de Vídeo/Reels": 3, "Gestão de Redes Sociais": 1, "Campanha Google Ads": 5, "Atualização de Site": 2},
+        "IMPRENSA": {"Redação de Release": 3, "Clipping de Projetos": 7, "Agendamento de Pauta": 2, "Artigos Institucionais": 5, "Boletim Informativo": 2},
+        "PROJETOS": {"Escrita de Novo Edital": 15, "Relatório de Prestação de Contas": 10, "Pesquisa de Editais": 5, "Inscrição em Prêmios": 7},
+        "GERÊNCIA": {"Manutenção de Parcerias": 7, "Análise de Relatórios": 2, "Planejamento Anual": 30, "Gestão de Equipe": 2}
+    }
+
+    # 2. ESTILIZAÇÃO CSS
+    st.markdown("""
+        <style>
+        .stMetric { background-color: #ffffff; padding: 15px; border-radius: 10px; border: 1px solid #e0e0e0; }
+        .card-demanda { background: white; padding: 20px; border-radius: 12px; margin-bottom: 15px; border-left: 8px solid; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+        .setor-tag { font-size: 11px; font-weight: bold; color: #555; background: #f0f2f6; padding: 3px 10px; border-radius: 15px; }
+        .sla-box { background: #e3f2fd; color: #0d47a1; padding: 10px; border-radius: 8px; font-size: 13px; margin-bottom: 10px; }
+        </style>
+    """, unsafe_allow_html=True)
+
+    st.title(f"Planejamento: {user['nome']}")
     
-    # 1. Busca dados da Meta
-    df_meta_sql = run_query("SELECT objetivo, valor_meta FROM Metas_Estrategicas WHERE ano = 2026")
+
+    # 3. DASHBOARD FILTRADO
+    # Se for gerente, conta tudo. Se for operacional, conta só o seu setor.
+    def contar_status_filtrado(status_nome):
+        try:
+            sql = f"SELECT COUNT(*) as total FROM Demandas_Estrategicas WHERE status = '{status_nome}'"
+            if not eh_gerente:
+                sql += f" AND setor = '{meu_setor}'"
+            res = run_query(sql)
+            return res.iloc[0]['total'] if not res.empty else 0
+        except: return 0
+
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Pendentes", contar_status_filtrado('PENDENTE'))
+    c2.metric("Com barreira", contar_status_filtrado('BLOQUEADO'), delta_color="inverse")
+    c3.metric("Concluídas", contar_status_filtrado('REALIZADO'))
+
+    st.divider()
+
+    # 4. FORMULÁRIO DE CADASTRO
+    with st.expander("NOVA SOLICITAÇÃO", expanded=False):
+        col_a, col_b = st.columns(2)
+        with col_a:
+            # Gerente escolhe qualquer um. Operacional só pode cadastrar para si mesmo ou o sistema trava no setor dele.
+            setor_opcoes = list(dados_equipe.keys())
+            setor_sel = st.selectbox("Responsável:", setor_opcoes, index=setor_opcoes.index(meu_setor) if meu_setor in setor_opcoes else 0, disabled=not eh_gerente)
+            solicitante = st.text_input("SOLICITANTE", value=user['nome'])
+        with col_b:
+            tarefa_sel = st.selectbox("O que precisa ser feito?", list(dados_equipe[setor_sel].keys()))
+            sla_dias = dados_equipe[setor_sel][tarefa_sel]
+            st.markdown(f"<div class='sla-box'>⏱️ <b>SLA:</b> {sla_dias} dias úteis</div>", unsafe_allow_html=True)
+
+        detalhes = st.text_area("Descrição:")
+        
+        st.write("**Prioridade (GUT):**")
+        g1, u1, t1 = st.columns(3)
+        g = g1.select_slider("Gravidade", [1,2,3,4,5], 3, key="g_d")
+        u = u1.select_slider("Urgência", [1,2,3,4,5], 3, key="u_d")
+        t = t1.select_slider("Tendência", [1,2,3,4,5], 3, key="t_d")
+
+        if st.button("Lançar demanda", use_container_width=True):
+            score = g * u * t
+            run_insert("INSERT INTO Demandas_Estrategicas (tarefa, setor, gravidade, urgencia, tendencia, score_gut, status) VALUES (?,?,?,?,?,?,'PENDENTE')",
+                       (f"[{tarefa_sel}] {detalhes} | POR: {solicitante}".upper(), setor_sel, g, u, t, score))
+            st.success("Registrado!"); st.rerun()
+
+    # 5. FILA DE TRABALHO FILTRADA
+    st.subheader("Fila")
     
-    if not df_meta_sql.empty:
-        objetivo_txt = df_meta_sql.iloc[0,0]
-        v_meta = df_meta_sql.iloc[0,1]
-        
-        # 2. Busca Realizado Financeiro
-        v_real = run_query("""
-            SELECT SUM(valor_estimado) FROM Doacao 
-            WHERE strftime('%Y', data_doacao) = '2026' AND tipo_doacao = 'Financeira'
-        """).iloc[0,0] or 0.0
+    # Lógica de Filtro SQL: Gerência vê tudo, Operacional vê só o seu
+    query_sql = "SELECT id, tarefa, setor, score_gut, status FROM Demandas_Estrategicas WHERE status IN ('PENDENTE', 'BLOQUEADO')"
+    params = []
+    
+    if not eh_gerente:
+        query_sql += " AND setor = ?"
+        params.append(meu_setor)
+    
+    demandas = run_query(query_sql + " ORDER BY status DESC, score_gut DESC", tuple(params))
 
-        percentual = (v_real / v_meta) * 100
-        restante = max(0, v_meta - v_real)
-        
-        # Definição de Cores e Status
-        if percentual >= 100:
-            cor_fundo, status = "#28a745", "ALCANÇADO"
-        elif percentual >= 70:
-            cor_fundo, status = "#ffc107", "EM ATENÇÃO"
-        else:
-            cor_fundo, status = "#dc3545", "CRÍTICO"
-
-        # --- ESTILIZAÇÃO DOS CARDS ---
-        st.markdown(f"""
-            <div style="background-color: {cor_fundo}; padding: 20px; border-radius: 10px; color: white; text-align: center; margin-bottom: 25px;">
-                <h3 style="margin:0;">STATUS: {status}</h3>
-                <h1 style="margin:0; font-size: 45px;">{percentual:.1f}%</h1>
-                <p style="margin:0;">Objetivo: {objetivo_txt}</p>
-            </div>
-        """, unsafe_allow_html=True)
-
-        # Métrica em Colunas com Design Limpo
-        c1, c2, c3 = st.columns(3)
-        with c1:
-            st.markdown(f"**META ANUAL**<br><h2 style='color: #555;'>{format_br(v_meta)}</h2>", unsafe_allow_html=True)
-        with c2:
-            st.markdown(f"**REALIZADO**<br><h2 style='color: #28a745;'>{format_br(v_real)}</h2>", unsafe_allow_html=True)
-        with c3:
-            st.markdown(f"**GAP (FALTA)**<br><h2 style='color: #dc3545;'>{format_br(restante)}</h2>", unsafe_allow_html=True)
-
-        st.divider()
+    if not demandas.empty:
+        for _, row in demandas.iterrows():
+            is_b = row['status'] == 'BLOQUEADO'
+            cor = "#7030a0" if is_b else ("#FF4B4B" if row['score_gut'] >= 80 else "#FFA500" if row['score_gut'] >= 40 else "#28A745")
+            
+            st.markdown(f"""
+                <div class="card-demanda" style="border-left-color: {cor};">
+                    <span class="setor-tag">{row['setor']}</span>
+                    <h5 style="margin: 10px 0;">{'🚨 BLOQUEADO: ' if is_b else ''}{row['tarefa']}</h5>
+                    <p style="font-size: 12px; color: #666; margin:0;">Prioridade: <b>{row['score_gut']} pts</b></p>
+                </div>
+            """, unsafe_allow_html=True)
+            
+            b1, b2 = st.columns(2)
+            if b1.button("**Concluir**", key=f"c_{row['id']}"):
+                run_insert("UPDATE Demandas_Estrategicas SET status = 'REALIZADO' WHERE id = ?", (row['id'],))
+                st.rerun()
+            if b2.button("**Barreira / Liberar**", key=f"b_{row['id']}"):
+                novo_st = 'PENDENTE' if is_b else 'BLOQUEADO'
+                run_insert("UPDATE Demandas_Estrategicas SET status = ? WHERE id = ?", (novo_st, row['id']))
+                st.rerun()
     else:
-        st.error("Nenhuma meta estratégica de 2026 encontrada no banco.")
+        st.info("Nenhuma demanda pendente para o seu setor.")
+
+    # 6. HISTÓRICO (Também filtrado)
+    with st.expander("MEU HISTÓRICO"):
+        sql_hist = "SELECT tarefa, status FROM Demandas_Estrategicas WHERE status = 'REALIZADO'"
+        if not eh_gerente: sql_hist += f" AND setor = '{meu_setor}'"
+        hist = run_query(sql_hist + " ORDER BY id DESC LIMIT 5")
+        st.table(hist)
+        
 
 elif menu == "EVENTOS":
     st.markdown("<h1 style='text-align: center;'>ALMOÇO CDP</h1>", unsafe_allow_html=True)
