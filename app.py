@@ -1048,92 +1048,154 @@ if st.sidebar.button("Sair", use_container_width=True):
 
 # --- COLOQUE ISSO NO FINAL DO ARQUIVO ---
 elif menu == "RELACIONAMENTO":
-    st.title("SAÚDE BD")
+    from datetime import datetime, timedelta
+    import plotly.graph_objects as go
+    import pandas as pd
+
+    # 1. BUSCA DE DADOS (Blindagem de Nomes e Colunas)
+    df_parceiros = run_query("SELECT id_parceiro, nome_instituicao, UPPER(TRIM(status)) as status_limpo FROM Parceiro")
     
-    # 1. BUSCA OS DADOS DA VIEW
-    df_rel = run_query("SELECT * FROM View_Relacionamento_Critico")
-    
-    # Criamos o resumo para o gráfico
-    df_status = df_rel.groupby('Status_Relacionamento').size().reset_index(name='qtd')
+    # SQL para View com espaços no nome da coluna
+    query_rel = 'SELECT Empresa, [Status_Relacionamento], [Dias Sem Contato] FROM View_Relacionamento_Critico'
+    df_rel = run_query(query_rel)
 
-    # --- LAYOUT EM COLUNAS ---
-    col_grafico, col_tabela = st.columns([1, 1.2])
+    # Buscar última data de retorno agendada
+    df_retornos = run_query("SELECT id_parceiro, MAX(proxima_acao_data) as data_retorno FROM Registro_Relacionamento GROUP BY id_parceiro")
 
-    with col_grafico:
-        if not df_status.empty:
-            import plotly.graph_objects as go
-            
-            # Cores modernas sincronizadas
-            cores_map = {
-                "🔴 CRÍTICO (+3 meses)": "#FF4B4B", 
-                "🟡 ATENÇÃO (+45 dias)": "#FFA500", 
-                "🟢 EM DIA": "#00CC96"
-            }
-            cores_lista = [cores_map.get(s, "#808080") for s in df_status['Status_Relacionamento']]
-
-            fig = go.Figure(data=[go.Pie(
-                labels=df_status['Status_Relacionamento'], 
-                values=df_status['qtd'], 
-                hole=.6, 
-                marker_colors=cores_lista,
-                textinfo='percent'
-            )])
-
-            total_p = df_status['qtd'].sum()
-            fig.update_layout(
-                showlegend=True,
-                legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5),
-                margin=dict(t=0, b=0, l=0, r=0),
-                height=300,
-                annotations=[dict(text=f'<b>{total_p}</b><br>Parceiros', x=0.5, y=0.5, font_size=18, showarrow=False)]
-            )
-            st.plotly_chart(fig, use_container_width=True)
-
-    with col_tabela:
-        st.subheader("**STATUS ATUAL**")
-        if not df_rel.empty:
-            status_filtro = st.radio("Filtrar urgência:", 
-                                    ["Todos", "🔴 CRÍTICO", "🟡 ATENÇÃO", "🟢 EM DIA"], 
-                                    horizontal=True)
-            
-            if status_filtro != "Todos":
-                termo = status_filtro.split(" ")[1] 
-                df_display = df_rel[df_rel['Status_Relacionamento'].str.contains(termo)]
-            else:
-                df_display = df_rel
-            
-            # AJUSTE AQUI: Mudamos 'nome_instituicao' para 'Empresa' que é o nome real na View
-            st.dataframe(df_display[['Empresa', 'Status_Relacionamento']], height=250, use_container_width=True, hide_index=True)
-        else:
-            st.success("✅ Todos em dia!")
-
-    st.divider()
-
-    # 2. Formulário para registrar nova conversa
-    st.subheader("**Registrar nova interação**")
-    # No banco a tabela principal de parceiros usa 'nome_instituicao', então aqui mantemos
-    df_p = run_query("SELECT id_parceiro, nome_instituicao FROM Parceiro ORDER BY nome_instituicao")
-    
-    with st.form("form_crm", clear_on_submit=True):
-        c1, c2 = st.columns(2)
-        with c1:
-            p_sel = st.selectbox("Parceiro", ["Selecione..."] + df_p['nome_instituicao'].tolist())
-            data_c = st.date_input("Data de contato", datetime.now())
-        with c2:
-            prox_c = st.date_input("Agendar retorno")
-            
-        txt = st.text_area("Descrição da conversa").upper()
+    # 2. CSS GLASSMORPHISM PREMIUM
+    st.markdown("""
+        <style>
+        /* Fundo do Card de Vidro */
+        .glass-card {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border-radius: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            padding: 22px;
+            margin-bottom: 20px;
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+        }
         
-        if st.form_submit_button("Salvar histórico", type="primary"):
-            if p_sel != "Selecione...":
-                id_parc = df_p[df_p['nome_instituicao'] == p_sel]['id_parceiro'].values[0]
-                sql = """
-                    INSERT INTO Registro_Relacionamento 
-                    (id_parceiro, data_interacao, descricao_do_que_foi_feito, proxima_acao_data)
-                    VALUES (?, ?, ?, ?)
-                """
-                run_insert(sql, (int(id_parc), data_c.strftime('%Y-%m-%d'), txt, prox_c.strftime('%Y-%m-%d')))
-                st.success("✅ Histórico salvo com sucesso!")
-                st.rerun()
-            else:
-                st.error("Por favor, selecione um parceiro.")
+        /* Texto de Destaque */
+        .stat-value {
+            font-size: 2.8rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, #00FFC2, #00A37B);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin: 5px 0;
+        }
+
+        /* Sugestões Estilo Glass */
+        .suggestion-box {
+            background: rgba(255, 255, 255, 0.03);
+            border-left: 5px solid #00CC96;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 10px 0;
+        }
+        .urgent-border { border-left-color: #FF4B4B; }
+        
+        /* Badge de Data */
+        .date-badge {
+            background: rgba(0, 204, 150, 0.15);
+            color: #00FFC2;
+            padding: 3px 10px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            border: 1px solid rgba(0, 204, 150, 0.3);
+        }
+        </style>
+    """, unsafe_allow_html=True)
+
+    st.title("MANUTENÇÃO DE RELACIONAMENTO")
+
+    # 3. MÉTRICAS SUPERIORES (Cards de Vidro)
+    m_p = df_parceiros['status_limpo'].str.contains('PROSPEC', na=False)
+    m_a = df_parceiros['status_limpo'].str.contains('ATIVO', na=False)
+    m_i = df_parceiros['status_limpo'].str.contains('INATIVO', na=False)
+
+    c1, c2, c3 = st.columns(3)
+    with c1: st.markdown(f'<div class="glass-card"><small>PROSPECÇÃO</small><div class="stat-value">{len(df_parceiros[m_p])}</div></div>', unsafe_allow_html=True)
+    with c2: st.markdown(f'<div class="glass-card"><small>ATIVOS</small><div class="stat-value">{len(df_parceiros[m_a])}</div></div>', unsafe_allow_html=True)
+    with c3: st.markdown(f'<div class="glass-card"><small>INATIVOS</small><div class="stat-value" style="background:linear-gradient(135deg, #FF6B6B, #9B1B1B);-webkit-background-clip:text;">{len(df_parceiros[m_i])}</div></div>', unsafe_allow_html=True)
+
+    # 4. PLANO DE AÇÃO COM TAREFAS DETALHADAS
+    st.markdown("### SUGESTÕES DO MÊS")
+    semente = int(datetime.now().strftime('%Y%m'))
+    cs1, cs2 = st.columns(2)
+
+    with cs1:
+        st.markdown('<p style="opacity:0.7; font-size:0.9rem;">FOCO: CONVERSÃO</p>', unsafe_allow_html=True)
+        sug_p = df_parceiros[m_p].sample(min(2, len(df_parceiros[m_p])), random_state=semente) if any(m_p) else pd.DataFrame()
+        for _, r in sug_p.iterrows():
+            st.markdown(f"""<div class="suggestion-box"><b>{r['nome_instituicao']}</b><br>
+            <span style="font-size:0.85rem; opacity:0.8;">Ação sugerida: Enviar apresentação atualizada e solicitar agenda de 15min.</span></div>""", unsafe_allow_html=True)
+
+    with cs2:
+        st.markdown('<p style="opacity:0.7; font-size:0.9rem;">FOCO: REATIVAÇÃO</p>', unsafe_allow_html=True)
+        sug_i = df_parceiros[m_i].sample(min(2, len(df_parceiros[m_i])), random_state=semente) if any(m_i) else pd.DataFrame()
+        for _, r in sug_i.iterrows():
+            st.markdown(f"""<div class="suggestion-box urgent-border"><b>{r['nome_instituicao']}</b><br>
+            <span style="font-size:0.85rem; opacity:0.8;">Ação sugerida: Ligação de cortesia para entender motivo da pausa e oferecer novo benefício.</span></div>""", unsafe_allow_html=True)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # 5. DIAGNÓSTICO (Rosca Premium + Tabela de Retornos)
+    tab_saude, tab_hist = st.tabs(["Saúde e Retornos", "Histórico detalhado"])
+
+    with tab_saude:
+        df_join = df_rel.merge(df_parceiros[['nome_instituicao', 'id_parceiro']], left_on='Empresa', right_on='nome_instituicao', how='left')
+        df_final = df_join.merge(df_retornos, on='id_parceiro', how='left')
+
+        cg, ct = st.columns([1, 1.4])
+        with cg:
+            df_g = df_final.groupby('Status_Relacionamento').size().reset_index(name='qtd')
+            fig = go.Figure(data=[go.Pie(labels=df_g['Status_Relacionamento'], values=df_g['qtd'], hole=.78, 
+                                        marker_colors=["#FF4B4B", "#FFA500", "#00CC96"], textinfo='none')])
+            fig.update_layout(height=260, margin=dict(t=10,b=10,l=0,r=0), showlegend=False, paper_bgcolor='rgba(0,0,0,0)',
+                             annotations=[dict(text='STATUS<br>SAÚDE', x=0.5, y=0.5, font_size=14, showarrow=False, font_color="white")])
+            st.plotly_chart(fig, use_container_width=True)
+        
+        with ct:
+            st.markdown("**Cronograma de Follow-up:**")
+            st.dataframe(df_final[['Empresa', 'Dias Sem Contato', 'data_retorno', 'Status_Relacionamento']], 
+                         column_config={
+                             "Dias Sem Contato": st.column_config.NumberColumn("Dias Parado", format="%d d"),
+                             "data_retorno": st.column_config.DateColumn("Próximo Retorno", format="DD/MM/YYYY"),
+                             "Status_Relacionamento": "Saúde"
+                         }, use_container_width=True, hide_index=True, height=250)
+
+    with tab_hist:
+        p_lista = ["--"] + sorted(df_parceiros['nome_instituicao'].tolist())
+        sel_h = st.selectbox("Selecione o parceiro para histórico:", p_lista)
+        if sel_h != "--":
+            id_p = df_parceiros[df_parceiros['nome_instituicao'] == sel_h]['id_parceiro'].values[0]
+            h = run_query(f"SELECT data_interacao, descricao_do_que_foi_feito FROM Registro_Relacionamento WHERE id_parceiro = {id_p} ORDER BY data_interacao DESC")
+            for _, r in h.iterrows():
+                st.markdown(f"""<div style="margin-bottom:15px; padding:10px; border-bottom:1px solid rgba(255,255,255,0.1)">
+                <span class="date-badge">{r['data_interacao']}</span><br>
+                <p style="margin-top:8px; font-size:0.95rem;">{r['descricao_do_que_foi_feito']}</p></div>""", unsafe_allow_html=True)
+
+    # 6. REGISTRO GLASS (Ação + Retorno)
+    st.markdown("<br>", unsafe_allow_html=True)
+    with st.expander("REGISTRAR INTERAÇÃO E AGENDAR RETORNO"):
+        with st.form("form_glass_final", clear_on_submit=True):
+            c1, c2, c3 = st.columns(3)
+            d_acao = c1.date_input("Data do Contato", datetime.now())
+            d_retorno = c2.date_input("Próximo Retorno", datetime.now() + timedelta(days=15))
+            p_sel = c3.selectbox("Parceiro", p_lista)
+            
+            st_novo = st.selectbox("Atualizar Status?", ["Manter atual", "ATIVO", "PROSPECÇÃO", "INATIVO"])
+            relato = st.text_area("Descrição da conversa:")
+            
+            if st.form_submit_button("SALVAR GESTÃO", type="primary"):
+                if p_sel != "--" and relato:
+                    id_p = int(df_parceiros[df_parceiros['nome_instituicao'] == p_sel]['id_parceiro'].values[0])
+                    # Inserção com proxima_acao_data
+                    run_insert("INSERT INTO Registro_Relacionamento (id_parceiro, data_interacao, descricao_do_que_foi_feito, proxima_acao_data) VALUES (?, ?, ?, ?)",
+                              (id_p, d_acao.strftime('%Y-%m-%d'), relato.upper(), d_retorno.strftime('%Y-%m-%d')))
+                    if st_novo != "Manter atual":
+                        run_insert("UPDATE Parceiro SET status = ? WHERE id_parceiro = ?", (st_novo, id_p))
+                    st.toast("Registro salvo!"); st.rerun()
