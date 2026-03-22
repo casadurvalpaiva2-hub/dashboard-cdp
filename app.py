@@ -340,17 +340,61 @@ elif menu == "DEMANDAS":
         "GERÊNCIA": {"Manutenção de Parcerias": 7, "Análise de Relatórios": 2, "Planejamento Anual": 30, "Gestão de Equipe": 2}
     }
 
-    # 2. ESTILIZAÇÃO CSS
+    # 2. ESTILIZAÇÃO CSS (Adaptável para Modo Claro e Escuro)
     st.markdown("""
         <style>
-        .stMetric { background-color: #ffffff; padding: 15px; border-radius: 10px; border: 1px solid #e0e0e0; }
-        .card-demanda { background: white; padding: 20px; border-radius: 12px; margin-bottom: 15px; border-left: 8px solid; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
-        .setor-tag { font-size: 11px; font-weight: bold; color: #555; background: #f0f2f6; padding: 3px 10px; border-radius: 15px; }
-        .sla-box { background: #e3f2fd; color: #0d47a1; padding: 10px; border-radius: 8px; font-size: 13px; margin-bottom: 10px; }
+        /* Ajuste das Métricas */
+        div[data-testid="stMetric"] {
+            background-color: rgba(255, 255, 255, 0.05); 
+            padding: 15px; 
+            border-radius: 10px; 
+            border: 1px solid rgba(128, 128, 128, 0.2);
+        }
+        
+        /* Ajuste dos Cards de Demanda */
+        .card-demanda {
+            background-color: rgba(255, 255, 255, 0.05); /* Fundo semi-transparente */
+            padding: 20px; 
+            border-radius: 12px; 
+            margin-bottom: 15px; 
+            border-left: 8px solid; 
+            border-top: 1px solid rgba(128, 128, 128, 0.1);
+            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+        }
+
+        /* Títulos e Textos dentro do Card - Usando cores do tema */
+        .card-demanda h5 {
+            color: var(--text-color); /* Variável mágica do Streamlit */
+            margin: 10px 0;
+            font-weight: 600;
+        }
+        
+        .card-demanda p {
+            color: var(--text-color);
+            opacity: 0.8;
+            font-size: 13px;
+        }
+
+        .setor-tag { 
+            font-size: 11px; 
+            font-weight: bold; 
+            color: #555; 
+            background: #f0f2f6; 
+            padding: 3px 10px; 
+            border-radius: 15px; 
+        }
+
+        .sla-box { 
+            background: rgba(13, 71, 161, 0.2); 
+            color: #90caf9; 
+            padding: 10px; 
+            border-radius: 8px; 
+            font-size: 13px; 
+            margin-bottom: 10px;
+            border: 1px solid #1976d2;
+        }
         </style>
     """, unsafe_allow_html=True)
-
-    st.title(f"Planejamento: {user['nome']}")
     
 
     # 3. DASHBOARD FILTRADO
