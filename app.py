@@ -11,9 +11,9 @@ def format_br(valor):
     return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 # --- SISTEMA DE LOGIN ---
-# Podes alterar as senhas aqui
 contas = {
-    "comunicação": {"nome": "Alice/Daniel", "setor": "MARKETING DIGITAL", "senha": "cdp1", "perfil": "operacional"},
+    "alice": {"nome": "Alice Karine", "setor": "MARKETING DIGITAL", "senha": "123456", "perfil": "operacional"},
+    "daniel": {"nome": "Daniel", "setor": "MARKETING DIGITAL", "senha": "123456", "perfil": "operacional"},
     "imprensa": {"nome": "Michelle Phiffer", "setor": "IMPRENSA", "senha": "cdp2", "perfil": "operacional"},
     "projetos": {"nome": "Viviane Moura", "setor": "PROJETOS", "senha": "cdp3", "perfil": "operacional"},
     "gerencia": {"nome": "Helder Coutinho", "setor": "GERÊNCIA", "senha": "Hc!24601", "perfil": "gerencia"}
@@ -24,9 +24,9 @@ if 'autenticado' not in st.session_state:
     st.session_state.user_data = None
 
 if not st.session_state.autenticado:
-    st.title("Desenvolvimento Institucional CDP")
+    st.title("Sistema DI CDP")
     with st.form("login"):
-        user_login = st.text_input("Utilizador (ex: helder.mkt)").lower()
+        user_login = st.text_input("Usuário").lower()
         pass_login = st.text_input("Senha", type="password")
         if st.form_submit_button("Entrar"):
             if user_login in contas and contas[user_login]["senha"] == pass_login:
@@ -36,9 +36,6 @@ if not st.session_state.autenticado:
             else:
                 st.error("Utilizador ou senha incorretos.")
     st.stop() # Bloqueia o resto do app se não estiver logado
-
-# 1. Defina sua senha (ou busque de um banco de dados/secrets)
-SENHA_MESTRA = "CDP2026" # Altere para uma senha forte
 
 def verificar_login():
     if "autenticado" not in st.session_state:
@@ -170,9 +167,6 @@ try:
 except Exception as e:
     st.error(f"Erro ao atualizar banco: {e}")
 
-# ==========================================
-# COLE O CÓDIGO AQUI VVVVVVV
-# ==========================================
 # --- CRIAÇÃO DA TABELA DE EVENTOS ---
 try:
     run_insert("""
@@ -324,8 +318,6 @@ if menu == "PAINEL GERAL":
             st.table(df_top)
 
 
-# --- 2. DEMANDAS (ESTE BLOCO DEVE FICAR COLADO NA ESQUERDA) ---
-# --- COLAR ESTE BLOCO DENTRO DO elif menu == "DEMANDAS": ---
 elif menu == "DEMANDAS":
     # Captura dados do usuário logado
     user = st.session_state.user_data
@@ -488,13 +480,39 @@ elif menu == "DEMANDAS":
         
 
 elif menu == "EVENTOS":
+    from datetime import datetime
+    import pandas as pd
+
+    # CSS PARA ESTÉTICA DE VIDRO (GLASSMORPHISM)
+    st.markdown("""
+        <style>
+        .glass-card {
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border-radius: 15px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+        }
+        .guest-item {
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 10px;
+            padding: 10px;
+            margin-bottom: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        </style>
+    """, unsafe_allow_html=True)
+
     st.markdown("<h1 style='text-align: center;'>ALMOÇO CDP</h1>", unsafe_allow_html=True)
     
     # 1. Definição do Mês de Referência
     mes_atual = datetime.now().strftime("%m/%Y")
-    mes_ref = st.selectbox("📅 Mês do evento", [mes_atual, "04/2026", "05/2026"], help="Selecione o mês para cadastrar ou consultar convidados")
+    mes_ref = st.selectbox("Mês do evento", [mes_atual, "04/2026", "05/2026"], help="Selecione o mês do evento")
     
-    # BUSCA OS DADOS (Certifique-se de que a tabela já tem a coluna 'telefone')
+    # BUSCA OS DADOS
     df_almoco = run_query("SELECT * FROM Convidados_Almoco WHERE mes_referencia = ?", (mes_ref,))
     
     metas = {
@@ -505,7 +523,7 @@ elif menu == "EVENTOS":
     tab_recepcao, tab_planejamento = st.tabs(["CHECK-IN E RECEPÇÃO", "PLANEJAMENTO MENSAL"])
 
     # ==========================================
-    # ABA 1: RECEPÇÃO (Modo Inteligente)
+    # ABA 1: RECEPÇÃO (MODO INTELIGENTE)
     # ==========================================
     with tab_recepcao:
         df_conf = df_almoco[df_almoco['confirmado'] == 1].copy() if not df_almoco.empty else pd.DataFrame()
@@ -513,53 +531,113 @@ elif menu == "EVENTOS":
         tot = len(df_conf)
         
         c1, c2, c3 = st.columns([1, 2, 1])
-        c1.metric("Confirmados", tot)
-        c2.write(f"**Ocupação Real: {pres} de {tot}**")
-        c2.progress(pres/tot if tot > 0 else 0)
-        c3.metric("Presentes", pres)
+        with c1: st.metric("Confirmados", tot)
+        with c2: 
+            st.write(f"**Ocupação Real: {pres} de {tot}**")
+            st.progress(pres/tot if tot > 0 else 0)
+        with c3: st.metric("Presentes", pres)
 
         st.divider()
         col_fila, col_brief = st.columns([1.5, 1])
 
         with col_fila:
-            busca = st.text_input("🔍 Buscar por nome...", label_visibility="collapsed", placeholder="Buscar na lista...")
+            # --- NOVO: CADASTRO RÁPIDO COM WHATSAPP ---
+            with st.expander("Adicionar convidado extra (Última Hora)⚡"):
+                with st.form("form_fast_checkin", clear_on_submit=True):
+                    st.caption("Cadastre o contato e libere a entrada. A presença será confirmada automaticamente.")
+                    fc1, fc2 = st.columns(2)
+                    fast_nome = fc1.text_input("Nome *")
+                    fast_telefone = fc2.text_input("WhatsApp *")
+                    fast_cargo = fc1.text_input("Cargo")
+                    fast_empresa = fc2.text_input("Empresa/Instituição")
+                    fast_seg = st.selectbox("Segmento *", list(metas.keys()))
+                    
+                    if st.form_submit_button("Liberar entrada e fazer check-in", type="primary"):
+                        if fast_nome:
+                            # Insere a pessoa já com telefone, confirmado=1 e compareceu=1
+                            run_insert("""
+                                INSERT INTO Convidados_Almoco 
+                                (mes_referencia, segmento, nome, cargo, empresa, telefone, confirmado, compareceu) 
+                                VALUES (?,?,?,?,?,?, 1, 1)
+                            """, (mes_ref, fast_seg, fast_nome.title(), fast_cargo.title(), fast_empresa, fast_telefone))
+                            st.toast(f"Entrada liberada para {fast_nome}!")
+                            st.rerun()
+                        else:
+                            st.error("O nome é obrigatório.")
+            
+            # --- BUSCA E LISTA DE CHECK-IN ---
+            busca = st.text_input("Buscar por nome...", label_visibility="collapsed", placeholder="Buscar na lista...")
             
             if not df_conf.empty:
                 df_v = df_conf[df_conf['nome'].str.contains(busca, case=False)] if busca else df_conf
                 for _, row in df_v.iterrows():
-                    with st.container(border=True):
-                        ca, cb = st.columns([3, 1])
-                        ca.markdown(f"**{row['nome']}**")
-                        # Exibe cargo e telefone no card de recepção
-                        ca.markdown(f"<small>{row['cargo']} | {row['empresa']} | 📞 {row['telefone']}</small>", unsafe_allow_html=True)
+                    with st.container():
+                        st.markdown(f"""
+                        <div class="guest-item">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <div>
+                                    <b>{str(row['nome']).title()}</b><br>
+                                    <small style="opacity:0.7;">{str(row['cargo']).title() if pd.notna(row['cargo']) else ''} | {row['empresa'] if pd.notna(row['empresa']) else ''} | 📞 {row['telefone'] if pd.notna(row['telefone']) else 'Sem número'}</small>
+                                </div>
+                            </div>
+                        </div>
+                        """, unsafe_allow_html=True)
                         
-                        label_btn = "Check-in" if not row['compareceu'] else "Anular"
-                        if cb.button(label_btn, key=f"btn_{row['id']}", type="primary" if not row['compareceu'] else "secondary", use_container_width=True):
+                        label_btn = "Fazer Check-in" if not row['compareceu'] else "Anular Presença"
+                        if st.button(label_btn, key=f"btn_{row['id']}", type="primary" if not row['compareceu'] else "secondary", use_container_width=True):
                             novo_status = 1 if not row['compareceu'] else 0
                             run_insert("UPDATE Convidados_Almoco SET compareceu = ? WHERE id = ?", (novo_status, row['id']))
                             st.rerun()
 
+        # --- DOSSIÊ EXECUTIVO ---
         with col_brief:
-            st.subheader("Dôssie executivo")
+            st.subheader("Dossiê executivo")
             df_p = df_conf[df_conf['compareceu'] == 1] if not df_conf.empty else pd.DataFrame()
+            
             if not df_p.empty:
-                msg = f"*ALMOÇO CDP - {mes_ref}*\n\n"
+                msg_whatsapp = f"*PRESENTES NO ALMOÇO CDP - {mes_ref}*\n\n"
+                
+                html_visual = f"""
+                <div class="glass-card">
+                    <h4 style="color: #00CC96; margin-top: 0; text-align: center; font-size: 1.1rem;">🍽️ LISTA DE PRESENÇA</h4>
+                    <hr style="border-color: rgba(255,255,255,0.05); margin-bottom: 15px;">
+                """
+                
                 for seg, gp in df_p.groupby('segmento'):
-                    msg += f"✅ *{seg.upper()}*\n"
+                    msg_whatsapp += f"✅ *{seg.upper()}*\n"
+                    html_visual += f"<h6 style='color: #00FFC2; margin-top: 15px; font-size: 0.9rem; letter-spacing: 1px;'>{seg.upper()}</h6><ul style='list-style-type: none; padding-left: 5px;'>"
+                    
                     for _, p in gp.iterrows():
-                        msg += f"• {p['nome']} ({p['cargo']})\n"
-                    msg += "\n"
-                st.code(msg, language="markdown")
+                        nome_fmt = str(p['nome']).title()
+                        cargo_raw = str(p['cargo']).strip()
+                        tem_cargo = cargo_raw and cargo_raw.lower() not in ['nan', 'none', '']
+                        
+                        if tem_cargo:
+                            cargo_fmt = cargo_raw.title()
+                            msg_whatsapp += f"• {nome_fmt} ({cargo_fmt})\n"
+                            html_visual += f"<li style='margin-bottom: 10px;'>👤 <b>{nome_fmt}</b><br><span style='opacity: 0.6; font-size: 0.85em; margin-left: 20px;'>— {cargo_fmt}</span></li>"
+                        else:
+                            msg_whatsapp += f"• {nome_fmt}\n"
+                            html_visual += f"<li style='margin-bottom: 10px;'>👤 <b>{nome_fmt}</b></li>"
+                    
+                    msg_whatsapp += "\n"
+                    html_visual += "</ul>"
+                
+                html_visual += "</div>"
+                st.markdown(html_visual, unsafe_allow_html=True)
+                
+                with st.expander("Copiar para WhatsApp"):
+                    st.code(msg_whatsapp, language="markdown")
             else:
-                st.info("Aguardando chegadas...")
+                st.info("Nenhum convidado presente no momento.")
 
     # ==========================================
-    # ABA 2: PLANEJAMENTO (AQUI O TELEFONE É EDITÁVEL)
+    # ABA 2: PLANEJAMENTO
     # ==========================================
     with tab_planejamento:
-        st.subheader("Cadastro e Edição")
-        with st.expander("NOVO CONVIDADO"):
-            with st.form("form_planejamento", clear_on_submit=True):
+        st.subheader("Cadastro e edição completa")
+        with st.expander("NOVO CONVIDADO (Completo)"):
+            with st.form("form_planejamento_completo", clear_on_submit=True):
                 c1, c2 = st.columns(2)
                 n_c = c1.text_input("Nome *")
                 f_c = c2.text_input("Cargo/Função *")
@@ -570,6 +648,7 @@ elif menu == "EVENTOS":
                     if n_c:
                         run_insert("INSERT INTO Convidados_Almoco (mes_referencia, segmento, nome, cargo, empresa, telefone) VALUES (?,?,?,?,?,?)",
                                    (mes_ref, s_c, n_c, f_c, e_c, t_c))
+                        st.toast(f"{n_c} adicionado ao planejamento!")
                         st.rerun()
 
         st.divider()
@@ -578,7 +657,6 @@ elif menu == "EVENTOS":
             for col in ['contato_1', 'contato_2', 'confirmado']:
                 df_ed[col] = df_ed[col].astype(bool)
 
-            # TABELA COM TELEFONE APARECENDO E SENDO EDITÁVEL
             edited = st.data_editor(
                 df_ed[['id', 'nome', 'cargo', 'empresa', 'telefone', 'segmento', 'contato_1', 'contato_2', 'confirmado']],
                 column_config={
@@ -590,15 +668,14 @@ elif menu == "EVENTOS":
                 use_container_width=True
             )
             
-            if st.button("Guardar"):
+            if st.button("Guardar Alterações da Tabela", type="primary"):
                 for _, r in edited.iterrows():
-                    # UPDATE INCLUINDO O TELEFONE
                     run_insert("""
                         UPDATE Convidados_Almoco 
                         SET contato_1=?, contato_2=?, confirmado=?, telefone=?, cargo=?, empresa=?, nome=?
                         WHERE id=?
                     """, (int(r['contato_1']), int(r['contato_2']), int(r['confirmado']), r['telefone'], r['cargo'], r['empresa'], r['nome'], r['id']))
-                st.success("Dados e Telefones atualizados!")
+                st.success("Tabela atualizada com sucesso!")
                 st.rerun()
 
 # --- 2. PARCEIROS E PROJETOS ---
