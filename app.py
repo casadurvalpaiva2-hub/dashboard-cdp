@@ -509,8 +509,20 @@ elif menu == "EVENTOS":
     st.markdown("<h1 style='text-align: center;'>ALMOÇO CDP</h1>", unsafe_allow_html=True)
     
     # 1. Definição do Mês de Referência
+    # 1. Definição do Mês de Referência
     mes_atual = datetime.now().strftime("%m/%Y")
-    mes_ref = st.selectbox("Mês do evento", [mes_atual, "04/2026", "05/2026"], help="Selecione o mês do evento")
+    
+    # Busca todos os meses que já têm algum cadastro no banco de dados
+    df_meses = run_query("SELECT DISTINCT mes_referencia FROM Convidados_Almoco")
+    meses_cadastrados = df_meses['mes_referencia'].tolist() if not df_meses.empty else []
+    
+    # Junta o mês atual, os meses do banco e meses futuros para planejamento (evita duplicidade usando set)
+    lista_meses = list(set([mes_atual, "04/2026", "05/2026", "06/2026"] + meses_cadastrados))
+    
+    # Ordena a lista cronologicamente do mais recente para o mais antigo
+    lista_meses.sort(key=lambda x: datetime.strptime(x, "%m/%Y"), reverse=True)
+    
+    mes_ref = st.selectbox("Mês do evento", lista_meses, help="Selecione o mês do evento")
     
     # BUSCA OS DADOS
     df_almoco = run_query("SELECT * FROM Convidados_Almoco WHERE mes_referencia = ?", (mes_ref,))
@@ -1220,7 +1232,7 @@ elif menu == "RELACIONAMENTO":
     st.markdown("<br>", unsafe_allow_html=True)
 
     # 5. DIAGNÓSTICO (Rosca Premium + Tabela de Retornos)
-    tab_saude, tab_hist = st.tabs(["Saúde e Retornos", "Histórico detalhado"])
+    tab_saude, tab_hist, tab_diretoria = st.tabs(["Saúde e Retornos", "Histórico detalhado", "Relatório para Diretoria"])
 
     with tab_saude:
         df_join = df_rel.merge(df_parceiros[['nome_instituicao', 'id_parceiro']], left_on='Empresa', right_on='nome_instituicao', how='left')
@@ -1243,6 +1255,7 @@ elif menu == "RELACIONAMENTO":
                              "data_retorno": st.column_config.DateColumn("Próximo Retorno", format="DD/MM/YYYY"),
                              "Status_Relacionamento": "Saúde"
                          }, use_container_width=True, hide_index=True, height=250)
+            
 
     with tab_hist:
         p_lista = ["--"] + sorted(df_parceiros['nome_instituicao'].tolist())
@@ -1254,6 +1267,106 @@ elif menu == "RELACIONAMENTO":
                 st.markdown(f"""<div style="margin-bottom:15px; padding:10px; border-bottom:1px solid rgba(255,255,255,0.1)">
                 <span class="date-badge">{r['data_interacao']}</span><br>
                 <p style="margin-top:8px; font-size:0.95rem;">{r['descricao_do_que_foi_feito']}</p></div>""", unsafe_allow_html=True)
+
+    # ==========================================
+    # ABA 3: RELATÓRIO PARA A DIRETORIA
+    # ==========================================
+    with tab_diretoria:
+        st.markdown("### Extrair atualizações de parcerias")
+        st.write("Gerar um resumo estratégico (ações manuais e doações recebidas) para reportar à direção.")
+
+        # Filtro de datas
+        c_inicio, c_fim = st.columns(2)
+        data_inicio = c_inicio.date_input("Data inicial", datetime.now() - timedelta(days=7), key="dt_ini_rel")
+        data_fim = c_fim.date_input("Data final", datetime.now(), key="dt_fim_rel")
+
+        if st.button("Gerar relatório de atividades", type="primary", use_container_width=True):
+            # A MÁGICA ESTÁ AQUI: União de duas consultas (Doações reais + Interações reais)
+            # Filtramos "Sistema:%" para remover os avisos automáticos
+            sql_relatorio = """
+                SELECT * FROM (
+                    SELECT 
+                        p.nome_instituicao, 
+                        r.data_interacao AS data_registro, 
+                        'RELACIONAMENTO' AS tipo,
+                        r.descricao_do_que_foi_feito AS descricao,
+                        0 AS valor_estimado
+                    FROM Registro_Relacionamento r
+                    JOIN Parceiro p ON r.id_parceiro = p.id_parceiro
+                    WHERE r.data_interacao BETWEEN ? AND ?
+                      AND r.descricao_do_que_foi_feito NOT LIKE 'Sistema:%'
+
+                    UNION ALL
+
+                    SELECT 
+                        p.nome_instituicao, 
+                        d.data_doacao AS data_registro, 
+                        'DOAÇÃO (' || d.tipo_doacao || ')' AS tipo,
+                        d.descricao AS descricao,
+                        d.valor_estimado
+                    FROM Doacao d
+                    JOIN Parceiro p ON d.id_parceiro = p.id_parceiro
+                    WHERE d.data_doacao BETWEEN ? AND ?
+                )
+                ORDER BY data_registro DESC
+            """
+            
+            # Precisamos passar as datas 4 vezes (2 para a primeira parte do UNION, 2 para a segunda)
+            d_ini = data_inicio.strftime('%Y-%m-%d')
+            d_fim = data_fim.strftime('%Y-%m-%d')
+            df_relatorio = run_query(sql_relatorio, (d_ini, d_fim, d_ini, d_fim))
+
+            if not df_relatorio.empty:
+                dt_ini_fmt = data_inicio.strftime('%d/%m/%Y')
+                dt_fim_fmt = data_fim.strftime('%d/%m/%Y')
+                
+                texto_diretoria = f"*RESUMO ESTRATÉGICO DI - {dt_ini_fmt} a {dt_fim_fmt}*\n\n"
+
+                html_relatorio = f"""
+                <div class="glass-card">
+                    <h4 style="color: #00CC96; margin-top: 0; text-align: center;">RESUMO: {dt_ini_fmt} a {dt_fim_fmt}</h4>
+                    <hr style="border-color: rgba(255,255,255,0.05); margin-bottom: 15px;">
+                    <ul style='list-style-type: none; padding-left: 5px;'>
+                """
+
+                for _, row in df_relatorio.iterrows():
+                    data_reg_fmt = datetime.strptime(row['data_registro'], '%Y-%m-%d').strftime('%d/%m')
+                    nome_parceiro = str(row['nome_instituicao']).upper()
+                    descricao = str(row['descricao']).capitalize() if pd.notna(row['descricao']) and str(row['descricao']).strip() != "" else "Sem observações adicionais."
+                    tipo = row['tipo']
+                    
+                    # Lógica de formatação condicional se for doação (mostra o valor se for maior que 0)
+                    if "DOAÇÃO" in tipo and row['valor_estimado'] > 0:
+                        valor_fmt = f"R$ {row['valor_estimado']:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                        texto_extra = f" | Valor: {valor_fmt}"
+                        html_extra = f" <span style='color:#00FFC2; font-weight:bold;'>| {valor_fmt}</span>"
+                    else:
+                        texto_extra = ""
+                        html_extra = ""
+
+                    # Adiciona ao texto do WhatsApp
+                    texto_diretoria += f"🔹 *{nome_parceiro}* ({data_reg_fmt})\n"
+                    texto_diretoria += f"{tipo}{texto_extra}\n"
+                    texto_diretoria += f"Detalhe: {descricao}\n\n"
+
+                    # Adiciona ao visual HTML
+                    html_relatorio += f"<li style='margin-bottom: 18px;'>"
+                    html_relatorio += f"🏢 <b style='font-size:1.05em;'>{nome_parceiro}</b> <span class='date-badge' style='margin-left: 10px;'>{data_reg_fmt}</span><br>"
+                    html_relatorio += f"<span style='font-size: 0.85em; color: #FFB74D; font-weight: 600; margin-left: 25px; display: inline-block; margin-top: 4px; margin-bottom: 4px;'>{tipo}{html_extra}</span><br>"
+                    html_relatorio += f"<span style='opacity: 0.85; font-size: 0.95em; margin-left: 25px;'>↳ {descricao}</span>"
+                    html_relatorio += f"</li>"
+                
+                html_relatorio += "</ul></div>"
+
+                # Exibe visualmente no Streamlit
+                st.markdown(html_relatorio, unsafe_allow_html=True)
+
+                # Caixa para o usuário copiar o texto
+                with st.expander("Copiar texto para WhatsApp / E-mail"):
+                    st.code(texto_diretoria, language="markdown")
+                    
+            else:
+                st.info("Nenhuma ação estratégica manual ou doação foi registrada neste período.")
 
     # 6. REGISTRO GLASS (Ação + Retorno)
     st.markdown("<br>", unsafe_allow_html=True)
