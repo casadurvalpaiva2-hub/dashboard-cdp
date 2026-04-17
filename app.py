@@ -324,6 +324,30 @@ elif menu == "DEMANDAS":
     eh_gerente = user['perfil'] == 'gerencia'
     meu_setor = user['setor']
 
+    # --- 0. AJUSTE E MANUTENÇÃO DO BANCO ---
+    # Adiciona as novas colunas se elas não existirem
+    try:
+        with sqlite3.connect(db_path) as conn:
+            cursor = conn.cursor()
+            try: cursor.execute("ALTER TABLE Demandas_Estrategicas ADD COLUMN data_prevista DATE")
+            except: pass
+            try: cursor.execute("ALTER TABLE Demandas_Estrategicas ADD COLUMN is_diaria INTEGER DEFAULT 0")
+            except: pass
+            try: cursor.execute("ALTER TABLE Demandas_Estrategicas ADD COLUMN data_ultima_conclusao DATETIME")
+            except: pass
+            conn.commit()
+    except: pass
+
+    # --- LÓGICA DE TAREFAS DIÁRIAS (RESET) ---
+    # Se a tarefa for diária e foi concluída em um dia anterior, volta para PENDENTE
+    run_insert("""
+        UPDATE Demandas_Estrategicas 
+        SET status = 'PENDENTE' 
+        WHERE is_diaria = 1 
+          AND status = 'REALIZADO' 
+          AND date(data_ultima_conclusao) < date('now', 'localtime')
+    """)
+
     # 1. DEFINIÇÃO DOS DADOS (PITs)
     dados_equipe = {
         "MARKETING DIGITAL": {"Produção de Peças Avulsas": 2, "Edição de Vídeo/Reels": 3, "Gestão de Redes Sociais": 1, "Campanha Google Ads": 5, "Atualização de Site": 2},
@@ -332,7 +356,7 @@ elif menu == "DEMANDAS":
         "GERÊNCIA": {"Manutenção de Parcerias": 7, "Análise de Relatórios": 2, "Planejamento Anual": 30, "Gestão de Equipe": 2}
     }
 
-    # 2. ESTILIZAÇÃO CSS (Adaptável para Modo Claro e Escuro)
+    # 2. ESTILIZAÇÃO CSS (Mais compacto e alinhado)
     st.markdown("""
         <style>
         /* Ajuste das Métricas */
@@ -343,59 +367,31 @@ elif menu == "DEMANDAS":
             border: 1px solid rgba(128, 128, 128, 0.2);
         }
         
-        /* Ajuste dos Cards de Demanda */
-        .card-demanda {
-            background-color: rgba(255, 255, 255, 0.05); /* Fundo semi-transparente */
-            padding: 20px; 
-            border-radius: 12px; 
-            margin-bottom: 15px; 
-            border-left: 8px solid; 
-            border-top: 1px solid rgba(128, 128, 128, 0.1);
-            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+        /* Ajuste do Card Compacto na mesma linha */
+        .task-card {
+            background-color: rgba(255, 255, 255, 0.05);
+            padding: 12px 15px;
+            border-radius: 8px;
+            border-left: 5px solid;
+            margin-bottom: 0px !important;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
-
-        /* Títulos e Textos dentro do Card - Usando cores do tema */
-        .card-demanda h5 {
-            color: var(--text-color); /* Variável mágica do Streamlit */
-            margin: 10px 0;
-            font-weight: 600;
-        }
+        .task-title { font-size: 14px; font-weight: 600; margin-bottom: 4px; color: var(--text-color); }
+        .task-meta { font-size: 11px; opacity: 0.7; color: var(--text-color); }
+        .tag-diaria { background: #4b9ced; color: white; font-size: 9px; padding: 2px 6px; border-radius: 4px; margin-left: 8px; vertical-align: middle;}
         
-        .card-demanda p {
-            color: var(--text-color);
-            opacity: 0.8;
-            font-size: 13px;
-        }
-
-        .setor-tag { 
-            font-size: 11px; 
-            font-weight: bold; 
-            color: #555; 
-            background: #f0f2f6; 
-            padding: 3px 10px; 
-            border-radius: 15px; 
-        }
-
         .sla-box { 
-            background: rgba(13, 71, 161, 0.2); 
-            color: #90caf9; 
-            padding: 10px; 
-            border-radius: 8px; 
-            font-size: 13px; 
-            margin-bottom: 10px;
-            border: 1px solid #1976d2;
+            background: rgba(13, 71, 161, 0.2); color: #90caf9; padding: 10px; 
+            border-radius: 8px; font-size: 13px; margin-bottom: 10px; border: 1px solid #1976d2;
         }
         </style>
     """, unsafe_allow_html=True)
     
-
     # 3. DASHBOARD FILTRADO
-    # Se for gerente, conta tudo. Se for operacional, conta só o seu setor.
     def contar_status_filtrado(status_nome):
         try:
             sql = f"SELECT COUNT(*) as total FROM Demandas_Estrategicas WHERE status = '{status_nome}'"
-            if not eh_gerente:
-                sql += f" AND setor = '{meu_setor}'"
+            if not eh_gerente: sql += f" AND setor = '{meu_setor}'"
             res = run_query(sql)
             return res.iloc[0]['total'] if not res.empty else 0
         except: return 0
@@ -408,20 +404,18 @@ elif menu == "DEMANDAS":
     st.divider()
 
     # 4. FORMULÁRIO DE CADASTRO
-    with st.expander("NOVA SOLICITAÇÃO", expanded=False):
+    with st.expander("**NOVA SOLICITAÇÃO**", expanded=False):
         col_a, col_b = st.columns(2)
         with col_a:
-            # Gerente escolhe qualquer um. Operacional só pode cadastrar para si mesmo ou o sistema trava no setor dele.
             setor_opcoes = list(dados_equipe.keys())
             setor_sel = st.selectbox("Responsável:", setor_opcoes, index=setor_opcoes.index(meu_setor) if meu_setor in setor_opcoes else 0, disabled=not eh_gerente)
             solicitante = st.text_input("SOLICITANTE", value=user['nome'])
+            data_p = st.date_input("Data prevista (Prazo):", datetime.now())
         with col_b:
             tarefa_sel = st.selectbox("O que precisa ser feito?", list(dados_equipe[setor_sel].keys()))
-            sla_dias = dados_equipe[setor_sel][tarefa_sel]
-            st.markdown(f"<div class='sla-box'>⏱️ <b>SLA:</b> {sla_dias} dias úteis</div>", unsafe_allow_html=True)
+            detalhes = st.text_input("Complemento/Descrição:")
+            is_diaria = st.checkbox("Tarefa diária")
 
-        detalhes = st.text_area("Descrição:")
-        
         st.write("**Prioridade (GUT):**")
         g1, u1, t1 = st.columns(3)
         g = g1.select_slider("Gravidade", [1,2,3,4,5], 3, key="g_d")
@@ -430,17 +424,18 @@ elif menu == "DEMANDAS":
 
         if st.button("Lançar demanda", use_container_width=True):
             score = g * u * t
-            run_insert("INSERT INTO Demandas_Estrategicas (tarefa, setor, gravidade, urgencia, tendencia, score_gut, status) VALUES (?,?,?,?,?,?,'PENDENTE')",
-                       (f"[{tarefa_sel}] {detalhes} | POR: {solicitante}".upper(), setor_sel, g, u, t, score))
+            sql = """INSERT INTO Demandas_Estrategicas 
+                     (tarefa, setor, gravidade, urgencia, tendencia, score_gut, status, data_prevista, is_diaria) 
+                     VALUES (?,?,?,?,?,?,'PENDENTE',?,?)"""
+            run_insert(sql, (f"[{tarefa_sel}] {detalhes} | POR: {solicitante}".upper(), 
+                            setor_sel, g, u, t, score, data_p.strftime('%Y-%m-%d'), 1 if is_diaria else 0))
             st.success("Registrado!"); st.rerun()
 
-    # 5. FILA DE TRABALHO FILTRADA
-    st.subheader("Fila")
+    # 5. FILA DE TRABALHO COMPACTA
+    st.subheader("FILA DE TRABALHO")
     
-    # Lógica de Filtro SQL: Gerência vê tudo, Operacional vê só o seu
-    query_sql = "SELECT id, tarefa, setor, score_gut, status FROM Demandas_Estrategicas WHERE status IN ('PENDENTE', 'BLOQUEADO')"
+    query_sql = "SELECT * FROM Demandas_Estrategicas WHERE status IN ('PENDENTE', 'BLOQUEADO')"
     params = []
-    
     if not eh_gerente:
         query_sql += " AND setor = ?"
         params.append(meu_setor)
@@ -452,31 +447,92 @@ elif menu == "DEMANDAS":
             is_b = row['status'] == 'BLOQUEADO'
             cor = "#7030a0" if is_b else ("#FF4B4B" if row['score_gut'] >= 80 else "#FFA500" if row['score_gut'] >= 40 else "#28A745")
             
-            st.markdown(f"""
-                <div class="card-demanda" style="border-left-color: {cor};">
-                    <span class="setor-tag">{row['setor']}</span>
-                    <h5 style="margin: 10px 0;">{'🚨 BLOQUEADO: ' if is_b else ''}{row['tarefa']}</h5>
-                    <p style="font-size: 12px; color: #666; margin:0;">Prioridade: <b>{row['score_gut']} pts</b></p>
-                </div>
-            """, unsafe_allow_html=True)
+            with st.container():
+                # NOVIDADE: 3 colunas perfeitamente alinhadas ao centro (requer Streamlit atualizado)
+                col_chk, col_info, col_acao = st.columns([0.5, 7.5, 2], vertical_alignment="center")
+                
+                with col_chk:
+                    marcar_feito = st.checkbox("", key=f"chk_{row['id']}", help="Marcar como concluída")
+                    if marcar_feito:
+                        run_insert("UPDATE Demandas_Estrategicas SET status = 'REALIZADO', data_ultima_conclusao = CURRENT_TIMESTAMP WHERE id = ?", (row['id'],))
+                        st.toast("Tarefa concluída ✅!")
+                        st.rerun()
+                
+                with col_info:
+                    dt_cad = datetime.strptime(row['data_criacao'], '%Y-%m-%d %H:%M:%S').strftime('%d/%m')
+                    dt_prev = row['data_prevista'] if row['data_prevista'] else "---"
+                    tag_d = '<span class="tag-diaria">DIÁRIA</span>' if row['is_diaria'] else ""
+                    prefixo = '🚨 <b style="color:#FF4B4B;">[BLOQUEADO]</b> ' if is_b else ''
+                    
+                    st.markdown(f"""
+                        <div class="task-card" style="border-left-color: {cor};">
+                            <div class="task-title">{prefixo}{row['tarefa']} {tag_d}</div>
+                            <div class="task-meta">Cadastrada: {dt_cad} | <b>Prazo: {dt_prev}</b> | Setor: {row['setor']}</div>
+                        </div>
+                    """, unsafe_allow_html=True)
+                
+                with col_acao:
+                    # Pontuação e botão agrupados na direita
+                    st.markdown(f"<div style='text-align:center; font-size:15px; font-weight:bold; margin-bottom:5px;'>{row['score_gut']} pts</div>", unsafe_allow_html=True)
+                    
+                    label_btn = "Liberar" if is_b else "Pedir ajuda"
+                    tipo_btn = "primary" if is_b else "secondary"
+                    
+                    if st.button(label_btn, key=f"btn_{row['id']}", type=tipo_btn, use_container_width=True):
+                        novo_st = 'PENDENTE' if is_b else 'BLOQUEADO'
+                        run_insert("UPDATE Demandas_Estrategicas SET status = ? WHERE id = ?", (novo_st, row['id']))
+                        st.rerun()
             
-            b1, b2 = st.columns(2)
-            if b1.button("**Concluir**", key=f"c_{row['id']}"):
-                run_insert("UPDATE Demandas_Estrategicas SET status = 'REALIZADO' WHERE id = ?", (row['id'],))
-                st.rerun()
-            if b2.button("**Barreira / Liberar**", key=f"b_{row['id']}"):
-                novo_st = 'PENDENTE' if is_b else 'BLOQUEADO'
-                run_insert("UPDATE Demandas_Estrategicas SET status = ? WHERE id = ?", (novo_st, row['id']))
-                st.rerun()
+            st.write("") # Dá um pequeno respiro invisível entre uma linha e outra
     else:
-        st.info("Nenhuma demanda pendente para o seu setor.")
+        st.info("Nenhuma demanda pendente para o seu setor no momento.")
 
-    # 6. HISTÓRICO (Também filtrado)
-    with st.expander("MEU HISTÓRICO"):
-        sql_hist = "SELECT tarefa, status FROM Demandas_Estrategicas WHERE status = 'REALIZADO'"
+    # 6. HISTÓRICO
+    with st.expander("Realizadas"):
+        sql_hist = "SELECT tarefa, data_ultima_conclusao as 'Concluído em' FROM Demandas_Estrategicas WHERE status = 'REALIZADO'"
         if not eh_gerente: sql_hist += f" AND setor = '{meu_setor}'"
-        hist = run_query(sql_hist + " ORDER BY id DESC LIMIT 5")
+        hist = run_query(sql_hist + " ORDER BY data_ultima_conclusao DESC LIMIT 10")
         st.table(hist)
+
+    # 7. ESTATÍSTICAS DE PRODUTIVIDADE (O toque final elegante)
+    st.markdown("<br><br>", unsafe_allow_html=True)
+    st.divider()
+    
+    # Título sutil
+    st.markdown("<p style='opacity:0.5; font-size:11px; text-align:center; letter-spacing:2px;'>MÉTRICAS DE ENTREGA MENSAL</p>", unsafe_allow_html=True)
+    
+    # Query para contar tarefas realizadas por mês/ano
+    # Filtramos por setor se o usuário não for gerente
+    sql_stats = """
+        SELECT strftime('%m/%Y', data_ultima_conclusao) as MesAno, COUNT(*) as Total 
+        FROM Demandas_Estrategicas 
+        WHERE status = 'REALIZADO' 
+          AND data_ultima_conclusao IS NOT NULL
+    """
+    if not eh_gerente:
+        sql_stats += f" AND setor = '{meu_setor}'"
+    
+    sql_stats += " GROUP BY MesAno ORDER BY data_ultima_conclusao DESC LIMIT 6"
+    
+    df_stats = run_query(sql_stats)
+    
+    if not df_stats.empty:
+        # Criamos colunas dinâmicas para as estatísticas
+        num_stats = len(df_stats)
+        cols_stats = st.columns(num_stats)
+        
+        for i, row in df_stats.iterrows():
+            with cols_stats[i]:
+                # Estilo de mini-card minimalista
+                st.markdown(f"""
+                    <div style="text-align:center; padding: 5px; border-left: 1px solid rgba(255,255,255,0.1);">
+                        <div style="font-size:10px; opacity:0.6; text-transform: uppercase;">{row['MesAno']}</div>
+                        <div style="font-size:22px; font-weight:800; color:#28A745; margin: -5px 0;">{row['Total']}</div>
+                        <div style="font-size:9px; opacity:0.4;">TAREFAS FEITAS</div>
+                    </div>
+                """, unsafe_allow_html=True)
+    else:
+        st.markdown("<p style='opacity:0.4; font-size:10px; text-align:center;'>Ainda não há dados de conclusão para gerar estatísticas.</p>", unsafe_allow_html=True)
         
 
 elif menu == "EVENTOS":
