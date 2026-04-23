@@ -1,25 +1,40 @@
-import streamlit as st
-import sqlite3
-import pandas as pd
+# ============================================================
+#  SISTEMA INTERNO DI CDP
+#  Versão refatorada — dívida técnica limpa
+#  (login unificado, CSS centralizado, imports consolidados)
+# ============================================================
+
 import os
-from datetime import datetime
-import streamlit as st
 import re
+import sqlite3
+from datetime import datetime, timedelta
+from io import BytesIO
+
+import pandas as pd
+import streamlit as st
 from streamlit_option_menu import option_menu
 
+
+# ------------------------------------------------------------
+#  HELPERS GLOBAIS
+# ------------------------------------------------------------
 def format_br(valor):
+    """Formata número como moeda brasileira: 1234.5 -> 'R$ 1.234,50'."""
     return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
-# --- SISTEMA DE LOGIN ---
-contas = {
-    "alice": {"nome": "Alice Karine", "setor": "MARKETING DIGITAL", "senha": "123456", "perfil": "operacional"},
-    "daniel": {"nome": "Daniel", "setor": "MARKETING DIGITAL", "senha": "123456", "perfil": "operacional"},
-    "imprensa": {"nome": "Michelle Phiffer", "setor": "IMPRENSA", "senha": "cdp2", "perfil": "operacional"},
-    "projetos": {"nome": "Viviane Moura", "setor": "PROJETOS", "senha": "cdp3", "perfil": "operacional"},
-    "gerencia": {"nome": "Helder Coutinho", "setor": "GERÊNCIA", "senha": "Hc!24601", "perfil": "gerencia"}
+
+# ------------------------------------------------------------
+#  LOGIN — sistema único (multiusuário com perfis)
+# ------------------------------------------------------------
+CONTAS = {
+    "alice":    {"nome": "Alice Karine",    "setor": "MARKETING DIGITAL", "senha": "123456", "perfil": "operacional"},
+    "daniel":   {"nome": "Daniel",          "setor": "MARKETING DIGITAL", "senha": "123456", "perfil": "operacional"},
+    "imprensa": {"nome": "Michelle Phiffer","setor": "IMPRENSA",          "senha": "cdp2",   "perfil": "operacional"},
+    "projetos": {"nome": "Viviane Moura",   "setor": "PROJETOS",          "senha": "cdp3",   "perfil": "operacional"},
+    "gerencia": {"nome": "Helder Coutinho", "setor": "GERÊNCIA",          "senha": "Hc!24601","perfil": "gerencia"},
 }
 
-if 'autenticado' not in st.session_state:
+if "autenticado" not in st.session_state:
     st.session_state.autenticado = False
     st.session_state.user_data = None
 
@@ -29,102 +44,145 @@ if not st.session_state.autenticado:
         user_login = st.text_input("Usuário").lower()
         pass_login = st.text_input("Senha", type="password")
         if st.form_submit_button("Entrar"):
-            if user_login in contas and contas[user_login]["senha"] == pass_login:
+            if user_login in CONTAS and CONTAS[user_login]["senha"] == pass_login:
                 st.session_state.autenticado = True
-                st.session_state.user_data = contas[user_login]
+                st.session_state.user_data = CONTAS[user_login]
                 st.rerun()
             else:
                 st.error("Utilizador ou senha incorretos.")
-    st.stop() # Bloqueia o resto do app se não estiver logado
+    st.stop()
 
-def verificar_login():
-    if "autenticado" not in st.session_state:
-        st.session_state.autenticado = False
-
-    if not st.session_state.autenticado:
-        st.markdown("<h1 style='text-align: center;'> Sistema interno - Desenvolvimento Institucional</h1>", unsafe_allow_html=True)
-        
-        # Centraliza a caixa de login
-        _, col_login, _ = st.columns([1, 2, 1])
-        with col_login:
-            senha = st.text_input("Insira a senha de acesso:", type="password")
-            if st.button("Entrar", use_container_width=True):
-                if senha == "CDP2026": # Substitua pela sua senha
-                    st.session_state.autenticado = True
-                    st.rerun()
-                else:
-                    st.error("Senha incorreta!")
-        
-        # O PULO DO GATO: Para a execução aqui se não estiver logado
-        st.stop() 
-
-# Chama a função logo no início do código
-verificar_login()
-
-
-
-# --- EXECUÇÃO ---
-if verificar_login():
-    # AQUI VAI TODO O SEU CÓDIGO ATUAL (Menu, Dashboard, etc.)
-    # Se o usuário não estiver logado, ele nunca chegará aqui.
-    st.sidebar.button("Sair", on_click=lambda: st.session_state.update({"autenticado": False}))
-    
-    # ... resto do seu código ...
-# 1. Configuração de Página e Identidade Visual
+# ------------------------------------------------------------
+#  CONFIG DA PÁGINA
+# ------------------------------------------------------------
 st.set_page_config(page_title="GESTÃO DI", layout="wide", page_icon="🏠")
 
-st.markdown("""
-    <style>
-    /* 1. Transforma a área da seta em um botão retangular com a palavra MENU */
-    [data-testid="stSidebarCollapsedControl"] {
-        background-color: #E31D24 !important;
-        border-radius: 0 20px 20px 0 !important;
-        width: 80px !important; /* Mais largo para caber o texto */
-        height: 45px !important;
-        top: 15px !important;
-        display: flex !important;
-        align-items: center !important;
-        justify-content: center !important;
-        box-shadow: 4px 4px 10px rgba(0,0,0,0.2) !important;
-    }
 
-    /* 2. Esconde a seta original do Streamlit */
-    [data-testid="stSidebarCollapsedControl"] svg {
-        display: none !important;
-    }
+# ------------------------------------------------------------
+#  CSS GLOBAL — todas as classes do app em um único bloco
+#  (botão MENU, glass-card, task-card, suggestion-box, guest-item,
+#   stat-value, date-badge, sla-box, tag-diaria, urgent-border)
+# ------------------------------------------------------------
+CSS_GLOBAL = """
+<style>
+/* ---------- Botão retangular MENU no lugar da seta ---------- */
+[data-testid="stSidebarCollapsedControl"] {
+    background-color: #E31D24 !important;
+    border-radius: 0 20px 20px 0 !important;
+    width: 80px !important;
+    height: 45px !important;
+    top: 15px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    box-shadow: 4px 4px 10px rgba(0,0,0,0.2) !important;
+}
+[data-testid="stSidebarCollapsedControl"] svg { display: none !important; }
+[data-testid="stSidebarCollapsedControl"]::before {
+    content: "☰ MENU" !important;
+    color: white !important;
+    font-weight: bold !important;
+    font-size: 14px !important;
+    font-family: sans-serif !important;
+}
+.main .block-container { padding-top: 5rem !important; }
 
-    /* 3. Injeta a palavra "MENU" no lugar da seta */
-    [data-testid="stSidebarCollapsedControl"]::before {
-        content: "☰ MENU" !important;
-        color: white !important;
-        font-weight: bold !important;
-        font-size: 14px !important;
-        font-family: sans-serif !important;
-    }
-    
-    /* 4. Ajuste para o conteúdo não subir demais */
-    .main .block-container {
-        padding-top: 5rem !important;
-    }
-    </style>
-    """, unsafe_allow_html=True)
+/* ---------- Métricas em destaque ---------- */
+div[data-testid="stMetric"] {
+    background-color: rgba(255, 255, 255, 0.05);
+    padding: 15px;
+    border-radius: 10px;
+    border: 1px solid rgba(128, 128, 128, 0.2);
+}
 
-# --- INSERÇÃO DA LOGO ---
-# Opção A: Se você tiver o link da imagem na internet
-logo_url = "https://casadurvalpaiva.org.br/wp-content/themes/durvalpaiva/dist/img/header/logo.png" # Verifique se este link está ativo ou use o seu
-st.sidebar.image(logo_url, width=150) # Ajuste o número 150 até ficar do tamanho que você gosta
+/* ---------- Cartões genéricos ---------- */
+.glass-card {
+    background: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-radius: 20px;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    padding: 22px;
+    margin-bottom: 20px;
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+}
+.stat-value {
+    font-size: 2.8rem;
+    font-weight: 800;
+    background: linear-gradient(135deg, #00FFC2, #00A37B);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin: 5px 0;
+}
+
+/* ---------- DEMANDAS: task-card ---------- */
+.task-card {
+    background-color: rgba(255, 255, 255, 0.05);
+    padding: 12px 15px;
+    border-radius: 8px;
+    border-left: 5px solid;
+    margin-bottom: 0px !important;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+.task-title { font-size: 14px; font-weight: 600; margin-bottom: 4px; color: var(--text-color); }
+.task-meta  { font-size: 11px; opacity: 0.7; color: var(--text-color); }
+.tag-diaria { background: #4b9ced; color: white; font-size: 9px; padding: 2px 6px; border-radius: 4px; margin-left: 8px; vertical-align: middle; }
+.sla-box {
+    background: rgba(13, 71, 161, 0.2); color: #90caf9; padding: 10px;
+    border-radius: 8px; font-size: 13px; margin-bottom: 10px; border: 1px solid #1976d2;
+}
+
+/* ---------- EVENTOS: guest-item ---------- */
+.guest-item {
+    background: rgba(255, 255, 255, 0.02);
+    border-radius: 10px;
+    padding: 10px;
+    margin-bottom: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+/* ---------- RELACIONAMENTO: suggestion-box e date-badge ---------- */
+.suggestion-box {
+    background: rgba(255, 255, 255, 0.03);
+    border-left: 5px solid #00CC96;
+    border-radius: 8px;
+    padding: 15px;
+    margin: 10px 0;
+}
+.urgent-border { border-left-color: #FF4B4B; }
+.date-badge {
+    background: rgba(0, 204, 150, 0.15);
+    color: #00FFC2;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    border: 1px solid rgba(0, 204, 150, 0.3);
+}
+</style>
+"""
+st.markdown(CSS_GLOBAL, unsafe_allow_html=True)
+
+
+# ------------------------------------------------------------
+#  LOGO NO SIDEBAR
+# ------------------------------------------------------------
+LOGO_URL = "https://casadurvalpaiva.org.br/wp-content/themes/durvalpaiva/dist/img/header/logo.png"
+st.sidebar.image(LOGO_URL, width=150)
 st.sidebar.markdown("---")
 
-# Caminho do banco
+
+# ------------------------------------------------------------
+#  BANCO DE DADOS — caminho e conexão
+# ------------------------------------------------------------
 pasta_atual = os.path.dirname(os.path.abspath(__file__))
-db_path = os.path.join(pasta_atual, 'MeusContatos.db')
+db_path = os.path.join(pasta_atual, "MeusContatos.db")
 
-# Teste de leitura direta do banco
-with sqlite3.connect(db_path) as test_conn:
-    res = test_conn.execute("SELECT COUNT(*) FROM Contato_Direto").fetchone()
-   
 
+# ------------------------------------------------------------
+#  ACESSO AO BANCO — funções centrais
+# ------------------------------------------------------------
 def run_query(query, params=()):
+    """Executa SELECT e retorna DataFrame. Silencia erro mostrando na UI."""
     try:
         with sqlite3.connect(db_path, timeout=10) as conn:
             return pd.read_sql_query(query, conn, params=params)
@@ -132,71 +190,156 @@ def run_query(query, params=()):
         st.error(f"Erro na consulta: {e}")
         return pd.DataFrame()
 
-def run_insert(query, params=()):
+
+def run_exec(query, params=()):
+    """Executa INSERT/UPDATE/DELETE/DDL.
+    Registra no Logs mantendo só os últimos 1000 registros (rotação)."""
     try:
         with sqlite3.connect(db_path, timeout=10) as conn:
             cursor = conn.cursor()
             cursor.execute(query, params)
-            conn.commit()
-            # Esta linha abaixo registra a ação no Log automaticamente
-            cursor.execute("CREATE TABLE IF NOT EXISTS Logs (id INTEGER PRIMARY KEY AUTOINCREMENT, acao TEXT, data_hora DATETIME)")
-            cursor.execute("INSERT INTO Logs (acao, data_hora) VALUES (?,?)", (query[:50], datetime.now().strftime('%d/%m/%Y %H:%M:%S')))
+            # Log apenas de mutações reais (ignora CREATE/DROP idempotente de setup)
+            q_upper = query.lstrip().upper()
+            if q_upper.startswith(("INSERT", "UPDATE", "DELETE")):
+                cursor.execute(
+                    "CREATE TABLE IF NOT EXISTS Logs "
+                    "(id INTEGER PRIMARY KEY AUTOINCREMENT, acao TEXT, data_hora DATETIME)"
+                )
+                cursor.execute(
+                    "INSERT INTO Logs (acao, data_hora) VALUES (?,?)",
+                    (query[:50], datetime.now().strftime("%d/%m/%Y %H:%M:%S")),
+                )
+                # Rotação: mantém só os últimos 1000 logs
+                cursor.execute(
+                    "DELETE FROM Logs WHERE id NOT IN "
+                    "(SELECT id FROM Logs ORDER BY id DESC LIMIT 1000)"
+                )
             conn.commit()
     except Exception as e:
         st.error(f"Erro ao salvar: {e}")
-        
-# --- AJUSTE DEFINITIVO DO BANCO ---
-try:
-    with sqlite3.connect(db_path) as conn:
-        # Tenta adicionar a coluna email se ela não existir
-        try:
-            conn.execute("ALTER TABLE Contato_Direto ADD COLUMN email TEXT")
-        except:
-            pass # Se já existir, ele pula
-except Exception as e:
-    st.error(f"Erro ao atualizar banco: {e}")
 
-# --- AJUSTE DEFINITIVO DO BANCO ---
-try:
-    with sqlite3.connect(db_path) as conn:
-        # Tenta adicionar a coluna email se ela não existir
-        try:
-            conn.execute("ALTER TABLE Contato_Direto ADD COLUMN email TEXT")
-        except:
-            pass # Se já existir, ele pula
-except Exception as e:
-    st.error(f"Erro ao atualizar banco: {e}")
 
-# --- CRIAÇÃO DA TABELA DE EVENTOS ---
-try:
-    run_insert("""
-        CREATE TABLE IF NOT EXISTS Convidados_Almoco (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            mes_referencia TEXT,
-            segmento TEXT,
-            nome TEXT,
-            empresa TEXT,
-            cargo TEXT,
-            telefone TEXT,
-            contato_1 BOOLEAN DEFAULT 0,
-            contato_2 BOOLEAN DEFAULT 0,
-            contato_3 BOOLEAN DEFAULT 0,
-            contato_4 BOOLEAN DEFAULT 0,
-            confirmado BOOLEAN DEFAULT 0,
-            compareceu BOOLEAN DEFAULT 0,
-            observacoes TEXT
-        )
-    """)
-except Exception as e:
-    st.error(f"Erro ao criar tabela de almoço: {e}")
+# Alias para não quebrar as ~20 chamadas existentes no código
+run_insert = run_exec
 
-# --- NAVEGAÇÃO PREMIUM (Substitua o radio por isso) ---
+
+# ------------------------------------------------------------
+#  MIGRATIONS IDEMPOTENTES — rodam 1x ao carregar o app
+#  (adicionar colunas ou criar tabelas ausentes sem explodir)
+# ------------------------------------------------------------
+def setup_schema():
+    try:
+        with sqlite3.connect(db_path) as conn:
+            cur = conn.cursor()
+
+            # Coluna email em Contato_Direto
+            try:
+                cur.execute("ALTER TABLE Contato_Direto ADD COLUMN email TEXT")
+            except sqlite3.OperationalError:
+                pass  # já existe
+
+            # Coluna responsavel em Demandas_Estrategicas
+            try:
+                cur.execute("ALTER TABLE Demandas_Estrategicas ADD COLUMN responsavel TEXT")
+            except sqlite3.OperationalError:
+                pass  # já existe
+
+            # View unificada de ações (DEMANDAS + TAREFAS) — idempotente
+            cur.execute("DROP VIEW IF EXISTS View_Acoes_Unificadas")
+            cur.execute("""
+                CREATE VIEW View_Acoes_Unificadas AS
+                SELECT
+                    'D' || d.id                                        AS id_uniforme,
+                    'DEMANDA'                                          AS fonte,
+                    d.tarefa                                           AS titulo,
+                    d.setor                                            AS setor,
+                    d.responsavel                                      AS responsavel,
+                    NULL                                               AS parceiro,
+                    NULL                                               AS contato,
+                    d.data_prevista                                    AS data_prazo,
+                    d.score_gut                                        AS score,
+                    d.status                                           AS status,
+                    d.is_diaria                                        AS is_diaria,
+                    d.data_criacao                                     AS data_criacao,
+                    CASE
+                        WHEN d.data_prevista IS NULL THEN '⚪ SEM PRAZO'
+                        WHEN julianday(d.data_prevista) < julianday('now')         THEN '🔴 ATRASADA'
+                        WHEN julianday(d.data_prevista) - julianday('now') <= 2    THEN '🟡 URGENTE'
+                        WHEN julianday(d.data_prevista) - julianday('now') <= 7    THEN '🟢 ESTA SEMANA'
+                        ELSE '⚪ FUTURA'
+                    END                                                AS situacao
+                FROM Demandas_Estrategicas d
+                WHERE d.status IN ('PENDENTE', 'BLOQUEADO')
+
+                UNION ALL
+
+                SELECT
+                    'T' || t.id_tarefa                                 AS id_uniforme,
+                    'TAREFA'                                           AS fonte,
+                    t.tipo_tarefa || ' — ' || t.descricao              AS titulo,
+                    NULL                                               AS setor,
+                    t.responsavel                                      AS responsavel,
+                    p.nome_instituicao                                 AS parceiro,
+                    c.nome_pessoa                                      AS contato,
+                    t.data_prazo                                       AS data_prazo,
+                    CASE t.prioridade
+                        WHEN 'ALTA'  THEN 100
+                        WHEN 'MEDIA' THEN 50
+                        WHEN 'BAIXA' THEN 20
+                        ELSE 0
+                    END                                                AS score,
+                    t.status                                           AS status,
+                    0                                                  AS is_diaria,
+                    t.data_criacao                                     AS data_criacao,
+                    CASE
+                        WHEN julianday(t.data_prazo) < julianday('now')         THEN '🔴 ATRASADA'
+                        WHEN julianday(t.data_prazo) - julianday('now') <= 2    THEN '🟡 URGENTE'
+                        WHEN julianday(t.data_prazo) - julianday('now') <= 7    THEN '🟢 ESTA SEMANA'
+                        ELSE '⚪ FUTURA'
+                    END                                                AS situacao
+                FROM Tarefas_Pendentes t
+                LEFT JOIN Parceiro       p ON t.id_parceiro = p.id_parceiro
+                LEFT JOIN Contato_Direto c ON t.id_contato  = c.id_contato
+                WHERE t.status = 'PENDENTE'
+            """)
+
+            # Tabela de convidados do almoço
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS Convidados_Almoco (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    mes_referencia TEXT,
+                    segmento TEXT,
+                    nome TEXT,
+                    empresa TEXT,
+                    cargo TEXT,
+                    telefone TEXT,
+                    contato_1 BOOLEAN DEFAULT 0,
+                    contato_2 BOOLEAN DEFAULT 0,
+                    contato_3 BOOLEAN DEFAULT 0,
+                    contato_4 BOOLEAN DEFAULT 0,
+                    confirmado BOOLEAN DEFAULT 0,
+                    compareceu BOOLEAN DEFAULT 0,
+                    observacoes TEXT
+                )
+            """)
+            conn.commit()
+    except Exception as e:
+        st.error(f"Erro ao preparar banco: {e}")
+
+
+setup_schema()
+
+
+
+# ============================================================
+#  NAVEGAÇÃO — menu lateral
+# ============================================================
 with st.sidebar:
     # O menu retorna o texto selecionado para a variável 'menu'
     menu = option_menu(
-        menu_title="MENU", # Título do menu
-        options=["PAINEL GERAL", "PARCERIAS", "CONTATOS", "EVENTOS", "DEMANDAS", "REGISTRAR DOAÇÃO","RELACIONAMENTO"],
-        icons=["bar-chart-fill", "building", "person-lines-fill", "calendar-event", "stoplights", "cash-coin", "heart-fill",],
+        menu_title="MENU",
+        options=["PAINEL GERAL", "PARCERIAS", "CONTATOS", "EVENTOS", "AÇÕES", "REGISTRAR DOAÇÃO", "RELACIONAMENTO"],
+        icons=["bar-chart-fill", "building", "person-lines-fill", "calendar-event", "check2-square", "cash-coin", "heart-fill"],
         menu_icon="cast", 
         default_index=0,
         styles={
@@ -312,259 +455,414 @@ if menu == "PAINEL GERAL":
     else:
         st.info("Nenhum dado encontrado no banco de dados.")
 
-# ... final do código do PAINEL GERAL ...
-        if not df_top.empty:
-            df_top['Total'] = df_top['Total'].apply(fmt)
-            st.table(df_top)
-
-
-elif menu == "DEMANDAS":
-    # Captura dados do usuário logado
+elif menu == "AÇÕES":
     user = st.session_state.user_data
-    eh_gerente = user['perfil'] == 'gerencia'
-    meu_setor = user['setor']
+    eh_gerente = user["perfil"] == "gerencia"
+    meu_setor = user["setor"]
+    meu_nome = user["nome"]
 
-    # --- 0. AJUSTE E MANUTENÇÃO DO BANCO ---
-    # Adiciona as novas colunas se elas não existirem
-    try:
-        with sqlite3.connect(db_path) as conn:
-            cursor = conn.cursor()
-            try: cursor.execute("ALTER TABLE Demandas_Estrategicas ADD COLUMN data_prevista DATE")
-            except: pass
-            try: cursor.execute("ALTER TABLE Demandas_Estrategicas ADD COLUMN is_diaria INTEGER DEFAULT 0")
-            except: pass
-            try: cursor.execute("ALTER TABLE Demandas_Estrategicas ADD COLUMN data_ultima_conclusao DATETIME")
-            except: pass
-            conn.commit()
-    except: pass
+    st.title("CENTRO DE AÇÕES")
+    st.caption("Tudo que está pendente — operação interna e relacionamento.")
 
-    # --- LÓGICA DE TAREFAS DIÁRIAS (RESET) ---
-    # Se a tarefa for diária e foi concluída em um dia anterior, volta para PENDENTE
-    run_insert("""
-        UPDATE Demandas_Estrategicas 
-        SET status = 'PENDENTE' 
-        WHERE is_diaria = 1 
-          AND status = 'REALIZADO' 
-          AND date(data_ultima_conclusao) < date('now', 'localtime')
-    """)
+    tab_mim, tab_op, tab_rel = st.tabs(["📥 PRA MIM", "📋 PLANEJAMENTO OPERACIONAL", "🤝 RELACIONAMENTO"])
 
-    # 1. DEFINIÇÃO DOS DADOS (PITs)
-    dados_equipe = {
-        "MARKETING DIGITAL": {"Produção de Peças Avulsas": 2, "Edição de Vídeo/Reels": 3, "Gestão de Redes Sociais": 1, "Campanha Google Ads": 5, "Atualização de Site": 2},
-        "IMPRENSA": {"Redação de Release": 3, "Clipping de Projetos": 7, "Agendamento de Pauta": 2, "Artigos Institucionais": 5, "Boletim Informativo": 2},
-        "PROJETOS": {"Escrita de Novo Edital": 15, "Relatório de Prestação de Contas": 10, "Pesquisa de Editais": 5, "Inscrição em Prêmios": 7},
-        "GERÊNCIA": {"Manutenção de Parcerias": 7, "Análise de Relatórios": 2, "Planejamento Anual": 30, "Gestão de Equipe": 2}
-    }
+    # ========== ABA 1: PRA MIM (inbox unificado) ==========
+    with tab_mim:
+        # Busca tudo da view unificada
+        df_acoes = run_query("SELECT * FROM View_Acoes_Unificadas")
 
-    # 2. ESTILIZAÇÃO CSS (Mais compacto e alinhado)
-    st.markdown("""
-        <style>
-        /* Ajuste das Métricas */
-        div[data-testid="stMetric"] {
-            background-color: rgba(255, 255, 255, 0.05); 
-            padding: 15px; 
-            border-radius: 10px; 
-            border: 1px solid rgba(128, 128, 128, 0.2);
-        }
-        
-        /* Ajuste do Card Compacto na mesma linha */
-        .task-card {
-            background-color: rgba(255, 255, 255, 0.05);
-            padding: 12px 15px;
-            border-radius: 8px;
-            border-left: 5px solid;
-            margin-bottom: 0px !important;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-        .task-title { font-size: 14px; font-weight: 600; margin-bottom: 4px; color: var(--text-color); }
-        .task-meta { font-size: 11px; opacity: 0.7; color: var(--text-color); }
-        .tag-diaria { background: #4b9ced; color: white; font-size: 9px; padding: 2px 6px; border-radius: 4px; margin-left: 8px; vertical-align: middle;}
-        
-        .sla-box { 
-            background: rgba(13, 71, 161, 0.2); color: #90caf9; padding: 10px; 
-            border-radius: 8px; font-size: 13px; margin-bottom: 10px; border: 1px solid #1976d2;
-        }
-        </style>
-    """, unsafe_allow_html=True)
-    
-    # 3. DASHBOARD FILTRADO
-    def contar_status_filtrado(status_nome):
+        if df_acoes.empty:
+            st.success("🎉 Nenhuma ação pendente no momento.")
+        else:
+            # Filtrar o que é MEU: setor bate OU responsavel bate OU gerência vê tudo
+            if eh_gerente:
+                df_mim = df_acoes.copy()
+            else:
+                mask_setor = df_acoes["setor"] == meu_setor
+                mask_resp  = df_acoes["responsavel"] == meu_nome
+                mask_livre = df_acoes["responsavel"].isna() & df_acoes["setor"].isna()
+                df_mim = df_acoes[mask_setor | mask_resp | mask_livre].copy()
+
+            # Ordenar por prioridade real: situação + score
+            ordem_sit = {"🔴 ATRASADA": 1, "🟡 URGENTE": 2, "🟢 ESTA SEMANA": 3, "⚪ FUTURA": 4, "⚪ SEM PRAZO": 5}
+            df_mim["_ord"] = df_mim["situacao"].map(ordem_sit).fillna(9)
+            df_mim = df_mim.sort_values(by=["_ord", "score"], ascending=[True, False])
+
+            # Cards de resumo
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric("Total", len(df_mim))
+            c2.metric("🔴 Atrasadas", int((df_mim["situacao"] == "🔴 ATRASADA").sum()))
+            c3.metric("🟡 Urgentes",  int((df_mim["situacao"] == "🟡 URGENTE").sum()))
+            c4.metric("🟢 Esta semana", int((df_mim["situacao"] == "🟢 ESTA SEMANA").sum()))
+
+            st.markdown("---")
+
+            # Filtros
+            fc1, fc2 = st.columns(2)
+            fonte_fil = fc1.selectbox("Filtrar por tipo:", ["TODOS", "DEMANDA", "TAREFA"], key="mim_fonte")
+            sit_fil   = fc2.selectbox("Filtrar por situação:", ["TODAS"] + list(ordem_sit.keys()), key="mim_sit")
+
+            df_view = df_mim.copy()
+            if fonte_fil != "TODOS":
+                df_view = df_view[df_view["fonte"] == fonte_fil]
+            if sit_fil != "TODAS":
+                df_view = df_view[df_view["situacao"] == sit_fil]
+
+            st.markdown(f"**Mostrando {len(df_view)} ação(ões)**")
+
+            # Lista de ações
+            for _, a in df_view.iterrows():
+                with st.container(border=True):
+                    ci, cb = st.columns([5, 1])
+                    with ci:
+                        icone_fonte = "📋" if a["fonte"] == "DEMANDA" else "🤝"
+                        st.markdown(f"### {a['situacao']}  &nbsp;&nbsp; {icone_fonte} `{a['fonte']}`")
+                        st.markdown(f"**{a['titulo']}**")
+                        detalhes = []
+                        if pd.notna(a["data_prazo"]) and a["data_prazo"]:
+                            detalhes.append(f"📅 {a['data_prazo']}")
+                        if pd.notna(a["setor"]) and a["setor"]:
+                            detalhes.append(f"🏷️ {a['setor']}")
+                        if pd.notna(a["responsavel"]) and a["responsavel"]:
+                            detalhes.append(f"👤 {a['responsavel']}")
+                        if pd.notna(a["parceiro"]) and a["parceiro"]:
+                            detalhes.append(f"🏢 {a['parceiro']}")
+                        detalhes.append(f"⚡ {int(a['score'])} pts")
+                        st.markdown(" · ".join(detalhes))
+                    with cb:
+                        # Concluir: decide tabela pela fonte
+                        if st.button("✅ Concluir", key=f"mim_ok_{a['id_uniforme']}"):
+                            if a["fonte"] == "DEMANDA":
+                                real_id = int(a["id_uniforme"][1:])
+                                run_insert("UPDATE Demandas_Estrategicas SET status='REALIZADO', data_ultima_conclusao=CURRENT_TIMESTAMP WHERE id=?", (real_id,))
+                            else:
+                                real_id = int(a["id_uniforme"][1:])
+                                run_insert("UPDATE Tarefas_Pendentes SET status='CONCLUIDA', data_conclusao=? WHERE id_tarefa=?",
+                                           (datetime.now().strftime("%Y-%m-%d"), real_id))
+                            st.toast("Concluído ✅"); st.rerun()
+
+    # ========== ABA 2: PLANEJAMENTO OPERACIONAL (DEMANDAS) ==========
+    with tab_op:
+        # Captura dados do usuário logado
+        user = st.session_state.user_data
+        eh_gerente = user['perfil'] == 'gerencia'
+        meu_setor = user['setor']
+
+        # --- 0. AJUSTE E MANUTENÇÃO DO BANCO ---
+        # Adiciona as novas colunas se elas não existirem
         try:
-            sql = f"SELECT COUNT(*) as total FROM Demandas_Estrategicas WHERE status = '{status_nome}'"
-            if not eh_gerente: sql += f" AND setor = '{meu_setor}'"
-            res = run_query(sql)
-            return res.iloc[0]['total'] if not res.empty else 0
-        except: return 0
+            with sqlite3.connect(db_path) as conn:
+                cursor = conn.cursor()
+                try: cursor.execute("ALTER TABLE Demandas_Estrategicas ADD COLUMN data_prevista DATE")
+                except: pass
+                try: cursor.execute("ALTER TABLE Demandas_Estrategicas ADD COLUMN is_diaria INTEGER DEFAULT 0")
+                except: pass
+                try: cursor.execute("ALTER TABLE Demandas_Estrategicas ADD COLUMN data_ultima_conclusao DATETIME")
+                except: pass
+                conn.commit()
+        except: pass
 
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Pendentes", contar_status_filtrado('PENDENTE'))
-    c2.metric("Com barreira", contar_status_filtrado('BLOQUEADO'), delta_color="inverse")
-    c3.metric("Concluídas", contar_status_filtrado('REALIZADO'))
+        # --- LÓGICA DE TAREFAS DIÁRIAS (RESET) ---
+        # Se a tarefa for diária e foi concluída em um dia anterior, volta para PENDENTE
+        run_insert("""
+            UPDATE Demandas_Estrategicas 
+            SET status = 'PENDENTE' 
+            WHERE is_diaria = 1 
+              AND status = 'REALIZADO' 
+              AND date(data_ultima_conclusao) < date('now', 'localtime')
+        """)
 
-    st.divider()
+        # 1. DEFINIÇÃO DOS DADOS (PITs)
+        dados_equipe = {
+            "MARKETING DIGITAL": {"Produção de Peças Avulsas": 2, "Edição de Vídeo/Reels": 3, "Gestão de Redes Sociais": 1, "Campanha Google Ads": 5, "Atualização de Site": 2},
+            "IMPRENSA": {"Redação de Release": 3, "Clipping de Projetos": 7, "Agendamento de Pauta": 2, "Artigos Institucionais": 5, "Boletim Informativo": 2},
+            "PROJETOS": {"Escrita de Novo Edital": 15, "Relatório de Prestação de Contas": 10, "Pesquisa de Editais": 5, "Inscrição em Prêmios": 7},
+            "GERÊNCIA": {"Manutenção de Parcerias": 7, "Análise de Relatórios": 2, "Planejamento Anual": 30, "Gestão de Equipe": 2}
+        }
 
-    # 4. FORMULÁRIO DE CADASTRO
-    with st.expander("**NOVA SOLICITAÇÃO**", expanded=False):
-        col_a, col_b = st.columns(2)
-        with col_a:
-            setor_opcoes = list(dados_equipe.keys())
-            setor_sel = st.selectbox("Responsável:", setor_opcoes, index=setor_opcoes.index(meu_setor) if meu_setor in setor_opcoes else 0, disabled=not eh_gerente)
-            solicitante = st.text_input("SOLICITANTE", value=user['nome'])
-            data_p = st.date_input("Data prevista (Prazo):", datetime.now())
-        with col_b:
-            tarefa_sel = st.selectbox("O que precisa ser feito?", list(dados_equipe[setor_sel].keys()))
-            detalhes = st.text_input("Complemento/Descrição:")
-            is_diaria = st.checkbox("Tarefa diária")
+        # CSS das métricas e task-card já está no CSS_GLOBAL (topo do arquivo)
 
-        st.write("**Prioridade (GUT):**")
-        g1, u1, t1 = st.columns(3)
-        g = g1.select_slider("Gravidade", [1,2,3,4,5], 3, key="g_d")
-        u = u1.select_slider("Urgência", [1,2,3,4,5], 3, key="u_d")
-        t = t1.select_slider("Tendência", [1,2,3,4,5], 3, key="t_d")
+        # 3. DASHBOARD FILTRADO
+        def contar_status_filtrado(status_nome):
+            try:
+                sql = f"SELECT COUNT(*) as total FROM Demandas_Estrategicas WHERE status = '{status_nome}'"
+                if not eh_gerente: sql += f" AND setor = '{meu_setor}'"
+                res = run_query(sql)
+                return res.iloc[0]['total'] if not res.empty else 0
+            except: return 0
 
-        if st.button("Lançar demanda", use_container_width=True):
-            score = g * u * t
-            sql = """INSERT INTO Demandas_Estrategicas 
-                     (tarefa, setor, gravidade, urgencia, tendencia, score_gut, status, data_prevista, is_diaria) 
-                     VALUES (?,?,?,?,?,?,'PENDENTE',?,?)"""
-            run_insert(sql, (f"[{tarefa_sel}] {detalhes} | POR: {solicitante}".upper(), 
-                            setor_sel, g, u, t, score, data_p.strftime('%Y-%m-%d'), 1 if is_diaria else 0))
-            st.success("Registrado!"); st.rerun()
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Pendentes", contar_status_filtrado('PENDENTE'))
+        c2.metric("Com barreira", contar_status_filtrado('BLOQUEADO'), delta_color="inverse")
+        c3.metric("Concluídas", contar_status_filtrado('REALIZADO'))
 
-    # 5. FILA DE TRABALHO COMPACTA
-    st.subheader("FILA DE TRABALHO")
+        st.divider()
+
+        # 4. FORMULÁRIO DE CADASTRO
+        with st.expander("**NOVA SOLICITAÇÃO**", expanded=False):
+            col_a, col_b = st.columns(2)
+            with col_a:
+                setor_opcoes = list(dados_equipe.keys())
+                setor_sel = st.selectbox("Setor responsável:", setor_opcoes, index=setor_opcoes.index(meu_setor) if meu_setor in setor_opcoes else 0, disabled=not eh_gerente)
+                solicitante = st.text_input("SOLICITANTE", value=user['nome'])
+                data_p = st.date_input("Data prevista (Prazo):", datetime.now())
+            with col_b:
+                tarefa_sel = st.selectbox("O que precisa ser feito?", list(dados_equipe[setor_sel].keys()))
+                detalhes = st.text_input("Complemento/Descrição:")
+                nomes_equipe = [c["nome"] for c in CONTAS.values() if c["setor"] == setor_sel]
+                resp_opcoes = ["-- A definir --"] + sorted(nomes_equipe)
+                responsavel_sel = st.selectbox("Responsável direto (pessoa):", resp_opcoes)
+                is_diaria = st.checkbox("Tarefa diária")
+
+            st.write("**Prioridade (GUT):**")
+            g1, u1, t1 = st.columns(3)
+            g = g1.select_slider("Gravidade", [1,2,3,4,5], 3, key="g_d")
+            u = u1.select_slider("Urgência", [1,2,3,4,5], 3, key="u_d")
+            t = t1.select_slider("Tendência", [1,2,3,4,5], 3, key="t_d")
+
+            if st.button("Lançar demanda", use_container_width=True):
+                score = g * u * t
+                resp_final = None if responsavel_sel == "-- A definir --" else responsavel_sel
+                sql = """INSERT INTO Demandas_Estrategicas 
+                         (tarefa, setor, gravidade, urgencia, tendencia, score_gut, status, data_prevista, is_diaria, responsavel) 
+                         VALUES (?,?,?,?,?,?,'PENDENTE',?,?,?)"""
+                run_insert(sql, (f"[{tarefa_sel}] {detalhes} | POR: {solicitante}".upper(), 
+                                setor_sel, g, u, t, score, data_p.strftime('%Y-%m-%d'), 1 if is_diaria else 0, resp_final))
+                st.success("Registrado!"); st.rerun()
+
+        # 5. FILA DE TRABALHO COMPACTA
+        st.subheader("FILA DE TRABALHO")
     
-    query_sql = "SELECT * FROM Demandas_Estrategicas WHERE status IN ('PENDENTE', 'BLOQUEADO')"
-    params = []
-    if not eh_gerente:
-        query_sql += " AND setor = ?"
-        params.append(meu_setor)
+        query_sql = "SELECT * FROM Demandas_Estrategicas WHERE status IN ('PENDENTE', 'BLOQUEADO')"
+        params = []
+        if not eh_gerente:
+            query_sql += " AND setor = ?"
+            params.append(meu_setor)
     
-    demandas = run_query(query_sql + " ORDER BY status DESC, score_gut DESC", tuple(params))
+        demandas = run_query(query_sql + " ORDER BY status DESC, score_gut DESC", tuple(params))
 
-    if not demandas.empty:
-        for _, row in demandas.iterrows():
-            is_b = row['status'] == 'BLOQUEADO'
-            cor = "#7030a0" if is_b else ("#FF4B4B" if row['score_gut'] >= 80 else "#FFA500" if row['score_gut'] >= 40 else "#28A745")
+        if not demandas.empty:
+            for _, row in demandas.iterrows():
+                is_b = row['status'] == 'BLOQUEADO'
+                cor = "#7030a0" if is_b else ("#FF4B4B" if row['score_gut'] >= 80 else "#FFA500" if row['score_gut'] >= 40 else "#28A745")
             
-            with st.container():
-                # NOVIDADE: 3 colunas perfeitamente alinhadas ao centro (requer Streamlit atualizado)
-                col_chk, col_info, col_acao = st.columns([0.5, 7.5, 2], vertical_alignment="center")
+                with st.container():
+                    # NOVIDADE: 3 colunas perfeitamente alinhadas ao centro (requer Streamlit atualizado)
+                    col_chk, col_info, col_acao = st.columns([0.5, 7.5, 2], vertical_alignment="center")
                 
-                with col_chk:
-                    marcar_feito = st.checkbox("", key=f"chk_{row['id']}", help="Marcar como concluída")
-                    if marcar_feito:
-                        run_insert("UPDATE Demandas_Estrategicas SET status = 'REALIZADO', data_ultima_conclusao = CURRENT_TIMESTAMP WHERE id = ?", (row['id'],))
-                        st.toast("Tarefa concluída ✅!")
-                        st.rerun()
+                    with col_chk:
+                        marcar_feito = st.checkbox("", key=f"chk_{row['id']}", help="Marcar como concluída")
+                        if marcar_feito:
+                            run_insert("UPDATE Demandas_Estrategicas SET status = 'REALIZADO', data_ultima_conclusao = CURRENT_TIMESTAMP WHERE id = ?", (row['id'],))
+                            st.toast("Tarefa concluída ✅!")
+                            st.rerun()
                 
-                with col_info:
-                    dt_cad = datetime.strptime(row['data_criacao'], '%Y-%m-%d %H:%M:%S').strftime('%d/%m')
-                    dt_prev = row['data_prevista'] if row['data_prevista'] else "---"
-                    tag_d = '<span class="tag-diaria">DIÁRIA</span>' if row['is_diaria'] else ""
-                    prefixo = '🚨 <b style="color:#FF4B4B;">[BLOQUEADO]</b> ' if is_b else ''
+                    with col_info:
+                        dt_cad = datetime.strptime(row['data_criacao'], '%Y-%m-%d %H:%M:%S').strftime('%d/%m')
+                        dt_prev = row['data_prevista'] if row['data_prevista'] else "---"
+                        tag_d = '<span class="tag-diaria">DIÁRIA</span>' if row['is_diaria'] else ""
+                        prefixo = '🚨 <b style="color:#FF4B4B;">[BLOQUEADO]</b> ' if is_b else ''
                     
+                        st.markdown(f"""
+                            <div class="task-card" style="border-left-color: {cor};">
+                                <div class="task-title">{prefixo}{row['tarefa']} {tag_d}</div>
+                                <div class="task-meta">Cadastrada: {dt_cad} | <b>Prazo: {dt_prev}</b> | Setor: {row['setor']}</div>
+                            </div>
+                        """, unsafe_allow_html=True)
+                
+                    with col_acao:
+                        # Pontuação e botão agrupados na direita
+                        st.markdown(f"<div style='text-align:center; font-size:15px; font-weight:bold; margin-bottom:5px;'>{row['score_gut']} pts</div>", unsafe_allow_html=True)
+                    
+                        label_btn = "Liberar" if is_b else "Pedir ajuda"
+                        tipo_btn = "primary" if is_b else "secondary"
+                    
+                        if st.button(label_btn, key=f"btn_{row['id']}", type=tipo_btn, use_container_width=True):
+                            novo_st = 'PENDENTE' if is_b else 'BLOQUEADO'
+                            run_insert("UPDATE Demandas_Estrategicas SET status = ? WHERE id = ?", (novo_st, row['id']))
+                            st.rerun()
+            
+                st.write("") # Dá um pequeno respiro invisível entre uma linha e outra
+        else:
+            st.info("Nenhuma demanda pendente para o seu setor no momento.")
+
+        # 6. HISTÓRICO
+        with st.expander("Realizadas"):
+            sql_hist = "SELECT tarefa, data_ultima_conclusao as 'Concluído em' FROM Demandas_Estrategicas WHERE status = 'REALIZADO'"
+            if not eh_gerente: sql_hist += f" AND setor = '{meu_setor}'"
+            hist = run_query(sql_hist + " ORDER BY data_ultima_conclusao DESC LIMIT 10")
+            st.table(hist)
+
+        # 7. ESTATÍSTICAS DE PRODUTIVIDADE (O toque final elegante)
+        st.markdown("<br><br>", unsafe_allow_html=True)
+        st.divider()
+    
+        # Título sutil
+        st.markdown("<p style='opacity:0.5; font-size:11px; text-align:center; letter-spacing:2px;'>MÉTRICAS DE ENTREGA MENSAL</p>", unsafe_allow_html=True)
+    
+        # Query para contar tarefas realizadas por mês/ano
+        # Filtramos por setor se o usuário não for gerente
+        sql_stats = """
+            SELECT strftime('%m/%Y', data_ultima_conclusao) as MesAno, COUNT(*) as Total 
+            FROM Demandas_Estrategicas 
+            WHERE status = 'REALIZADO' 
+              AND data_ultima_conclusao IS NOT NULL
+        """
+        if not eh_gerente:
+            sql_stats += f" AND setor = '{meu_setor}'"
+    
+        sql_stats += " GROUP BY MesAno ORDER BY data_ultima_conclusao DESC LIMIT 6"
+    
+        df_stats = run_query(sql_stats)
+    
+        if not df_stats.empty:
+            # Criamos colunas dinâmicas para as estatísticas
+            num_stats = len(df_stats)
+            cols_stats = st.columns(num_stats)
+        
+            for i, row in df_stats.iterrows():
+                with cols_stats[i]:
+                    # Estilo de mini-card minimalista
                     st.markdown(f"""
-                        <div class="task-card" style="border-left-color: {cor};">
-                            <div class="task-title">{prefixo}{row['tarefa']} {tag_d}</div>
-                            <div class="task-meta">Cadastrada: {dt_cad} | <b>Prazo: {dt_prev}</b> | Setor: {row['setor']}</div>
+                        <div style="text-align:center; padding: 5px; border-left: 1px solid rgba(255,255,255,0.1);">
+                            <div style="font-size:10px; opacity:0.6; text-transform: uppercase;">{row['MesAno']}</div>
+                            <div style="font-size:22px; font-weight:800; color:#28A745; margin: -5px 0;">{row['Total']}</div>
+                            <div style="font-size:9px; opacity:0.4;">TAREFAS FEITAS</div>
                         </div>
                     """, unsafe_allow_html=True)
-                
-                with col_acao:
-                    # Pontuação e botão agrupados na direita
-                    st.markdown(f"<div style='text-align:center; font-size:15px; font-weight:bold; margin-bottom:5px;'>{row['score_gut']} pts</div>", unsafe_allow_html=True)
-                    
-                    label_btn = "Liberar" if is_b else "Pedir ajuda"
-                    tipo_btn = "primary" if is_b else "secondary"
-                    
-                    if st.button(label_btn, key=f"btn_{row['id']}", type=tipo_btn, use_container_width=True):
-                        novo_st = 'PENDENTE' if is_b else 'BLOQUEADO'
-                        run_insert("UPDATE Demandas_Estrategicas SET status = ? WHERE id = ?", (novo_st, row['id']))
+        else:
+            st.markdown("<p style='opacity:0.4; font-size:10px; text-align:center;'>Ainda não há dados de conclusão para gerar estatísticas.</p>", unsafe_allow_html=True)
+        
+
+
+    # ========== ABA 3: RELACIONAMENTO (CRM) ==========
+    with tab_rel:
+        st.title("📋 Tarefas Pendentes")
+        st.caption("Agradecimentos, follow-ups e ações que precisam ser feitas")
+
+        # Buscar todas as tarefas abertas
+        df_tarefas = run_query("SELECT * FROM View_Tarefas_Abertas")
+
+        if df_tarefas.empty:
+            st.success("🎉 Nenhuma tarefa pendente no momento!")
+        else:
+            # Cards de resumo no topo
+            col1, col2, col3, col4 = st.columns(4)
+
+            total = len(df_tarefas)
+            atrasadas = len(df_tarefas[df_tarefas['Situacao'].str.contains('ATRASADA', na=False)])
+            urgentes = len(df_tarefas[df_tarefas['Situacao'].str.contains('URGENTE', na=False)])
+            semana = len(df_tarefas[df_tarefas['Situacao'].str.contains('ESTA SEMANA', na=False)])
+
+            col1.metric("Total de Tarefas", total)
+            col2.metric("🔴 Atrasadas", atrasadas)
+            col3.metric("🟡 Urgentes", urgentes)
+            col4.metric("🟢 Esta semana", semana)
+
+            st.markdown("---")
+
+            # Filtros
+            col_f1, col_f2 = st.columns(2)
+            tipo_filtro = col_f1.selectbox(
+                "Filtrar por tipo:",
+                ["TODOS"] + sorted(df_tarefas['tipo_tarefa'].unique().tolist())
+            )
+            situacao_filtro = col_f2.selectbox(
+                "Filtrar por situação:",
+                ["TODAS", "🔴 ATRASADA", "🟡 URGENTE (até 2 dias)", "🟢 ESTA SEMANA", "⚪ FUTURA"]
+            )
+
+            # Aplicar filtros
+            df_filtrado = df_tarefas.copy()
+            if tipo_filtro != "TODOS":
+                df_filtrado = df_filtrado[df_filtrado['tipo_tarefa'] == tipo_filtro]
+            if situacao_filtro != "TODAS":
+                df_filtrado = df_filtrado[df_filtrado['Situacao'] == situacao_filtro]
+
+            st.markdown(f"**Mostrando {len(df_filtrado)} tarefa(s)**")
+
+            # Lista de tarefas
+            for _, tarefa in df_filtrado.iterrows():
+                with st.container(border=True):
+                    col_info, col_acao = st.columns([4, 1])
+
+                    with col_info:
+                        # Cabeçalho: situação + tipo
+                        st.markdown(f"### {tarefa['Situacao']}")
+                        st.markdown(f"**{tarefa['tipo_tarefa']}** — {tarefa['descricao']}")
+
+                        # Detalhes
+                        detalhes = []
+                        if tarefa['Parceiro']:
+                            detalhes.append(f"🏢 **{tarefa['Parceiro']}**")
+                        if tarefa['Contato']:
+                            detalhes.append(f"👤 {tarefa['Contato']}")
+                        detalhes.append(f"📅 Prazo: **{tarefa['data_prazo']}** ({tarefa['Dias_Ate_Prazo']} dias)")
+                        if tarefa['prioridade']:
+                            detalhes.append(f"⚡ {tarefa['prioridade']}")
+
+                        st.markdown(" · ".join(detalhes))
+
+                    with col_acao:
+                        if st.button("✅ Concluir", key=f"concluir_{tarefa['id_tarefa']}"):
+                            run_insert(
+                                "UPDATE Tarefas_Pendentes SET status='CONCLUIDA', data_conclusao=? WHERE id_tarefa=?",
+                                (datetime.now().strftime('%Y-%m-%d'), int(tarefa['id_tarefa']))
+                            )
+                            st.toast("Tarefa concluída!")
+                            st.rerun()
+
+                        if st.button("❌ Cancelar", key=f"cancelar_{tarefa['id_tarefa']}"):
+                            run_insert(
+                                "UPDATE Tarefas_Pendentes SET status='CANCELADA' WHERE id_tarefa=?",
+                                (int(tarefa['id_tarefa']),)
+                            )
+                            st.toast("Tarefa cancelada.")
+                            st.rerun()
+
+        # Expander para criar tarefa manual
+        st.markdown("---")
+        with st.expander("➕ Criar nova tarefa manual"):
+            with st.form("form_nova_tarefa", clear_on_submit=True):
+                df_parceiros_form = run_query("SELECT id_parceiro, nome_instituicao FROM Parceiro ORDER BY nome_instituicao")
+                p_opcoes = ["-- Sem parceiro --"] + df_parceiros_form['nome_instituicao'].tolist()
+                nomes_cdp = ["-- A definir --"] + sorted([c["nome"] for c in CONTAS.values()])
+
+                col_a, col_b = st.columns(2)
+                tipo_novo = col_a.selectbox("Tipo", ["FOLLOW_UP", "RENOVACAO", "AGRADECIMENTO", "PROSPECCAO", "OUTRO"])
+                prioridade_nova = col_b.selectbox("Prioridade", ["ALTA", "MEDIA", "BAIXA"])
+
+                descricao_nova = st.text_area("Descrição da tarefa")
+
+                col_c, col_d = st.columns(2)
+                prazo_novo = col_c.date_input("Prazo", datetime.now() + timedelta(days=7))
+                parceiro_novo = col_d.selectbox("Parceiro relacionado (opcional)", p_opcoes)
+
+                responsavel_novo = st.selectbox("Responsável direto (opcional):", nomes_cdp)
+
+                if st.form_submit_button("Criar tarefa", type="primary"):
+                    if descricao_nova:
+                        id_parc_novo = None
+                        if parceiro_novo != "-- Sem parceiro --":
+                            id_parc_novo = int(df_parceiros_form[df_parceiros_form['nome_instituicao'] == parceiro_novo]['id_parceiro'].values[0])
+                        resp_final = None if responsavel_novo == "-- A definir --" else responsavel_novo
+
+                        run_insert(
+                            "INSERT INTO Tarefas_Pendentes (tipo_tarefa, descricao, data_prazo, prioridade, id_parceiro, responsavel) VALUES (?, ?, ?, ?, ?, ?)",
+                            (tipo_novo, descricao_nova, prazo_novo.strftime('%Y-%m-%d'), prioridade_nova, id_parc_novo, resp_final)
+                        )
+                        st.toast("Tarefa criada!")
                         st.rerun()
-            
-            st.write("") # Dá um pequeno respiro invisível entre uma linha e outra
-    else:
-        st.info("Nenhuma demanda pendente para o seu setor no momento.")
+                    else:
+                        st.warning("Preencha a descrição.")
 
-    # 6. HISTÓRICO
-    with st.expander("Realizadas"):
-        sql_hist = "SELECT tarefa, data_ultima_conclusao as 'Concluído em' FROM Demandas_Estrategicas WHERE status = 'REALIZADO'"
-        if not eh_gerente: sql_hist += f" AND setor = '{meu_setor}'"
-        hist = run_query(sql_hist + " ORDER BY data_ultima_conclusao DESC LIMIT 10")
-        st.table(hist)
-
-    # 7. ESTATÍSTICAS DE PRODUTIVIDADE (O toque final elegante)
-    st.markdown("<br><br>", unsafe_allow_html=True)
-    st.divider()
-    
-    # Título sutil
-    st.markdown("<p style='opacity:0.5; font-size:11px; text-align:center; letter-spacing:2px;'>MÉTRICAS DE ENTREGA MENSAL</p>", unsafe_allow_html=True)
-    
-    # Query para contar tarefas realizadas por mês/ano
-    # Filtramos por setor se o usuário não for gerente
-    sql_stats = """
-        SELECT strftime('%m/%Y', data_ultima_conclusao) as MesAno, COUNT(*) as Total 
-        FROM Demandas_Estrategicas 
-        WHERE status = 'REALIZADO' 
-          AND data_ultima_conclusao IS NOT NULL
-    """
-    if not eh_gerente:
-        sql_stats += f" AND setor = '{meu_setor}'"
-    
-    sql_stats += " GROUP BY MesAno ORDER BY data_ultima_conclusao DESC LIMIT 6"
-    
-    df_stats = run_query(sql_stats)
-    
-    if not df_stats.empty:
-        # Criamos colunas dinâmicas para as estatísticas
-        num_stats = len(df_stats)
-        cols_stats = st.columns(num_stats)
-        
-        for i, row in df_stats.iterrows():
-            with cols_stats[i]:
-                # Estilo de mini-card minimalista
-                st.markdown(f"""
-                    <div style="text-align:center; padding: 5px; border-left: 1px solid rgba(255,255,255,0.1);">
-                        <div style="font-size:10px; opacity:0.6; text-transform: uppercase;">{row['MesAno']}</div>
-                        <div style="font-size:22px; font-weight:800; color:#28A745; margin: -5px 0;">{row['Total']}</div>
-                        <div style="font-size:9px; opacity:0.4;">TAREFAS FEITAS</div>
-                    </div>
-                """, unsafe_allow_html=True)
-    else:
-        st.markdown("<p style='opacity:0.4; font-size:10px; text-align:center;'>Ainda não há dados de conclusão para gerar estatísticas.</p>", unsafe_allow_html=True)
-        
 
 elif menu == "EVENTOS":
-    from datetime import datetime
-    import pandas as pd
-
-    # CSS PARA ESTÉTICA DE VIDRO (GLASSMORPHISM)
-    st.markdown("""
-        <style>
-        .glass-card {
-            background: rgba(255, 255, 255, 0.03);
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
-            border-radius: 15px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            padding: 20px;
-            margin-bottom: 20px;
-            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
-        }
-        .guest-item {
-            background: rgba(255, 255, 255, 0.02);
-            border-radius: 10px;
-            padding: 10px;
-            margin-bottom: 8px;
-            border: 1px solid rgba(255, 255, 255, 0.05);
-        }
-        </style>
-    """, unsafe_allow_html=True)
+    # datetime, timedelta e pandas já importados no topo
+    # CSS (.glass-card e .guest-item) já está no CSS_GLOBAL
 
     st.markdown("<h1 style='text-align: center;'>ALMOÇO CDP</h1>", unsafe_allow_html=True)
     
-    # 1. Definição do Mês de Referência
     # 1. Definição do Mês de Referência
     mes_atual = datetime.now().strftime("%m/%Y")
     
@@ -846,7 +1144,6 @@ elif menu == "PARCERIAS":
                             st.error(f"Erro técnico ao salvar: {e}")
 
 # --- ABA DE PROJETOS ---
-    # --- ABA DE PROJETOS ---
     with tab2:
         
         
@@ -896,7 +1193,6 @@ elif menu == "PARCERIAS":
         else:
             st.info("Ainda não existem doações vinculadas a projetos específicos.")
 
-# --- 3. REGISTRAR DOAÇÃO ---
 # --- 3. REGISTRAR DOAÇÃO ---
 elif menu == "REGISTRAR DOAÇÃO":
     st.title("ENTRADA DE RECURSOS")
@@ -1154,48 +1450,10 @@ elif menu == "CONTATOS":
         else:
             st.info("Não há contatos para gerenciar.")
 
-            # --- TUDO O QUE JÁ EXISTE NA SIDEBAR FICA ACIMA ---
-
-st.sidebar.subheader("Extrair dados")
-
-# 1. Download do Banco de Dados Completo (para abrir no DB Browser)
-with open(db_path, "rb") as f:
-    st.sidebar.download_button(
-        label="Baixar arquivo .db",
-        data=f,
-        file_name="MeusContatos_Nuvem.db",
-        mime="application/octet-stream"
-    )
-
-# 2. Download em Excel (mais fácil para relatórios)
-import pandas as pd
-from io import BytesIO
-
-if st.sidebar.button("Gerar planilha Excel"):
-    df_excel = run_query("SELECT * FROM Contato_Direto")
-    output = BytesIO()
-    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        df_excel.to_excel(writer, index=False, sheet_name='Contatos')
-    
-    st.sidebar.download_button(
-        label="Clique para baixar Excel",
-        data=output.getvalue(),
-        file_name="contatos_extraidos.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
-
-# 3. O botão de sair
-if st.sidebar.button("Sair", use_container_width=True):
-    st.session_state.clear()
-    st.rerun()
-
-    st.sidebar.markdown("---")
-
 # --- COLOQUE ISSO NO FINAL DO ARQUIVO ---
 elif menu == "RELACIONAMENTO":
-    from datetime import datetime, timedelta
+    # datetime, timedelta e pandas já importados no topo
     import plotly.graph_objects as go
-    import pandas as pd
 
     # 1. BUSCA DE DADOS (Blindagem de Nomes e Colunas)
     df_parceiros = run_query("SELECT id_parceiro, nome_instituicao, UPPER(TRIM(status)) as status_limpo FROM Parceiro")
@@ -1207,52 +1465,7 @@ elif menu == "RELACIONAMENTO":
     # Buscar última data de retorno agendada
     df_retornos = run_query("SELECT id_parceiro, MAX(proxima_acao_data) as data_retorno FROM Registro_Relacionamento GROUP BY id_parceiro")
 
-    # 2. CSS GLASSMORPHISM PREMIUM
-    st.markdown("""
-        <style>
-        /* Fundo do Card de Vidro */
-        .glass-card {
-            background: rgba(255, 255, 255, 0.05);
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
-            border-radius: 20px;
-            border: 1px solid rgba(255, 255, 255, 0.15);
-            padding: 22px;
-            margin-bottom: 20px;
-            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
-        }
-        
-        /* Texto de Destaque */
-        .stat-value {
-            font-size: 2.8rem;
-            font-weight: 800;
-            background: linear-gradient(135deg, #00FFC2, #00A37B);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            margin: 5px 0;
-        }
-
-        /* Sugestões Estilo Glass */
-        .suggestion-box {
-            background: rgba(255, 255, 255, 0.03);
-            border-left: 5px solid #00CC96;
-            border-radius: 8px;
-            padding: 15px;
-            margin: 10px 0;
-        }
-        .urgent-border { border-left-color: #FF4B4B; }
-        
-        /* Badge de Data */
-        .date-badge {
-            background: rgba(0, 204, 150, 0.15);
-            color: #00FFC2;
-            padding: 3px 10px;
-            border-radius: 20px;
-            font-size: 0.8rem;
-            border: 1px solid rgba(0, 204, 150, 0.3);
-        }
-        </style>
-    """, unsafe_allow_html=True)
+    # CSS (.glass-card, .stat-value, .suggestion-box, .date-badge) já está no CSS_GLOBAL
 
     st.title("MANUTENÇÃO DE RELACIONAMENTO")
 
@@ -1445,3 +1658,42 @@ elif menu == "RELACIONAMENTO":
                     if st_novo != "Manter atual":
                         run_insert("UPDATE Parceiro SET status = ? WHERE id_parceiro = ?", (st_novo, id_p))
                     st.toast("Registro salvo!"); st.rerun()
+
+# ============================================================
+# MENU: TAREFAS PENDENTES
+# ============================================================
+# ============================================================
+#  SIDEBAR — FERRAMENTAS FIXAS (sempre visíveis, independente do menu)
+# ============================================================
+st.sidebar.markdown("---")
+st.sidebar.subheader("Extrair dados")
+
+# 1. Download do banco completo (.db)
+with open(db_path, "rb") as f:
+    st.sidebar.download_button(
+        label="Baixar arquivo .db",
+        data=f,
+        file_name="MeusContatos_Nuvem.db",
+        mime="application/octet-stream",
+    )
+
+# 2. Download em Excel (contatos)
+if st.sidebar.button("Gerar planilha Excel"):
+    df_excel = run_query("SELECT * FROM Contato_Direto")
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
+        df_excel.to_excel(writer, index=False, sheet_name="Contatos")
+
+    st.sidebar.download_button(
+        label="Clique para baixar Excel",
+        data=output.getvalue(),
+        file_name="contatos_extraidos.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+st.sidebar.markdown("---")
+
+# 3. Sair
+if st.sidebar.button("Sair", use_container_width=True):
+    st.session_state.clear()
+    st.rerun()
