@@ -675,6 +675,96 @@ def setup_schema():
                     observacoes TEXT
                 )
             """)
+
+            # ── Plano DI 2026 ──────────────────────────────────────────
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS Meta_Fonte_2026 (
+                    id_fonte       INTEGER PRIMARY KEY AUTOINCREMENT,
+                    codigo_fonte   TEXT    UNIQUE NOT NULL,
+                    nome_fonte     TEXT    NOT NULL,
+                    valor_2025     REAL    DEFAULT 0,
+                    meta_2026      REAL    NOT NULL,
+                    tipo           TEXT    DEFAULT 'outros',
+                    ativa          INTEGER DEFAULT 1
+                )
+            """)
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS Registro_Captacao_DI (
+                    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                    id_fonte       INTEGER NOT NULL,
+                    mes_referencia TEXT    NOT NULL,
+                    valor_realizado REAL   NOT NULL,
+                    observacao     TEXT,
+                    data_registro  DATETIME DEFAULT (datetime('now','localtime')),
+                    registrado_por TEXT,
+                    FOREIGN KEY (id_fonte) REFERENCES Meta_Fonte_2026(id_fonte)
+                )
+            """)
+            _fontes_plano = [
+                ('BAZAR_CDP',            'Bazar CDP',                             216639.18,  238000.00, 'evento'),
+                ('BAZAR_RFB',            'Bazar RFB (Mercadorias)',               135138.87,  500000.00, 'evento'),
+                ('BAZAR_RFB_BRINQUEDOS', 'Bazar RFB (Brinquedos)',               213151.81,   40000.00, 'evento'),
+                ('DOACAO_ONLINE',        'Doação On-line',                         17881.24,   30000.00, 'campanha'),
+                ('EMENDAS',              'Emendas Parlamentares',                 100000.00,  200000.00, 'projeto'),
+                ('NOTA_POTIGUAR',        'Nota Potiguar',                          73350.70,   77018.24, 'campanha'),
+                ('OUTROS',               'Outros',                                 37621.99,   39503.09, 'outros'),
+                ('PARCERIAS_INST',       'Parcerias Institucionais',              166915.90,  166000.00, 'parceria'),
+                ('PROJETOS',             'Projetos (Recup. Crédito / Emendas)',   175000.00,  350000.00, 'projeto'),
+                ('TROCO',                'Troco',                                  70142.25,   70000.00, 'campanha'),
+            ]
+            for _f in _fontes_plano:
+                cur.execute(
+                    "INSERT OR IGNORE INTO Meta_Fonte_2026 (codigo_fonte,nome_fonte,valor_2025,meta_2026,tipo) VALUES (?,?,?,?,?)",
+                    _f
+                )
+            cur.execute("DROP VIEW IF EXISTS View_Progresso_PlanoAnual")
+            cur.execute("""
+                CREATE VIEW View_Progresso_PlanoAnual AS
+                SELECT
+                    m.id_fonte, m.codigo_fonte, m.nome_fonte, m.tipo,
+                    m.valor_2025, m.meta_2026,
+                    COALESCE(SUM(c.valor_realizado), 0)                          AS captado_2026,
+                    ROUND(COALESCE(SUM(c.valor_realizado),0)/m.meta_2026*100, 1) AS pct_meta,
+                    m.meta_2026 - COALESCE(SUM(c.valor_realizado), 0)            AS saldo_pendente,
+                    CASE
+                        WHEN COALESCE(SUM(c.valor_realizado),0) >= m.meta_2026          THEN '🟢 ATINGIDO'
+                        WHEN COALESCE(SUM(c.valor_realizado),0) / m.meta_2026 >= 0.7    THEN '🟡 EM PROGRESSO'
+                        WHEN COALESCE(SUM(c.valor_realizado),0) > 0                     THEN '🟠 ABAIXO DO ESPERADO'
+                        ELSE '⚪ SEM REGISTRO'
+                    END AS status_meta
+                FROM Meta_Fonte_2026 m
+                LEFT JOIN (
+                    -- FONTE 1: lançamentos manuais mensais (Bazar, TROCO, eventos)
+                    SELECT id_fonte, valor_realizado
+                    FROM Registro_Captacao_DI
+                    WHERE mes_referencia BETWEEN '2026-01' AND '2026-12'
+
+                    UNION ALL
+
+                    -- FONTE 2: doações financeiras individuais já registradas no CRM
+                    -- Mapeamento: origem_captacao (Doacao) → codigo_fonte (Meta_Fonte_2026)
+                    SELECT
+                        m2.id_fonte,
+                        d.valor_estimado AS valor_realizado
+                    FROM Doacao d
+                    JOIN Meta_Fonte_2026 m2
+                        ON m2.codigo_fonte = CASE d.origem_captacao
+                            WHEN 'Nota Potiguar'    THEN 'NOTA_POTIGUAR'
+                            WHEN 'Parcerias'        THEN 'PARCERIAS_INST'
+                            WHEN 'Doações Online'   THEN 'DOACAO_ONLINE'
+                            WHEN 'Projetos'         THEN 'PROJETOS'
+                            WHEN 'Bazar do Caquito' THEN 'BAZAR_CDP'
+                            WHEN 'Campanha Troco'   THEN 'TROCO'
+                            ELSE NULL
+                        END
+                    WHERE d.tipo_doacao IN ('Financeira', 'Projetos')
+                      AND d.data_doacao >= '2026-01-01'
+                ) c ON m.id_fonte = c.id_fonte
+                WHERE m.ativa = 1
+                GROUP BY m.id_fonte
+                ORDER BY m.meta_2026 DESC
+            """)
+
             conn.commit()
     except Exception as e:
         st.error(f"Erro ao preparar banco: {e}")
@@ -732,7 +822,7 @@ with st.sidebar:
     st.markdown("---")
 
     # O menu retorna o texto selecionado para a variável 'menu'
-    _opcoes_menu = ["PAINEL GERAL", "PARCERIAS", "CONTATOS", "EVENTOS", "AÇÕES", "REGISTRAR DOAÇÃO", "RELACIONAMENTO"]
+    _opcoes_menu = ["PAINEL GERAL", "PLANO DI 2026", "PARCERIAS", "CONTATOS", "EVENTOS", "AÇÕES", "REGISTRAR DOAÇÃO", "RELACIONAMENTO"]
 
     # Se uma ação rápida pediu redirecionamento, força o menu para o destino
     _idx_forcado = 0
@@ -806,53 +896,65 @@ if menu == "PAINEL GERAL":
         df_atual  = df_doacoes[df_doacoes['data_doacao'].dt.year == ano_sel]
         df_passado = df_doacoes[df_doacoes['data_doacao'].dt.year == (ano_sel - 1)]
 
-        total_atual   = df_atual['valor_estimado'].sum()
-        total_passado = df_passado['valor_estimado'].sum()
-        qtd_atual     = len(df_atual)
-        qtd_passada   = len(df_passado)
-        media_atual   = total_atual / qtd_atual if qtd_atual > 0 else 0
+        # Separação crítica: financeiro (entra na conta) vs estimado (mídia/espécie)
+        _tipos_fin = ['Financeira', 'Projetos']
+        df_fin    = df_atual[df_atual['tipo_doacao'].isin(_tipos_fin)]
+        df_est    = df_atual[~df_atual['tipo_doacao'].isin(_tipos_fin)]
+        df_fin_pa = df_passado[df_passado['tipo_doacao'].isin(_tipos_fin)]
+
+        total_fin    = df_fin['valor_estimado'].sum()
+        total_est    = df_est['valor_estimado'].sum()
+        total_fin_pa = df_fin_pa['valor_estimado'].sum()
+        qtd_atual    = len(df_atual)
+        qtd_passada  = len(df_passado)
+        media_fin    = total_fin / len(df_fin) if len(df_fin) > 0 else 0
 
         # ============================================================
-        # BLOCO 1 — ARRECADAÇÃO (visão financeira)
+        # BLOCO 1 — ARRECADAÇÃO (somente financeiro — entra na conta)
         # ============================================================
-        section("Arrecadação")
-
-        diff_valor = total_atual - total_passado
-        diff_qtd = qtd_atual - qtd_passada
+        section("Arrecadação financeira (entra na conta)")
 
         def _fmt(v): return format_br(v)
 
+        diff_fin = total_fin - total_fin_pa
         c1, c2, c3 = st.columns(3)
         c1.metric(
-            "Arrecadação no ano", _fmt(total_atual),
-            delta=(f"{'+' if diff_valor >= 0 else '-'} {_fmt(abs(diff_valor))}" if (ano_sel - 1) in anos else None)
+            "Financeiro no ano", _fmt(total_fin),
+            delta=(f"{'+' if diff_fin >= 0 else '-'} {_fmt(abs(diff_fin))}" if (ano_sel - 1) in anos else None)
         )
-        c2.metric(
-            "Doações no ano", f"{qtd_atual} un",
-            delta=(f"{diff_qtd:+d} vs ano ant." if (ano_sel - 1) in anos else None)
-        )
-        c3.metric("Ticket médio", _fmt(media_atual))
+        c2.metric("Registros financeiros", f"{len(df_fin)} un")
+        c3.metric("Ticket médio financeiro", _fmt(media_fin))
 
-        # Gráficos de arrecadação
         col_esq, col_dir = st.columns(2)
         with col_esq:
-            st.caption("Arrecadação por categoria")
-            dados_cat = df_atual.groupby('tipo_doacao')['valor_estimado'].sum().sort_values(ascending=False)
-            st.bar_chart(dados_cat, color="#E31D24", height=240)
-
+            st.caption("Financeiro por tipo")
+            if not df_fin.empty:
+                dados_cat = df_fin.groupby('tipo_doacao')['valor_estimado'].sum().sort_values(ascending=False)
+                st.bar_chart(dados_cat, color="#E31D24", height=240)
+            else:
+                st.caption("Sem registros financeiros no período.")
         with col_dir:
-            st.caption("Evolução mensal")
-            df_atual_plot = df_atual.copy()
-            df_atual_plot['Mês'] = df_atual_plot['data_doacao'].dt.strftime('%Y-%m')
-            dados_mes = df_atual_plot.groupby('Mês')['valor_estimado'].sum().sort_index()
-            st.line_chart(dados_mes, color="#E31D24", height=240)
+            st.caption("Evolução mensal — financeiro")
+            if not df_fin.empty:
+                df_fin_plot = df_fin.copy()
+                df_fin_plot['Mês'] = df_fin_plot['data_doacao'].dt.strftime('%Y-%m')
+                dados_mes = df_fin_plot.groupby('Mês')['valor_estimado'].sum().sort_index()
+                st.line_chart(dados_mes, color="#E31D24", height=240)
+            else:
+                st.caption("Sem dados financeiros mensais.")
 
-        # Mix de origem da captação (estratégia)
-        df_origem = df_atual[df_atual['origem_captacao'].notna() & (df_atual['origem_captacao'] != 'Selecione...')]
-        if not df_origem.empty:
-            st.caption("Mix por origem da captação")
-            dados_origem = df_origem.groupby('origem_captacao')['valor_estimado'].sum().sort_values(ascending=False)
-            st.bar_chart(dados_origem, color="#E31D24", height=200, horizontal=True)
+        df_origem_fin = df_fin[df_fin['origem_captacao'].notna() & (df_fin['origem_captacao'] != 'Selecione...')]
+        if not df_origem_fin.empty:
+            st.caption("Mix por origem — financeiro")
+            dados_orig = df_origem_fin.groupby('origem_captacao')['valor_estimado'].sum().sort_values(ascending=False)
+            st.bar_chart(dados_orig, color="#E31D24", height=200, horizontal=True)
+
+        # Doações estimadas: colapsado, informativo
+        if total_est > 0:
+            with st.expander(f"📊 Doações estimadas (mídia/espécie) — {_fmt(total_est)} declarados — não entram no caixa"):
+                st.caption("Valores declarados pelos parceiros (espaço de mídia, sessões de foto, materiais etc.). Contam para impacto e relacionamento, não para metas financeiras.")
+                dados_est = df_est.groupby('tipo_doacao')['valor_estimado'].sum().sort_values(ascending=False)
+                st.bar_chart(dados_est, color="#0284C7", height=180)
 
         # ============================================================
         # BLOCO 2 — PARCEIROS (saúde da base)
@@ -965,6 +1067,184 @@ if menu == "PAINEL GERAL":
             )
         else:
             st.caption("Sem doações registradas para este ano.")
+
+
+elif menu == "PLANO DI 2026":
+    page_header("Plano de Ação DI 2026", "Metas × Realizado por fonte de captação — monitoramento financeiro.")
+
+    eh_gerente_plano = st.session_state.user_data["perfil"] == "gerencia"
+
+    # ── Dados base ──────────────────────────────────────────────────────────
+    df_prog = run_query("SELECT * FROM View_Progresso_PlanoAnual ORDER BY meta_2026 DESC")
+    df_hist = run_query("""
+        SELECT rc.mes_referencia, mf.nome_fonte, rc.valor_realizado,
+               rc.observacao, rc.registrado_por, rc.data_registro
+        FROM Registro_Captacao_DI rc
+        JOIN Meta_Fonte_2026 mf ON rc.id_fonte = mf.id_fonte
+        ORDER BY rc.mes_referencia DESC, mf.nome_fonte
+    """)
+
+    # ── KPIs globais ────────────────────────────────────────────────────────
+    if not df_prog.empty:
+        meta_total     = df_prog['meta_2026'].sum()
+        captado_total  = df_prog['captado_2026'].sum()
+        saldo_total    = meta_total - captado_total
+        pct_geral      = round(captado_total / meta_total * 100, 1) if meta_total > 0 else 0
+        fontes_ok      = int((df_prog['status_meta'].str.contains("🟢", na=False)).sum())
+        fontes_risco   = int((df_prog['status_meta'].str.contains("⚪", na=False)).sum())
+
+        kpi_row([
+            {"label": "Meta total anual DI",    "value": format_br(meta_total)},
+            {"label": "Captado em 2026",         "value": format_br(captado_total), "accent": captado_total > 0},
+            {"label": "% da meta",               "value": f"{pct_geral}%"},
+            {"label": "Saldo a captar",          "value": format_br(saldo_total)},
+            {"label": "Fontes sem registro",     "value": fontes_risco, "hint": "Precisam de lançamento"},
+        ])
+
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        # ── Barra de progresso global ────────────────────────────────────
+        st.markdown(
+            f'<div style="font-size:13px;color:#555;margin-bottom:4px;">Progresso geral: <b>{pct_geral}%</b> da meta anual</div>',
+            unsafe_allow_html=True
+        )
+        st.progress(min(pct_geral / 100, 1.0))
+
+        # ── Progresso por fonte ─────────────────────────────────────────
+        section("Progresso por fonte de captação")
+
+        # Mês atual para calcular pró-rata
+        mes_atual = datetime.now().month
+        for _, row in df_prog.iterrows():
+            nome        = row['nome_fonte']
+            meta        = float(row['meta_2026'])
+            captado     = float(row['captado_2026'])
+            pct         = float(row['pct_meta']) if row['pct_meta'] else 0.0
+            saldo       = float(row['saldo_pendente'])
+            status      = str(row['status_meta'])
+            prorate     = round(meta / 12 * mes_atual, 2)
+            pct_prorate = round(captado / prorate * 100, 1) if prorate > 0 else 0
+
+            # Cor da barra por status
+            if "🟢" in status:
+                cor_bar = "#059669"
+            elif "🟡" in status:
+                cor_bar = "#D97706"
+            elif "🟠" in status:
+                cor_bar = "#EA580C"
+            else:
+                cor_bar = "#94A3B8"
+
+            col_n, col_v, col_p, col_s = st.columns([3, 2, 2, 1])
+            with col_n:
+                st.markdown(f"**{nome}**", unsafe_allow_html=True)
+                barra_val = min(pct / 100, 1.0)
+                st.markdown(
+                    f'<div style="background:#E5E7EB;border-radius:6px;height:8px;margin-top:4px;">'
+                    f'<div style="background:{cor_bar};width:{barra_val*100:.1f}%;height:8px;border-radius:6px;"></div>'
+                    f'</div>',
+                    unsafe_allow_html=True
+                )
+            with col_v:
+                st.markdown(
+                    f'<div style="font-size:13px;color:#555;">Meta: <b>{format_br(meta)}</b></div>'
+                    f'<div style="font-size:13px;color:#059669;">Captado: <b>{format_br(captado)}</b></div>',
+                    unsafe_allow_html=True
+                )
+            with col_p:
+                st.markdown(
+                    f'<div style="font-size:13px;color:#555;">Pró-rata ({mes_atual}m): {format_br(prorate)}</div>'
+                    f'<div style="font-size:13px;color:#888;">Vs pró-rata: <b>{pct_prorate}%</b></div>',
+                    unsafe_allow_html=True
+                )
+            with col_s:
+                st.markdown(f'<div style="font-size:20px;text-align:center;margin-top:4px;">{status.split()[0]}</div>', unsafe_allow_html=True)
+
+            st.markdown("<hr style='margin:6px 0;border-color:#F1F5F9;'>", unsafe_allow_html=True)
+
+    else:
+        st.info("Nenhuma fonte de captação cadastrada. Execute o setup do banco para popular Meta_Fonte_2026.")
+
+    # ── Formulário de lançamento mensal ─────────────────────────────────────
+    section("Lançar realizado mensal")
+
+    df_fontes = run_query("SELECT id_fonte, nome_fonte, codigo_fonte FROM Meta_Fonte_2026 WHERE ativa=1 ORDER BY nome_fonte")
+
+    if df_fontes.empty:
+        st.warning("Nenhuma fonte ativa cadastrada.")
+    else:
+        with st.form("form_captacao_mensal", clear_on_submit=True):
+            col_a, col_b = st.columns(2)
+            with col_a:
+                # Gera lista de meses 2026
+                meses_2026 = [f"2026-{str(m).zfill(2)}" for m in range(1, 13)]
+                mes_lancto = col_a.selectbox("Mês de referência *", meses_2026,
+                    index=min(datetime.now().month - 1, 11))
+                fonte_nome = col_a.selectbox("Fonte de captação *",
+                    df_fontes['nome_fonte'].tolist())
+            with col_b:
+                valor_lancto = col_b.number_input(
+                    "Valor realizado (R$) — somente financeiro *",
+                    min_value=0.0, step=100.0, format="%.2f",
+                    help="Informe apenas o valor que efetivamente entrou na conta. Doações midiáticas/estimadas NÃO entram aqui."
+                )
+                resp_lancto = col_b.text_input("Registrado por", value=st.session_state.user_data["nome"])
+
+            obs_lancto = st.text_area("Observação", placeholder="ex: Bazar CDP realizado em 15/04, 3 dias de evento.")
+
+            submitted_lancto = st.form_submit_button("Registrar realizado", type="primary", use_container_width=True)
+            if submitted_lancto:
+                if valor_lancto <= 0:
+                    st.warning("Informe um valor maior que zero.")
+                else:
+                    id_fonte_sel = df_fontes[df_fontes['nome_fonte'] == fonte_nome]['id_fonte'].values[0]
+                    run_exec(
+                        """INSERT INTO Registro_Captacao_DI
+                           (id_fonte, mes_referencia, valor_realizado, observacao, registrado_por)
+                           VALUES (?, ?, ?, ?, ?)""",
+                        (int(id_fonte_sel), mes_lancto, valor_lancto,
+                         obs_lancto.upper() if obs_lancto else None, resp_lancto)
+                    )
+                    st.success(f"✅ {fonte_nome} — {format_br(valor_lancto)} registrado para {mes_lancto}.")
+                    st.rerun()
+
+    # ── Histórico de lançamentos ─────────────────────────────────────────────
+    if not df_hist.empty:
+        section("Histórico de lançamentos")
+
+        # Totais por fonte
+        df_resumo = df_hist.groupby('nome_fonte')['valor_realizado'].sum().reset_index()
+        df_resumo.columns = ['Fonte', 'Total Registrado']
+        df_resumo['Total Registrado'] = df_resumo['Total Registrado'].apply(format_br)
+        st.dataframe(df_resumo, use_container_width=True, hide_index=True)
+
+        with st.expander("Ver todos os lançamentos"):
+            df_hist_exib = df_hist.copy()
+            df_hist_exib['valor_realizado'] = df_hist_exib['valor_realizado'].apply(format_br)
+            df_hist_exib.columns = ['Mês', 'Fonte', 'Valor', 'Observação', 'Registrado por', 'Data registro']
+            st.dataframe(df_hist_exib, use_container_width=True, hide_index=True)
+
+        # Permite exclusão (apenas gerência)
+        if eh_gerente_plano:
+            df_hist_del = run_query("""
+                SELECT rc.id, mf.nome_fonte, rc.mes_referencia, rc.valor_realizado
+                FROM Registro_Captacao_DI rc
+                JOIN Meta_Fonte_2026 mf ON rc.id_fonte = mf.id_fonte
+                ORDER BY rc.id DESC LIMIT 20
+            """)
+            if not df_hist_del.empty:
+                with st.expander("🗑 Excluir lançamento incorreto (gerência)"):
+                    opcoes_del = {
+                        f"#{r['id']} — {r['nome_fonte']} / {r['mes_referencia']} — {format_br(r['valor_realizado'])}": r['id']
+                        for _, r in df_hist_del.iterrows()
+                    }
+                    sel_del = st.selectbox("Selecione o lançamento para excluir:", list(opcoes_del.keys()))
+                    if st.button("Confirmar exclusão", type="secondary"):
+                        run_exec("DELETE FROM Registro_Captacao_DI WHERE id = ?", (opcoes_del[sel_del],))
+                        st.success("Lançamento excluído.")
+                        st.rerun()
+    else:
+        st.info("Nenhum lançamento registrado ainda. Use o formulário acima para registrar os realizados mensais.")
 
 
 elif menu == "AÇÕES":
@@ -2262,9 +2542,8 @@ elif menu == "RELACIONAMENTO":
                         run_insert("UPDATE Parceiro SET status = ? WHERE id_parceiro = ?", (st_novo, id_p))
                     st.toast("Registro salvo!"); st.rerun()
 
-# ============================================================
-# MENU: TAREFAS PENDENTES
-# ============================================================
+
+
 # ============================================================
 #  SIDEBAR — FERRAMENTAS FIXAS (sempre visíveis, independente do menu)
 # ============================================================
