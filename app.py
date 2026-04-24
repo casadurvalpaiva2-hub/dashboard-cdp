@@ -58,17 +58,81 @@ if not st.session_state.autenticado:
 st.set_page_config(page_title="GESTÃO DI", layout="wide", page_icon="🏠")
 
 
+# ============================================================
+#  DESIGN SYSTEM — tokens + CSS base + componentes Python
+#  Paleta neutra corporativa com vermelho CDP como acento.
+#  Adaptável a tema claro/escuro do Streamlit via CSS vars.
+# ============================================================
+
 # ------------------------------------------------------------
-#  CSS GLOBAL — todas as classes do app em um único bloco
-#  (botão MENU, glass-card, task-card, suggestion-box, guest-item,
-#   stat-value, date-badge, sla-box, tag-diaria, urgent-border)
+#  DESIGN TOKENS (referência — também expostos como CSS vars)
 # ------------------------------------------------------------
+CDP_RED        = "#E31D24"       # vermelho institucional — acento
+CDP_RED_DARK   = "#B51319"       # vermelho pressed/hover
+CDP_RED_SOFT   = "rgba(227,29,36,0.10)"  # vermelho sutil (fundos)
+
+# Tons funcionais (usados pelos badges de situação / status)
+COLOR_DANGER   = "#DC2626"       # atrasado / erro
+COLOR_WARNING  = "#D97706"       # urgente / alerta
+COLOR_SUCCESS  = "#059669"       # ok / realizado
+COLOR_INFO     = "#0284C7"       # informação / futuro
+COLOR_NEUTRAL  = "#64748B"       # neutro
+
 CSS_GLOBAL = """
 <style>
-/* ---------- Botão retangular MENU no lugar da seta ---------- */
+/* ============================================================
+   TOKENS — variáveis adaptativas ao tema (claro/escuro)
+   ============================================================ */
+:root {
+    --cdp-red: #E31D24;
+    --cdp-red-dark: #B51319;
+    --cdp-red-soft: rgba(227,29,36,0.10);
+
+    /* Superfícies e texto — tema claro (padrão) */
+    --ds-bg-page:      transparent;
+    --ds-bg-surface:   rgba(15, 23, 42, 0.03);
+    --ds-bg-elevated:  rgba(15, 23, 42, 0.06);
+    --ds-border:       rgba(15, 23, 42, 0.12);
+    --ds-border-soft:  rgba(15, 23, 42, 0.06);
+    --ds-text:         inherit;
+    --ds-text-muted:   rgba(15, 23, 42, 0.65);
+    --ds-text-subtle:  rgba(15, 23, 42, 0.45);
+
+    /* Cores semânticas */
+    --ds-danger:  #DC2626;
+    --ds-warning: #D97706;
+    --ds-success: #059669;
+    --ds-info:    #0284C7;
+    --ds-neutral: #64748B;
+
+    /* Espaçamento e raio */
+    --ds-radius-sm: 6px;
+    --ds-radius-md: 10px;
+    --ds-radius-lg: 14px;
+    --ds-gap-xs: 4px;
+    --ds-gap-sm: 8px;
+    --ds-gap-md: 12px;
+    --ds-gap-lg: 20px;
+}
+
+/* Tema escuro — respeita a preferência do Streamlit/sistema */
+@media (prefers-color-scheme: dark) {
+    :root {
+        --ds-bg-surface:   rgba(255, 255, 255, 0.04);
+        --ds-bg-elevated:  rgba(255, 255, 255, 0.07);
+        --ds-border:       rgba(255, 255, 255, 0.12);
+        --ds-border-soft:  rgba(255, 255, 255, 0.06);
+        --ds-text-muted:   rgba(255, 255, 255, 0.70);
+        --ds-text-subtle:  rgba(255, 255, 255, 0.45);
+    }
+}
+
+/* ============================================================
+   SIDEBAR — botão MENU (mantém identidade CDP vermelho)
+   ============================================================ */
 [data-testid="stSidebarCollapsedControl"] {
-    background-color: #E31D24 !important;
-    border-radius: 0 20px 20px 0 !important;
+    background-color: var(--cdp-red) !important;
+    border-radius: 0 var(--ds-radius-lg) var(--ds-radius-lg) 0 !important;
     width: 80px !important;
     height: 45px !important;
     top: 15px !important;
@@ -81,86 +145,347 @@ CSS_GLOBAL = """
 [data-testid="stSidebarCollapsedControl"]::before {
     content: "☰ MENU" !important;
     color: white !important;
-    font-weight: bold !important;
+    font-weight: 600 !important;
     font-size: 14px !important;
-    font-family: sans-serif !important;
+    font-family: inherit !important;
+    letter-spacing: 0.5px;
 }
-.main .block-container { padding-top: 5rem !important; }
+.main .block-container { padding-top: 4rem !important; }
 
-/* ---------- Métricas em destaque ---------- */
+/* ============================================================
+   BOTÕES PRIMÁRIOS — cor CDP
+   ============================================================ */
+.stButton > button[kind="primary"],
+.stFormSubmitButton > button[kind="primary"] {
+    background-color: var(--cdp-red) !important;
+    border-color: var(--cdp-red) !important;
+    color: white !important;
+    font-weight: 600 !important;
+}
+.stButton > button[kind="primary"]:hover,
+.stFormSubmitButton > button[kind="primary"]:hover {
+    background-color: var(--cdp-red-dark) !important;
+    border-color: var(--cdp-red-dark) !important;
+}
+
+/* ============================================================
+   st.metric — visual unificado (tom neutro, acento vermelho no delta)
+   ============================================================ */
 div[data-testid="stMetric"] {
-    background-color: rgba(255, 255, 255, 0.05);
-    padding: 15px;
-    border-radius: 10px;
-    border: 1px solid rgba(128, 128, 128, 0.2);
+    background-color: var(--ds-bg-surface);
+    padding: 14px 16px;
+    border-radius: var(--ds-radius-md);
+    border: 1px solid var(--ds-border-soft);
+}
+div[data-testid="stMetricLabel"] p {
+    font-size: 11px !important;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    opacity: 0.75;
+    font-weight: 600;
 }
 
-/* ---------- Cartões genéricos ---------- */
+/* ============================================================
+   DESIGN SYSTEM — COMPONENTES
+   ============================================================ */
+
+/* Page Header */
+.ds-page-header {
+    margin-bottom: var(--ds-gap-lg);
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--ds-border-soft);
+}
+.ds-page-header h1 {
+    font-size: 1.6rem !important;
+    font-weight: 700 !important;
+    letter-spacing: -0.3px;
+    margin: 0 0 4px 0 !important;
+    color: var(--ds-text);
+}
+.ds-page-header .ds-page-subtitle {
+    font-size: 0.9rem;
+    color: var(--ds-text-muted);
+    margin: 0;
+}
+
+/* Section divider (para subdividir módulos) */
+.ds-section {
+    margin: 24px 0 12px 0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.ds-section-title {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--ds-text-subtle);
+    white-space: nowrap;
+}
+.ds-section-line {
+    flex: 1;
+    height: 1px;
+    background: var(--ds-border-soft);
+}
+
+/* Card de KPI (alternativa enxuta ao st.metric) */
+.ds-kpi {
+    background: var(--ds-bg-surface);
+    border: 1px solid var(--ds-border-soft);
+    border-radius: var(--ds-radius-md);
+    padding: 14px 16px;
+}
+.ds-kpi-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--ds-text-muted);
+    font-weight: 600;
+    margin-bottom: 6px;
+}
+.ds-kpi-value {
+    font-size: 1.8rem;
+    font-weight: 700;
+    line-height: 1.1;
+    color: var(--ds-text);
+}
+.ds-kpi-value.accent { color: var(--cdp-red); }
+.ds-kpi-hint {
+    font-size: 11px;
+    color: var(--ds-text-subtle);
+    margin-top: 4px;
+}
+
+/* Action card — padrão único para listas de itens */
+.ds-card {
+    background: var(--ds-bg-surface);
+    border: 1px solid var(--ds-border-soft);
+    border-left: 3px solid var(--ds-neutral);
+    border-radius: var(--ds-radius-md);
+    padding: 12px 14px;
+    margin-bottom: 8px;
+    transition: background-color 0.15s ease;
+}
+.ds-card:hover { background: var(--ds-bg-elevated); }
+.ds-card.danger  { border-left-color: var(--ds-danger); }
+.ds-card.warning { border-left-color: var(--ds-warning); }
+.ds-card.success { border-left-color: var(--ds-success); }
+.ds-card.info    { border-left-color: var(--ds-info); }
+.ds-card.accent  { border-left-color: var(--cdp-red); }
+
+.ds-card-title {
+    font-size: 0.95rem;
+    font-weight: 600;
+    margin: 0 0 4px 0;
+    color: var(--ds-text);
+}
+.ds-card-meta {
+    font-size: 0.8rem;
+    color: var(--ds-text-muted);
+    margin: 0;
+}
+.ds-card-meta strong { color: var(--ds-text); font-weight: 600; }
+
+/* Badge / tag */
+.ds-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+    line-height: 1.6;
+    background: var(--ds-bg-elevated);
+    color: var(--ds-text-muted);
+    border: 1px solid var(--ds-border-soft);
+    white-space: nowrap;
+}
+.ds-badge.danger  { background: rgba(220, 38, 38, 0.12);  color: var(--ds-danger);  border-color: rgba(220, 38, 38, 0.25); }
+.ds-badge.warning { background: rgba(217, 119, 6, 0.12);  color: var(--ds-warning); border-color: rgba(217, 119, 6, 0.25); }
+.ds-badge.success { background: rgba(5, 150, 105, 0.12);  color: var(--ds-success); border-color: rgba(5, 150, 105, 0.25); }
+.ds-badge.info    { background: rgba(2, 132, 199, 0.12);  color: var(--ds-info);    border-color: rgba(2, 132, 199, 0.25); }
+.ds-badge.accent  { background: var(--cdp-red-soft);      color: var(--cdp-red);    border-color: rgba(227, 29, 36, 0.30); }
+
+/* Empty state */
+.ds-empty {
+    text-align: center;
+    padding: 40px 20px;
+    border: 1px dashed var(--ds-border);
+    border-radius: var(--ds-radius-md);
+    background: var(--ds-bg-surface);
+}
+.ds-empty-icon  { font-size: 2.2rem; margin-bottom: 8px; opacity: 0.6; }
+.ds-empty-title { font-size: 1rem; font-weight: 600; margin-bottom: 4px; color: var(--ds-text); }
+.ds-empty-msg   { font-size: 0.85rem; color: var(--ds-text-muted); }
+
+/* Classes legadas mantidas para compatibilidade com módulos ainda não migrados.
+   TODO: remover assim que todos os módulos usarem os componentes DS. */
 .glass-card {
-    background: rgba(255, 255, 255, 0.05);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border-radius: 20px;
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    padding: 22px;
-    margin-bottom: 20px;
-    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+    background: var(--ds-bg-surface);
+    border: 1px solid var(--ds-border-soft);
+    border-radius: var(--ds-radius-lg);
+    padding: 20px;
+    margin-bottom: 16px;
+}
+.guest-item {
+    background: var(--ds-bg-surface);
+    border-radius: var(--ds-radius-md);
+    padding: 10px 12px;
+    margin-bottom: 8px;
+    border: 1px solid var(--ds-border-soft);
+}
+.suggestion-box {
+    background: var(--ds-bg-surface);
+    border-left: 3px solid var(--ds-success);
+    border-radius: var(--ds-radius-sm);
+    padding: 12px 14px;
+    margin: 8px 0;
+}
+.urgent-border { border-left-color: var(--ds-danger); }
+.date-badge {
+    background: var(--cdp-red-soft);
+    color: var(--cdp-red);
+    padding: 2px 10px;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    border: 1px solid rgba(227, 29, 36, 0.25);
+    font-weight: 600;
 }
 .stat-value {
-    font-size: 2.8rem;
-    font-weight: 800;
-    background: linear-gradient(135deg, #00FFC2, #00A37B);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    margin: 5px 0;
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--cdp-red);
+    margin: 4px 0;
 }
-
-/* ---------- DEMANDAS: task-card ---------- */
 .task-card {
-    background-color: rgba(255, 255, 255, 0.05);
-    padding: 12px 15px;
-    border-radius: 8px;
-    border-left: 5px solid;
-    margin-bottom: 0px !important;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    background: var(--ds-bg-surface);
+    padding: 10px 14px;
+    border-radius: var(--ds-radius-sm);
+    border-left: 4px solid var(--ds-neutral);
+    margin-bottom: 0;
+    border-top: 1px solid var(--ds-border-soft);
+    border-right: 1px solid var(--ds-border-soft);
+    border-bottom: 1px solid var(--ds-border-soft);
 }
-.task-title { font-size: 14px; font-weight: 600; margin-bottom: 4px; color: var(--text-color); }
-.task-meta  { font-size: 11px; opacity: 0.7; color: var(--text-color); }
-.tag-diaria { background: #4b9ced; color: white; font-size: 9px; padding: 2px 6px; border-radius: 4px; margin-left: 8px; vertical-align: middle; }
+.task-title { font-size: 14px; font-weight: 600; margin-bottom: 4px; color: var(--ds-text); }
+.task-meta  { font-size: 11px; color: var(--ds-text-muted); }
+.tag-diaria { background: var(--cdp-red-soft); color: var(--cdp-red); font-size: 9px; padding: 2px 6px; border-radius: 4px; margin-left: 8px; vertical-align: middle; font-weight: 600; }
 .sla-box {
-    background: rgba(13, 71, 161, 0.2); color: #90caf9; padding: 10px;
-    border-radius: 8px; font-size: 13px; margin-bottom: 10px; border: 1px solid #1976d2;
-}
-
-/* ---------- EVENTOS: guest-item ---------- */
-.guest-item {
-    background: rgba(255, 255, 255, 0.02);
-    border-radius: 10px;
+    background: var(--ds-bg-surface);
+    color: var(--ds-text-muted);
     padding: 10px;
-    margin-bottom: 8px;
-    border: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-/* ---------- RELACIONAMENTO: suggestion-box e date-badge ---------- */
-.suggestion-box {
-    background: rgba(255, 255, 255, 0.03);
-    border-left: 5px solid #00CC96;
-    border-radius: 8px;
-    padding: 15px;
-    margin: 10px 0;
-}
-.urgent-border { border-left-color: #FF4B4B; }
-.date-badge {
-    background: rgba(0, 204, 150, 0.15);
-    color: #00FFC2;
-    padding: 3px 10px;
-    border-radius: 20px;
-    font-size: 0.8rem;
-    border: 1px solid rgba(0, 204, 150, 0.3);
+    border-radius: var(--ds-radius-sm);
+    font-size: 13px;
+    margin-bottom: 10px;
+    border: 1px solid var(--ds-border-soft);
 }
 </style>
 """
 st.markdown(CSS_GLOBAL, unsafe_allow_html=True)
+
+
+# ============================================================
+#  DESIGN SYSTEM — COMPONENTES PYTHON REUTILIZÁVEIS
+# ============================================================
+
+def page_header(titulo: str, subtitulo: str | None = None):
+    """Cabeçalho padrão de cada módulo/página."""
+    sub_html = f'<p class="ds-page-subtitle">{subtitulo}</p>' if subtitulo else ""
+    st.markdown(
+        f'<div class="ds-page-header"><h1>{titulo}</h1>{sub_html}</div>',
+        unsafe_allow_html=True,
+    )
+
+
+def section(titulo: str):
+    """Divisor de seção dentro de uma página. Use em vez de st.subheader/st.divider."""
+    st.markdown(
+        f'<div class="ds-section">'
+        f'<span class="ds-section-title">{titulo}</span>'
+        f'<span class="ds-section-line"></span>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+
+def kpi_row(items: list[dict]):
+    """Renderiza uma linha de KPIs em colunas iguais.
+    Cada item: {'label': str, 'value': str|int, 'hint': str|None, 'accent': bool}
+    """
+    if not items:
+        return
+    cols = st.columns(len(items))
+    for col, it in zip(cols, items):
+        accent_cls = " accent" if it.get("accent") else ""
+        hint_html = f'<div class="ds-kpi-hint">{it["hint"]}</div>' if it.get("hint") else ""
+        col.markdown(
+            f'<div class="ds-kpi">'
+            f'<div class="ds-kpi-label">{it["label"]}</div>'
+            f'<div class="ds-kpi-value{accent_cls}">{it["value"]}</div>'
+            f'{hint_html}'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+
+
+def badge(texto: str, tom: str = "neutral") -> str:
+    """Retorna HTML de um badge. Tons: neutral, danger, warning, success, info, accent."""
+    tom_cls = tom if tom in {"neutral", "danger", "warning", "success", "info", "accent"} else "neutral"
+    cls = "" if tom_cls == "neutral" else f" {tom_cls}"
+    return f'<span class="ds-badge{cls}">{texto}</span>'
+
+
+def situacao_to_tom(situacao: str) -> str:
+    """Mapeia os emojis de situação para o tom do DS."""
+    if not situacao:
+        return "neutral"
+    if "🔴" in situacao or "ATRASAD" in situacao:   return "danger"
+    if "🟡" in situacao or "URGENTE" in situacao:   return "warning"
+    if "🟢" in situacao or "ESTA SEMANA" in situacao: return "success"
+    return "neutral"
+
+
+def action_card(titulo: str, meta_parts: list[str], tom: str = "neutral",
+                situacao_badge: str | None = None, extra_badges: list[tuple[str, str]] | None = None):
+    """Card padrão para listas de ações/convidados/parceiros.
+    - titulo: texto principal
+    - meta_parts: lista de strings com metadata (serão juntadas por · )
+    - tom: cor da barra lateral (neutral|danger|warning|success|info|accent)
+    - situacao_badge: texto para virar badge no cabeçalho
+    - extra_badges: lista de (texto, tom) para badges adicionais
+    """
+    tom_cls = tom if tom in {"neutral", "danger", "warning", "success", "info", "accent"} else "neutral"
+    tom_class = "" if tom_cls == "neutral" else f" {tom_cls}"
+
+    badges_html = ""
+    if situacao_badge:
+        badges_html += badge(situacao_badge, situacao_to_tom(situacao_badge)) + " "
+    if extra_badges:
+        badges_html += " ".join(badge(t, tom) for t, tom in extra_badges)
+
+    meta = " · ".join(meta_parts) if meta_parts else ""
+
+    st.markdown(
+        f'<div class="ds-card{tom_class}">'
+        f'<div style="margin-bottom:4px;">{badges_html}</div>'
+        f'<p class="ds-card-title">{titulo}</p>'
+        f'<p class="ds-card-meta">{meta}</p>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+
+def empty_state(icone: str, titulo: str, mensagem: str = ""):
+    """Estado vazio padronizado."""
+    st.markdown(
+        f'<div class="ds-empty">'
+        f'<div class="ds-empty-icon">{icone}</div>'
+        f'<div class="ds-empty-title">{titulo}</div>'
+        f'<div class="ds-empty-msg">{mensagem}</div>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
 
 
 # ------------------------------------------------------------
@@ -303,6 +628,34 @@ def setup_schema():
                 WHERE t.status = 'PENDENTE'
             """)
 
+            # View auxiliar — Tarefas abertas com campos amigáveis (usada na aba CRM)
+            cur.execute("DROP VIEW IF EXISTS View_Tarefas_Abertas")
+            cur.execute("""
+                CREATE VIEW View_Tarefas_Abertas AS
+                SELECT
+                    t.id_tarefa,
+                    t.tipo_tarefa,
+                    t.descricao,
+                    t.data_criacao,
+                    t.data_prazo,
+                    t.prioridade,
+                    t.status,
+                    t.observacoes,
+                    p.nome_instituicao                AS Parceiro,
+                    c.nome_pessoa                     AS Contato,
+                    CAST(julianday(t.data_prazo) - julianday('now') AS INTEGER) AS Dias_Ate_Prazo,
+                    CASE
+                        WHEN julianday(t.data_prazo) < julianday('now')         THEN '🔴 ATRASADA'
+                        WHEN julianday(t.data_prazo) - julianday('now') <= 2    THEN '🟡 URGENTE'
+                        WHEN julianday(t.data_prazo) - julianday('now') <= 7    THEN '🟢 ESTA SEMANA'
+                        ELSE '⚪ FUTURA'
+                    END                               AS Situacao
+                FROM Tarefas_Pendentes t
+                LEFT JOIN Parceiro       p ON t.id_parceiro = p.id_parceiro
+                LEFT JOIN Contato_Direto c ON t.id_contato  = c.id_contato
+                WHERE t.status = 'PENDENTE'
+            """)
+
             # Tabela de convidados do almoço
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS Convidados_Almoco (
@@ -334,126 +687,285 @@ setup_schema()
 # ============================================================
 #  NAVEGAÇÃO — menu lateral
 # ============================================================
+
+# ------------------------------------------------------------
+#  ATALHO "+ NOVO" — selectbox único (sóbrio, 1 linha)
+# ------------------------------------------------------------
+if "force_menu" not in st.session_state:
+    st.session_state.force_menu = None
+if "open_form" not in st.session_state:
+    st.session_state.open_form = None  # 'parceiro' | 'contato' | 'doacao'
+if "_qa_nonce" not in st.session_state:
+    st.session_state._qa_nonce = 0  # muda após cada uso, força reset do selectbox
+
+def _trigger_quick_add(tipo: str):
+    """Dispara navegação + abertura automática do formulário."""
+    mapa_menu = {
+        "parceiro": "PARCERIAS",
+        "contato":  "CONTATOS",
+        "doacao":   "REGISTRAR DOAÇÃO",
+    }
+    st.session_state.force_menu = mapa_menu[tipo]
+    st.session_state.open_form = tipo
+
 with st.sidebar:
+    _opcoes_add = {
+        "Criar novo...": None,
+        "Parceiro":      "parceiro",
+        "Contato":       "contato",
+        "Doação":        "doacao",
+    }
+    # Usa key dinâmica (nonce) para que o selectbox reinicie após cada seleção
+    _qa_key = f"sel_quick_add_{st.session_state._qa_nonce}"
+    _escolha = st.selectbox(
+        "Atalho",
+        options=list(_opcoes_add.keys()),
+        index=0,
+        key=_qa_key,
+        label_visibility="collapsed",
+    )
+    if _opcoes_add[_escolha] is not None:
+        _trigger_quick_add(_opcoes_add[_escolha])
+        st.session_state._qa_nonce += 1  # avança nonce para recriar selectbox limpo
+        st.rerun()
+
+    st.markdown("---")
+
     # O menu retorna o texto selecionado para a variável 'menu'
+    _opcoes_menu = ["PAINEL GERAL", "PARCERIAS", "CONTATOS", "EVENTOS", "AÇÕES", "REGISTRAR DOAÇÃO", "RELACIONAMENTO"]
+
+    # Se uma ação rápida pediu redirecionamento, força o menu para o destino
+    _idx_forcado = 0
+    _menu_key = "menu_nav"  # key padrão
+    if st.session_state.force_menu in _opcoes_menu:
+        _idx_forcado = _opcoes_menu.index(st.session_state.force_menu)
+        # Usa nonce para recriar o menu (option_menu ignora default_index em re-renders)
+        st.session_state._qa_nonce += 1
+        _menu_key = f"menu_nav_{st.session_state._qa_nonce}"
+        st.session_state.force_menu = None  # consome o redirecionamento
+
     menu = option_menu(
         menu_title="MENU",
-        options=["PAINEL GERAL", "PARCERIAS", "CONTATOS", "EVENTOS", "AÇÕES", "REGISTRAR DOAÇÃO", "RELACIONAMENTO"],
+        options=_opcoes_menu,
         icons=["bar-chart-fill", "building", "person-lines-fill", "calendar-event", "check2-square", "cash-coin", "heart-fill"],
-        menu_icon="cast", 
-        default_index=0,
+        menu_icon="cast",
+        default_index=_idx_forcado,
+        key=_menu_key,
         styles={
             "container": {
-                "padding": "5!important", 
-                "background-color": "transparent" # Remove o fundo branco fixo
+                "padding": "5!important",
+                "background-color": "transparent"
             },
             "icon": {
-                "color": "#E31D24", 
+                "color": "#E31D24",
                 "font-size": "18px"
-            }, 
+            },
             "nav-link": {
-                "font-size": "14px", 
-                "text-align": "left", 
-                "margin":"0px", 
-                # Removemos cores fixas de texto para o Streamlit decidir conforme o tema
+                "font-size": "14px",
+                "text-align": "left",
+                "margin": "0px",
             },
             "nav-link-selected": {
-                "background-color": "#E31D24", # Mantém o destaque vermelho da Casa Durval Paiva
-                "color": "white" # Garante que o texto no botão selecionado seja branco
+                "background-color": "#E31D24",
+                "color": "white"
             },
         }
     )
 
 # --- 1. DASHBOARD GERAL ---
 if menu == "PAINEL GERAL":
-    st.title("DASHBOARD DI")
-    
+    page_header("Painel geral", "Visão consolidada do Desenvolvimento Institucional.")
+
+    # ============================================================
+    # BUSCA DE DADOS TRANSVERSAL
+    # ============================================================
     df_doacoes = run_query("SELECT * FROM Doacao")
-    
-    if not df_doacoes.empty:
-        # 1. Tratamento Inicial
+    df_parceiros_pg = run_query("SELECT id_parceiro, nome_instituicao, status, data_adesao FROM Parceiro")
+    df_acoes_pg = run_query("SELECT fonte, situacao FROM View_Acoes_Unificadas")
+    df_eventos_pg = run_query("""
+        SELECT mes_referencia, 
+               SUM(CASE WHEN confirmado=1 THEN 1 ELSE 0 END) as confirmados,
+               COUNT(*) as total
+        FROM Convidados_Almoco
+        GROUP BY mes_referencia
+        ORDER BY mes_referencia DESC
+        LIMIT 1
+    """)
+    df_rel_pg = run_query("SELECT Dias_Sem_Contato, Status_Relacionamento FROM View_Relacionamento_Critico")
+
+    # ============================================================
+    # SELETOR DE ANO
+    # ============================================================
+    if df_doacoes.empty:
+        empty_state("📋", "Nenhum dado cadastrado", "Comece registrando doações, parceiros e eventos.")
+    else:
         df_doacoes['data_doacao'] = pd.to_datetime(df_doacoes['data_doacao'])
         anos = sorted(df_doacoes['data_doacao'].dt.year.unique(), reverse=True)
-        ano_sel = st.selectbox("**Selecione o ano para análise:**", anos)
-        
-        # 2. Cálculos dos Dados (Ano Atual vs Ano Anterior)
-        df_atual = df_doacoes[df_doacoes['data_doacao'].dt.year == ano_sel]
-        df_passado = df_doacoes[df_doacoes['data_doacao'].dt.year == (ano_sel - 1)]
-        
-        # Valores Totais
-        total_atual = df_atual['valor_estimado'].sum()
-        total_passado = df_passado['valor_estimado'].sum()
-        
-        # Quantidades
-        qtd_atual = len(df_atual)
-        qtd_passada = len(df_passado)
-        
-        # Médias
-        media_atual = total_atual / qtd_atual if qtd_atual > 0 else 0
-        media_passada = total_passado / qtd_passada if qtd_passada > 0 else 0
+        ano_sel = st.selectbox("Ano de referência", anos, key="pg_ano")
 
-       # --- EXIBIÇÃO DAS MÉTRICAS (COLE AQUI) ---
-        
-        # 1. Primeiro definimos a função de formatar moeda
-        def fmt(v): 
-            return f"R$ {v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-            
-        c1, c2, c3 = st.columns(3)
-        
-        # 2. Depois calculamos as variações
+        df_atual  = df_doacoes[df_doacoes['data_doacao'].dt.year == ano_sel]
+        df_passado = df_doacoes[df_doacoes['data_doacao'].dt.year == (ano_sel - 1)]
+
+        total_atual   = df_atual['valor_estimado'].sum()
+        total_passado = df_passado['valor_estimado'].sum()
+        qtd_atual     = len(df_atual)
+        qtd_passada   = len(df_passado)
+        media_atual   = total_atual / qtd_atual if qtd_atual > 0 else 0
+
+        # ============================================================
+        # BLOCO 1 — ARRECADAÇÃO (visão financeira)
+        # ============================================================
+        section("Arrecadação")
+
         diff_valor = total_atual - total_passado
         diff_qtd = qtd_atual - qtd_passada
 
-        # 3. Lógica para a cor do Delta de Arrecadação
-        # Se o valor for negativo, colocamos o sinal de menos ANTES do R$
-        texto_delta_v = fmt(diff_valor)
-        if diff_valor < 0:
-            texto_delta_v = f"- {fmt(abs(diff_valor))}" 
+        def _fmt(v): return format_br(v)
 
-        # 4. Exibimos os cartões (Metrics)
-        # O delta de arrecadação agora ficará VERMELHO se cair
-        c1.metric("**Arrecadação no ano**", fmt(total_atual), 
-                  delta=texto_delta_v if ano_sel-1 in anos else None)
-        
-        # O delta de doações mostrará a quantidade
-        c2.metric("**Doações no ano**", f"{qtd_atual} un", 
-                  delta=f"{diff_qtd} vs ano ant." if ano_sel-1 in anos else None)
-        
-        c3.metric("**Ticket Médio**", fmt(media_atual))
+        c1, c2, c3 = st.columns(3)
+        c1.metric(
+            "Arrecadação no ano", _fmt(total_atual),
+            delta=(f"{'+' if diff_valor >= 0 else '-'} {_fmt(abs(diff_valor))}" if (ano_sel - 1) in anos else None)
+        )
+        c2.metric(
+            "Doações no ano", f"{qtd_atual} un",
+            delta=(f"{diff_qtd:+d} vs ano ant." if (ano_sel - 1) in anos else None)
+        )
+        c3.metric("Ticket médio", _fmt(media_atual))
 
-        # --- GRÁFICOS ---
+        # Gráficos de arrecadação
         col_esq, col_dir = st.columns(2)
-        
         with col_esq:
-            st.subheader("Por categoria")
-            dados_cat = df_atual.groupby('tipo_doacao')['valor_estimado'].sum()
-            st.bar_chart(dados_cat, color="#E31D24") 
+            st.caption("Arrecadação por categoria")
+            dados_cat = df_atual.groupby('tipo_doacao')['valor_estimado'].sum().sort_values(ascending=False)
+            st.bar_chart(dados_cat, color="#E31D24", height=240)
 
         with col_dir:
-            st.subheader("Evolução mensal")
-            df_atual['Mes'] = df_atual['data_doacao'].dt.strftime('%m - %b')
-            dados_mes = df_atual.groupby('Mes')['valor_estimado'].sum()
-            st.line_chart(dados_mes, color="#FFF200")
+            st.caption("Evolução mensal")
+            df_atual_plot = df_atual.copy()
+            df_atual_plot['Mês'] = df_atual_plot['data_doacao'].dt.strftime('%Y-%m')
+            dados_mes = df_atual_plot.groupby('Mês')['valor_estimado'].sum().sort_index()
+            st.line_chart(dados_mes, color="#E31D24", height=240)
 
-        st.markdown("---")
+        # Mix de origem da captação (estratégia)
+        df_origem = df_atual[df_atual['origem_captacao'].notna() & (df_atual['origem_captacao'] != 'Selecione...')]
+        if not df_origem.empty:
+            st.caption("Mix por origem da captação")
+            dados_origem = df_origem.groupby('origem_captacao')['valor_estimado'].sum().sort_values(ascending=False)
+            st.bar_chart(dados_origem, color="#E31D24", height=200, horizontal=True)
 
-        # --- RANKING TOP 5 (Nova Melhoria) ---
-        st.subheader("**Maiores doadores do ano** 🏆😎")
-        # Busca o nome das instituições fazendo um Join
-        query_top = f"""
-            SELECT p.nome_instituicao as Parceiro, SUM(d.valor_estimado) as Total
+        # ============================================================
+        # BLOCO 2 — PARCEIROS (saúde da base)
+        # ============================================================
+        section("Parceiros")
+
+        if not df_parceiros_pg.empty:
+            s_limpo = df_parceiros_pg['status'].fillna("").str.upper().str.strip()
+            ativos    = int(s_limpo.str.contains("ATIVO",   na=False).sum())
+            prospec   = int(s_limpo.str.contains("PROSPEC", na=False).sum())
+            inativos  = int(s_limpo.str.contains("INATIVO", na=False).sum())
+
+            # Novos parceiros no ano selecionado
+            df_parceiros_pg['data_adesao_dt'] = pd.to_datetime(df_parceiros_pg['data_adesao'], errors='coerce')
+            novos_ano = int((df_parceiros_pg['data_adesao_dt'].dt.year == ano_sel).sum())
+
+            kpi_row([
+                {"label": "Total",        "value": len(df_parceiros_pg)},
+                {"label": "Ativos",       "value": ativos, "accent": True},
+                {"label": "Prospecção",   "value": prospec},
+                {"label": "Inativos",     "value": inativos},
+                {"label": f"Novos em {ano_sel}", "value": novos_ano},
+            ])
+        else:
+            st.caption("Nenhum parceiro cadastrado ainda.")
+
+        # ============================================================
+        # BLOCO 3 — AÇÕES PENDENTES (operação)
+        # ============================================================
+        section("Ações pendentes")
+
+        if not df_acoes_pg.empty:
+            total_acoes   = len(df_acoes_pg)
+            atrasadas_pg  = int((df_acoes_pg['situacao'] == 'ATRASADA').sum())
+            urgentes_pg   = int((df_acoes_pg['situacao'] == 'URGENTE').sum())
+            n_demandas    = int((df_acoes_pg['fonte'] == 'DEMANDA').sum())
+            n_tarefas     = int((df_acoes_pg['fonte'] == 'TAREFA').sum())
+
+            kpi_row([
+                {"label": "Total pendente", "value": total_acoes},
+                {"label": "Atrasadas",      "value": atrasadas_pg, "accent": atrasadas_pg > 0},
+                {"label": "Urgentes",       "value": urgentes_pg},
+                {"label": "Operacional",    "value": n_demandas, "hint": "Demandas internas"},
+                {"label": "Relacionamento", "value": n_tarefas,  "hint": "Tarefas CRM"},
+            ])
+        else:
+            st.caption("Nenhuma ação pendente.")
+
+        # ============================================================
+        # BLOCO 4 — RELACIONAMENTO (saúde da base)
+        # ============================================================
+        section("Saúde do relacionamento")
+
+        if not df_rel_pg.empty:
+            df_rel_pg['Dias_Sem_Contato'] = pd.to_numeric(df_rel_pg['Dias_Sem_Contato'], errors='coerce')
+            criticos_30 = int((df_rel_pg['Dias_Sem_Contato'] > 30).sum())
+            criticos_60 = int((df_rel_pg['Dias_Sem_Contato'] > 60).sum())
+            em_dia      = int(df_rel_pg['Status_Relacionamento'].str.contains("DIA", na=False, case=False).sum())
+
+            kpi_row([
+                {"label": "Em dia",              "value": em_dia},
+                {"label": "Sem contato há 30+ dias", "value": criticos_30},
+                {"label": "Sem contato há 60+ dias", "value": criticos_60, "accent": criticos_60 > 0},
+            ])
+        else:
+            st.caption("Sem dados de relacionamento.")
+
+        # ============================================================
+        # BLOCO 5 — EVENTOS (almoço do mês)
+        # ============================================================
+        if not df_eventos_pg.empty:
+            section("Eventos do mês")
+            ev = df_eventos_pg.iloc[0]
+            mes_ev        = ev['mes_referencia']
+            confirmados   = int(ev['confirmados'] or 0)
+            total_conv    = int(ev['total'] or 0)
+            pct = int(100 * confirmados / total_conv) if total_conv > 0 else 0
+
+            kpi_row([
+                {"label": f"Convidados ({mes_ev})", "value": total_conv},
+                {"label": "Confirmados",             "value": confirmados, "accent": True},
+                {"label": "Taxa de confirmação",     "value": f"{pct}%"},
+            ])
+
+        # ============================================================
+        # BLOCO 6 — RANKING (top doadores)
+        # ============================================================
+        section("Maiores doadores do ano")
+        query_top = """
+            SELECT p.nome_instituicao as Parceiro, SUM(d.valor_estimado) as Total, COUNT(*) as Repasses
             FROM Doacao d
             JOIN Parceiro p ON d.id_parceiro = p.id_parceiro
-            WHERE strftime('%Y', d.data_doacao) = '{ano_sel}'
-            GROUP BY Parceiro ORDER BY Total DESC LIMIT 5
+            WHERE strftime('%Y', d.data_doacao) = ?
+            GROUP BY Parceiro
+            ORDER BY Total DESC
+            LIMIT 5
         """
-        df_top = run_query(query_top)
+        df_top = run_query(query_top, (str(ano_sel),))
         if not df_top.empty:
-            df_top['Total'] = df_top['Total'].apply(fmt)
-            st.table(df_top)
+            df_top['Total'] = df_top['Total'].apply(_fmt)
+            st.dataframe(
+                df_top,
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "Parceiro": "Parceiro",
+                    "Total":    "Valor total",
+                    "Repasses": st.column_config.NumberColumn("Repasses", format="%d"),
+                }
+            )
+        else:
+            st.caption("Sem doações registradas para este ano.")
 
-    else:
-        st.info("Nenhum dado encontrado no banco de dados.")
 
 elif menu == "AÇÕES":
     user = st.session_state.user_data
@@ -461,10 +973,9 @@ elif menu == "AÇÕES":
     meu_setor = user["setor"]
     meu_nome = user["nome"]
 
-    st.title("CENTRO DE AÇÕES")
-    st.caption("Tudo que está pendente — operação interna e relacionamento.")
+    page_header("Centro de ações", "Tudo que está pendente — operação interna e relacionamento.")
 
-    tab_mim, tab_op, tab_rel = st.tabs(["📥 PRA MIM", "📋 PLANEJAMENTO OPERACIONAL", "🤝 RELACIONAMENTO"])
+    tab_mim, tab_op, tab_rel = st.tabs(["Pra mim", "Planejamento operacional", "Relacionamento"])
 
     # ========== ABA 1: PRA MIM (inbox unificado) ==========
     with tab_mim:
@@ -472,7 +983,7 @@ elif menu == "AÇÕES":
         df_acoes = run_query("SELECT * FROM View_Acoes_Unificadas")
 
         if df_acoes.empty:
-            st.success("🎉 Nenhuma ação pendente no momento.")
+            empty_state("🎉", "Tudo em dia!", "Nenhuma ação pendente no momento.")
         else:
             # Filtrar o que é MEU: setor bate OU responsavel bate OU gerência vê tudo
             if eh_gerente:
@@ -488,19 +999,19 @@ elif menu == "AÇÕES":
             df_mim["_ord"] = df_mim["situacao"].map(ordem_sit).fillna(9)
             df_mim = df_mim.sort_values(by=["_ord", "score"], ascending=[True, False])
 
-            # Cards de resumo
-            c1, c2, c3, c4 = st.columns(4)
-            c1.metric("Total", len(df_mim))
-            c2.metric("🔴 Atrasadas", int((df_mim["situacao"] == "🔴 ATRASADA").sum()))
-            c3.metric("🟡 Urgentes",  int((df_mim["situacao"] == "🟡 URGENTE").sum()))
-            c4.metric("🟢 Esta semana", int((df_mim["situacao"] == "🟢 ESTA SEMANA").sum()))
+            # KPIs — via Design System
+            n_atrasadas = int((df_mim["situacao"] == "🔴 ATRASADA").sum())
+            kpi_row([
+                {"label": "Total",        "value": len(df_mim)},
+                {"label": "Atrasadas",    "value": n_atrasadas, "accent": n_atrasadas > 0},
+                {"label": "Urgentes",     "value": int((df_mim["situacao"] == "🟡 URGENTE").sum())},
+                {"label": "Esta semana",  "value": int((df_mim["situacao"] == "🟢 ESTA SEMANA").sum())},
+            ])
 
-            st.markdown("---")
-
-            # Filtros
+            section("Filtrar")
             fc1, fc2 = st.columns(2)
-            fonte_fil = fc1.selectbox("Filtrar por tipo:", ["TODOS", "DEMANDA", "TAREFA"], key="mim_fonte")
-            sit_fil   = fc2.selectbox("Filtrar por situação:", ["TODAS"] + list(ordem_sit.keys()), key="mim_sit")
+            fonte_fil = fc1.selectbox("Tipo",     ["TODOS", "DEMANDA", "TAREFA"], key="mim_fonte")
+            sit_fil   = fc2.selectbox("Situação", ["TODAS"] + list(ordem_sit.keys()), key="mim_sit")
 
             df_view = df_mim.copy()
             if fonte_fil != "TODOS":
@@ -508,38 +1019,46 @@ elif menu == "AÇÕES":
             if sit_fil != "TODAS":
                 df_view = df_view[df_view["situacao"] == sit_fil]
 
-            st.markdown(f"**Mostrando {len(df_view)} ação(ões)**")
+            section(f"Ações ({len(df_view)})")
 
-            # Lista de ações
-            for _, a in df_view.iterrows():
-                with st.container(border=True):
-                    ci, cb = st.columns([5, 1])
+            if df_view.empty:
+                empty_state("✨", "Nada aqui", "Nenhuma ação corresponde aos filtros.")
+            else:
+                # Lista com action_card do DS + botão de ação na coluna lateral
+                for _, a in df_view.iterrows():
+                    ci, cb = st.columns([6, 1])
                     with ci:
-                        icone_fonte = "📋" if a["fonte"] == "DEMANDA" else "🤝"
-                        st.markdown(f"### {a['situacao']}  &nbsp;&nbsp; {icone_fonte} `{a['fonte']}`")
-                        st.markdown(f"**{a['titulo']}**")
-                        detalhes = []
+                        tom = situacao_to_tom(a["situacao"])
+                        extra = [(a["fonte"], "accent" if a["fonte"] == "DEMANDA" else "info")]
+
+                        meta_parts = []
                         if pd.notna(a["data_prazo"]) and a["data_prazo"]:
-                            detalhes.append(f"📅 {a['data_prazo']}")
+                            meta_parts.append(f"📅 <strong>{a['data_prazo']}</strong>")
                         if pd.notna(a["setor"]) and a["setor"]:
-                            detalhes.append(f"🏷️ {a['setor']}")
+                            meta_parts.append(f"🏷️ {a['setor']}")
                         if pd.notna(a["responsavel"]) and a["responsavel"]:
-                            detalhes.append(f"👤 {a['responsavel']}")
+                            meta_parts.append(f"👤 {a['responsavel']}")
                         if pd.notna(a["parceiro"]) and a["parceiro"]:
-                            detalhes.append(f"🏢 {a['parceiro']}")
-                        detalhes.append(f"⚡ {int(a['score'])} pts")
-                        st.markdown(" · ".join(detalhes))
+                            meta_parts.append(f"🏢 {a['parceiro']}")
+                        meta_parts.append(f"{int(a['score'])} pts")
+
+                        action_card(
+                            titulo=a["titulo"],
+                            meta_parts=meta_parts,
+                            tom=tom,
+                            situacao_badge=a["situacao"],
+                            extra_badges=extra,
+                        )
                     with cb:
-                        # Concluir: decide tabela pela fonte
-                        if st.button("✅ Concluir", key=f"mim_ok_{a['id_uniforme']}"):
+                        st.write("")  # spacer para alinhar verticalmente
+                        if st.button("✅ Concluir", key=f"mim_ok_{a['id_uniforme']}", use_container_width=True):
+                            real_id = int(a["id_uniforme"][1:])
                             if a["fonte"] == "DEMANDA":
-                                real_id = int(a["id_uniforme"][1:])
                                 run_insert("UPDATE Demandas_Estrategicas SET status='REALIZADO', data_ultima_conclusao=CURRENT_TIMESTAMP WHERE id=?", (real_id,))
                             else:
-                                real_id = int(a["id_uniforme"][1:])
                                 run_insert("UPDATE Tarefas_Pendentes SET status='CONCLUIDA', data_conclusao=? WHERE id_tarefa=?",
                                            (datetime.now().strftime("%Y-%m-%d"), real_id))
-                            st.toast("Concluído ✅"); st.rerun()
+                            st.toast("Concluído"); st.rerun()
 
     # ========== ABA 2: PLANEJAMENTO OPERACIONAL (DEMANDAS) ==========
     with tab_op:
@@ -631,7 +1150,7 @@ elif menu == "AÇÕES":
                 st.success("Registrado!"); st.rerun()
 
         # 5. FILA DE TRABALHO COMPACTA
-        st.subheader("FILA DE TRABALHO")
+        section("Fila de trabalho")
     
         query_sql = "SELECT * FROM Demandas_Estrategicas WHERE status IN ('PENDENTE', 'BLOQUEADO')"
         params = []
@@ -737,88 +1256,85 @@ elif menu == "AÇÕES":
 
     # ========== ABA 3: RELACIONAMENTO (CRM) ==========
     with tab_rel:
-        st.title("📋 Tarefas Pendentes")
-        st.caption("Agradecimentos, follow-ups e ações que precisam ser feitas")
+        section("Tarefas de CRM pendentes")
+        st.caption("Agradecimentos, follow-ups e ações que precisam ser feitas.")
 
         # Buscar todas as tarefas abertas
         df_tarefas = run_query("SELECT * FROM View_Tarefas_Abertas")
 
         if df_tarefas.empty:
-            st.success("🎉 Nenhuma tarefa pendente no momento!")
+            empty_state("✨", "Nenhuma tarefa pendente", "Nenhum follow-up nem agradecimento em aberto.")
         else:
-            # Cards de resumo no topo
-            col1, col2, col3, col4 = st.columns(4)
-
-            total = len(df_tarefas)
+            total     = len(df_tarefas)
             atrasadas = len(df_tarefas[df_tarefas['Situacao'].str.contains('ATRASADA', na=False)])
-            urgentes = len(df_tarefas[df_tarefas['Situacao'].str.contains('URGENTE', na=False)])
-            semana = len(df_tarefas[df_tarefas['Situacao'].str.contains('ESTA SEMANA', na=False)])
+            urgentes  = len(df_tarefas[df_tarefas['Situacao'].str.contains('URGENTE',  na=False)])
+            semana    = len(df_tarefas[df_tarefas['Situacao'].str.contains('ESTA SEMANA', na=False)])
 
-            col1.metric("Total de Tarefas", total)
-            col2.metric("🔴 Atrasadas", atrasadas)
-            col3.metric("🟡 Urgentes", urgentes)
-            col4.metric("🟢 Esta semana", semana)
+            kpi_row([
+                {"label": "Total",       "value": total},
+                {"label": "Atrasadas",   "value": atrasadas, "accent": atrasadas > 0},
+                {"label": "Urgentes",    "value": urgentes},
+                {"label": "Esta semana", "value": semana},
+            ])
 
-            st.markdown("---")
-
-            # Filtros
+            section("Filtrar")
             col_f1, col_f2 = st.columns(2)
             tipo_filtro = col_f1.selectbox(
-                "Filtrar por tipo:",
-                ["TODOS"] + sorted(df_tarefas['tipo_tarefa'].unique().tolist())
+                "Tipo", ["TODOS"] + sorted(df_tarefas['tipo_tarefa'].unique().tolist()),
+                key="rel_tipo"
             )
-            situacao_filtro = col_f2.selectbox(
-                "Filtrar por situação:",
-                ["TODAS", "🔴 ATRASADA", "🟡 URGENTE (até 2 dias)", "🟢 ESTA SEMANA", "⚪ FUTURA"]
-            )
+            # Remove emojis das situações se existirem na view antiga
+            sit_opcoes = ["TODAS"] + sorted(df_tarefas['Situacao'].dropna().unique().tolist())
+            situacao_filtro = col_f2.selectbox("Situação", sit_opcoes, key="rel_sit")
 
-            # Aplicar filtros
             df_filtrado = df_tarefas.copy()
             if tipo_filtro != "TODOS":
                 df_filtrado = df_filtrado[df_filtrado['tipo_tarefa'] == tipo_filtro]
             if situacao_filtro != "TODAS":
                 df_filtrado = df_filtrado[df_filtrado['Situacao'] == situacao_filtro]
 
-            st.markdown(f"**Mostrando {len(df_filtrado)} tarefa(s)**")
+            section(f"Tarefas ({len(df_filtrado)})")
 
-            # Lista de tarefas
-            for _, tarefa in df_filtrado.iterrows():
-                with st.container(border=True):
-                    col_info, col_acao = st.columns([4, 1])
+            if df_filtrado.empty:
+                empty_state("🔍", "Nenhuma tarefa nos filtros atuais", "Ajuste os filtros acima.")
+            else:
+                for _, tarefa in df_filtrado.iterrows():
+                    col_info, col_acao = st.columns([6, 1])
 
                     with col_info:
-                        # Cabeçalho: situação + tipo
-                        st.markdown(f"### {tarefa['Situacao']}")
-                        st.markdown(f"**{tarefa['tipo_tarefa']}** — {tarefa['descricao']}")
+                        situacao_clean = str(tarefa['Situacao']).replace('🔴', '').replace('🟡', '').replace('🟢', '').replace('⚪', '').strip()
+                        tom = situacao_to_tom(situacao_clean)
 
-                        # Detalhes
-                        detalhes = []
+                        meta_parts = []
                         if tarefa['Parceiro']:
-                            detalhes.append(f"🏢 **{tarefa['Parceiro']}**")
+                            meta_parts.append(f"<strong>Parceiro:</strong> {tarefa['Parceiro']}")
                         if tarefa['Contato']:
-                            detalhes.append(f"👤 {tarefa['Contato']}")
-                        detalhes.append(f"📅 Prazo: **{tarefa['data_prazo']}** ({tarefa['Dias_Ate_Prazo']} dias)")
+                            meta_parts.append(f"Contato: {tarefa['Contato']}")
+                        meta_parts.append(f"Prazo: <strong>{tarefa['data_prazo']}</strong> ({tarefa['Dias_Ate_Prazo']} dias)")
                         if tarefa['prioridade']:
-                            detalhes.append(f"⚡ {tarefa['prioridade']}")
+                            meta_parts.append(f"Prioridade: {tarefa['prioridade']}")
 
-                        st.markdown(" · ".join(detalhes))
+                        action_card(
+                            titulo=f"{tarefa['tipo_tarefa']} — {tarefa['descricao']}",
+                            meta_parts=meta_parts,
+                            tom=tom,
+                            situacao_badge=situacao_clean,
+                        )
 
                     with col_acao:
-                        if st.button("✅ Concluir", key=f"concluir_{tarefa['id_tarefa']}"):
+                        st.write("")
+                        if st.button("Concluir", key=f"concluir_{tarefa['id_tarefa']}", use_container_width=True, type="primary"):
                             run_insert(
                                 "UPDATE Tarefas_Pendentes SET status='CONCLUIDA', data_conclusao=? WHERE id_tarefa=?",
                                 (datetime.now().strftime('%Y-%m-%d'), int(tarefa['id_tarefa']))
                             )
-                            st.toast("Tarefa concluída!")
-                            st.rerun()
-
-                        if st.button("❌ Cancelar", key=f"cancelar_{tarefa['id_tarefa']}"):
+                            st.toast("Concluída"); st.rerun()
+                        if st.button("Cancelar", key=f"cancelar_{tarefa['id_tarefa']}", use_container_width=True):
                             run_insert(
                                 "UPDATE Tarefas_Pendentes SET status='CANCELADA' WHERE id_tarefa=?",
                                 (int(tarefa['id_tarefa']),)
                             )
-                            st.toast("Tarefa cancelada.")
-                            st.rerun()
+                            st.toast("Cancelada"); st.rerun()
 
         # Expander para criar tarefa manual
         st.markdown("---")
@@ -861,7 +1377,7 @@ elif menu == "EVENTOS":
     # datetime, timedelta e pandas já importados no topo
     # CSS (.glass-card e .guest-item) já está no CSS_GLOBAL
 
-    st.markdown("<h1 style='text-align: center;'>ALMOÇO CDP</h1>", unsafe_allow_html=True)
+    page_header("Almoço CDP", "Controle de convidados, confirmações e check-in do mês.")
     
     # 1. Definição do Mês de Referência
     mes_atual = datetime.now().strftime("%m/%Y")
@@ -886,7 +1402,7 @@ elif menu == "EVENTOS":
         "Cofrinhos": 2, "Parlamentar": 3, "Parceiros CDP": 12
     }
 
-    tab_recepcao, tab_planejamento = st.tabs(["CHECK-IN E RECEPÇÃO", "PLANEJAMENTO MENSAL"])
+    tab_recepcao, tab_planejamento = st.tabs(["Check-in e recepção", "Planejamento mensal"])
 
     # ==========================================
     # ABA 1: RECEPÇÃO (MODO INTELIGENTE)
@@ -895,20 +1411,22 @@ elif menu == "EVENTOS":
         df_conf = df_almoco[df_almoco['confirmado'] == 1].copy() if not df_almoco.empty else pd.DataFrame()
         pres = len(df_conf[df_conf['compareceu'] == 1]) if not df_conf.empty else 0
         tot = len(df_conf)
-        
-        c1, c2, c3 = st.columns([1, 2, 1])
-        with c1: st.metric("Confirmados", tot)
-        with c2: 
-            st.write(f"**Ocupação Real: {pres} de {tot}**")
-            st.progress(pres/tot if tot > 0 else 0)
-        with c3: st.metric("Presentes", pres)
+        pct_ocup = int(100 * pres / tot) if tot > 0 else 0
 
-        st.divider()
+        kpi_row([
+            {"label": "Confirmados", "value": tot},
+            {"label": "Presentes",   "value": pres, "accent": True},
+            {"label": "Ocupação",    "value": f"{pct_ocup}%"},
+        ])
+        if tot > 0:
+            st.progress(pres/tot, text=f"{pres} de {tot} confirmados presentes")
+
+        section("Lista de recepção")
         col_fila, col_brief = st.columns([1.5, 1])
 
         with col_fila:
             # --- NOVO: CADASTRO RÁPIDO COM WHATSAPP ---
-            with st.expander("Adicionar convidado extra (Última Hora)⚡"):
+            with st.expander("Adicionar convidado extra (última hora)"):
                 with st.form("form_fast_checkin", clear_on_submit=True):
                     st.caption("Cadastre o contato e libere a entrada. A presença será confirmada automaticamente.")
                     fc1, fc2 = st.columns(2)
@@ -935,7 +1453,7 @@ elif menu == "EVENTOS":
             busca = st.text_input("Buscar por nome...", label_visibility="collapsed", placeholder="Buscar na lista...")
             
             if not df_conf.empty:
-                df_v = df_conf[df_conf['nome'].str.contains(busca, case=False)] if busca else df_conf
+                df_v = df_conf[df_conf['nome'].str.contains(busca, case=False, na=False)] if busca else df_conf
                 for _, row in df_v.iterrows():
                     with st.container():
                         st.markdown(f"""
@@ -957,7 +1475,7 @@ elif menu == "EVENTOS":
 
         # --- DOSSIÊ EXECUTIVO ---
         with col_brief:
-            st.subheader("Dossiê executivo")
+            section("Dossiê executivo")
             df_p = df_conf[df_conf['compareceu'] == 1] if not df_conf.empty else pd.DataFrame()
             
             if not df_p.empty:
@@ -1001,7 +1519,7 @@ elif menu == "EVENTOS":
     # ABA 2: PLANEJAMENTO
     # ==========================================
     with tab_planejamento:
-        st.subheader("Cadastro e edição completa")
+        section("Cadastro e edição completa")
         with st.expander("NOVO CONVIDADO (Completo)"):
             with st.form("form_planejamento_completo", clear_on_submit=True):
                 c1, c2 = st.columns(2)
@@ -1027,7 +1545,7 @@ elif menu == "EVENTOS":
                 df_ed[['id', 'nome', 'cargo', 'empresa', 'telefone', 'segmento', 'contato_1', 'contato_2', 'confirmado']],
                 column_config={
                     "id": None, 
-                    "confirmado": st.column_config.CheckboxColumn("✅ CONFIRMOU"),
+                    "confirmado": st.column_config.CheckboxColumn("Confirmou"),
                     "telefone": st.column_config.TextColumn("WhatsApp")
                 },
                 hide_index=True, 
@@ -1046,13 +1564,12 @@ elif menu == "EVENTOS":
 
 # --- 2. PARCEIROS E PROJETOS ---
 elif menu == "PARCERIAS":
-    st.title("**GESTÃO DE PARCEIROS E PROJETOS**")
-    tab1, tab2 = st.tabs(["**PARCEIROS**", "**PROJETOS**"])
+    page_header("Gestão de parceiros e projetos", "Cadastro, edição e acompanhamento de parceiros e projetos ativos.")
+    tab1, tab2 = st.tabs(["Parceiros", "Projetos"])
     
     with tab1:
 
-        # 1. BUSCA DE DADOS SIMPLIFICADA
-        # Se o erro 'subcategory' persistir, o try/except abaixo vai ignorar e rodar o resto
+        # 1. BUSCA DE DADOS
         try:
             query = """
                 SELECT p.*, c.nome_categoria 
@@ -1063,46 +1580,73 @@ elif menu == "PARCERIAS":
         except:
             df_p = run_query("SELECT * FROM Parceiro")
 
+        # KPIs no topo
+        if not df_p.empty:
+            s_limpo = df_p['status'].fillna("").str.upper().str.strip()
+            kpi_row([
+                {"label": "Total de parceiros", "value": len(df_p)},
+                {"label": "Ativos",       "value": int(s_limpo.str.contains("ATIVO", na=False).sum()), "accent": True},
+                {"label": "Prospecção",   "value": int(s_limpo.str.contains("PROSPEC", na=False).sum())},
+                {"label": "Inativos",     "value": int(s_limpo.str.contains("INATIVO", na=False).sum())},
+            ])
+
+        section("Buscar e visualizar")
+
         # Filtro de Busca
-        busca = st.text_input("Pesquisar parceiro:")
-        if busca and not df_p.empty:
-            df_p = df_p[df_p['nome_instituicao'].str.contains(busca, case=False)]
+        busca = st.text_input("Pesquisar parceiro", placeholder="Digite para filtrar por nome...")
+        df_view = df_p.copy()
+        if busca and not df_view.empty:
+            df_view = df_view[df_view['nome_instituicao'].str.contains(busca, case=False, na=False)]
 
-        # Exibição da Tabela
-        st.dataframe(df_p, use_container_width=True, hide_index=True)
+        # Tabela amigável — renomeia colunas e esconde técnicas
+        if not df_view.empty:
+            df_show = df_view.rename(columns={
+                'nome_instituicao': 'Parceiro',
+                'status': 'Status',
+                'data_adesao': 'Adesão',
+                'subcategoria': 'Subcategoria',
+                'nome_categoria': 'Categoria',
+            })
+            colunas_exibir = [c for c in ['Parceiro', 'Status', 'Categoria', 'Subcategoria', 'Adesão'] if c in df_show.columns]
+            st.dataframe(
+                df_show[colunas_exibir],
+                use_container_width=True, hide_index=True, height=320,
+                column_config={
+                    "Adesão": st.column_config.DateColumn("Adesão", format="DD/MM/YYYY"),
+                }
+            )
+        else:
+            empty_state("🔍", "Nada encontrado", "Ajuste a busca ou cadastre um novo parceiro.")
 
-        st.markdown("---")
+        section("Ficha do parceiro")
 
-        st.markdown("---")
-        st.subheader("Fichas")
-        
         # Cria uma lista de nomes para o selectbox
-        lista_nomes = df_p['nome_instituicao'].tolist()
-        parceiro_selecionado = st.selectbox("Selecione um parceiro para ver os contatos:", ["Selecione..."] + lista_nomes)
+        lista_nomes = df_p['nome_instituicao'].tolist() if not df_p.empty else []
+        parceiro_selecionado = st.selectbox("Selecione um parceiro para ver os contatos vinculados:", ["Selecione..."] + lista_nomes)
 
         if parceiro_selecionado != "Selecione...":
-            # Descobre o ID do parceiro escolhido
             id_selecionado = df_p[df_p['nome_instituicao'] == parceiro_selecionado]['id_parceiro'].values[0]
-            
-            # Busca os contatos específicos desse ID
             query_contatos = f"""
                 SELECT nome_pessoa as Nome, cargo as Cargo, telefone as WhatsApp, email as Email 
                 FROM Contato_Direto 
                 WHERE id_parceiro = {id_selecionado}
             """
             df_contatos_parceiro = run_query(query_contatos)
-            
-            # Exibe a tabela de contatos
+
             if not df_contatos_parceiro.empty:
                 st.write(f"**Pessoas de contato em {parceiro_selecionado}:**")
                 st.dataframe(df_contatos_parceiro, hide_index=True, use_container_width=True)
             else:
-                st.info(f"Ainda não há contatos cadastrados para {parceiro_selecionado}.")
-        
-        st.markdown("---")
+                empty_state("👤", f"Sem contatos em {parceiro_selecionado}", "Use o botão **➕ NOVO** no topo do menu para cadastrar um contato.")
 
         # 2. SEÇÃO DE CADASTRO
-        with st.expander("**CADASTRAR NOVO PARCEIRO**"):
+        # Auto-abre se o usuário veio do botão "+ Novo > Parceiro"
+        _abrir_p = (st.session_state.open_form == "parceiro")
+        if _abrir_p:
+            st.session_state.open_form = None  # consome a flag
+            st.info("✨ Cadastrando novo parceiro — preencha os campos abaixo.", icon="🏢")
+
+        with st.expander("**CADASTRAR NOVO PARCEIRO**", expanded=_abrir_p):
             # Busca categorias para o menu
             df_cat_list = run_query("SELECT id_categoria, nome_categoria FROM Categoria_Parceiro")
             opcoes_cat = dict(zip(df_cat_list['nome_categoria'], df_cat_list['id_categoria']))
@@ -1110,38 +1654,42 @@ elif menu == "PARCERIAS":
             with st.form("form_novo_p", clear_on_submit=True):
                 col1, col2 = st.columns(2)
                 with col1:
-                    nome = st.text_input("Nome da instituição")
-                    # Calendário aparece sempre por padrão
+                    nome = st.text_input("Nome da instituição *", placeholder="ex: TIM Brasil S.A.")
                     data_input = st.date_input("Data de adesão")
-                    # Checkbox para ignorar a data
                     sem_data = st.checkbox("Não possuo a data de adesão")
-                    
+
                 with col2:
                     status = st.selectbox("Status", ["Ativo", "Inativo", "Prospecção"])
                     cat_nome = st.selectbox("Categoria principal", options=list(opcoes_cat.keys()))
-                    sub_txt = st.text_input("Subcategoria / Detalhe")
+                    sub_txt = st.text_input("Subcategoria / Detalhe", placeholder="ex: Telecom")
 
-                if st.form_submit_button("Salvar", type="primary"):
+                if st.form_submit_button("Salvar parceiro", type="primary", use_container_width=True):
                     if nome:
                         id_cat = opcoes_cat[cat_nome]
-                        # Se o checkbox estiver marcado, data_final será None (vazio no SQL)
                         data_final = None if sem_data else data_input.strftime('%Y-%m-%d')
-                        
+
                         try:
-                            # 1. SQL com as 5 colunas EXATAS do seu banco (image_9f9400.png)
                             sql = """
-                                INSERT INTO Parceiro (nome_instituicao, status, id_categoria, data_adesao, subcategoria) 
+                                INSERT INTO Parceiro (nome_instituicao, status, id_categoria, data_adesao, subcategoria)
                                 VALUES (?, ?, ?, ?, ?)
                             """
-                            
-                            # 2. Enviando as 5 variáveis na ordem correta
-                            # Note que usamos 'sub_txt' que é o nome da sua variável na linha 231
                             run_insert(sql, (nome, status, id_cat, data_final, sub_txt))
-                            
-                            st.success(f"✅ {nome} cadastrado com sucesso!")
-                            st.rerun() 
+                            st.session_state.parceiro_cadastrado = nome  # para feedback pós-save
+                            st.rerun()
                         except Exception as e:
                             st.error(f"Erro técnico ao salvar: {e}")
+                    else:
+                        st.warning("O nome da instituição é obrigatório.")
+
+        # Feedback pós-cadastro com próxima ação sugerida
+        if st.session_state.get("parceiro_cadastrado"):
+            nome_p = st.session_state.pop("parceiro_cadastrado")
+            st.success(f"**{nome_p}** cadastrado com sucesso!")
+            cf1, cf2 = st.columns(2)
+            if cf1.button("👤 Adicionar contato deste parceiro", use_container_width=True, key="post_add_contato"):
+                _trigger_quick_add("contato"); st.rerun()
+            if cf2.button("💰 Registrar doação deste parceiro", use_container_width=True, key="post_add_doacao"):
+                _trigger_quick_add("doacao"); st.rerun()
 
 # --- ABA DE PROJETOS ---
     with tab2:
@@ -1163,101 +1711,95 @@ elif menu == "PARCERIAS":
         """
         df_proj = run_query(query_projetos)
         
-        # 2. Cálculos de Totais para os Cartões
+        # 2. KPIs de projetos
         total_projetos = df_proj['Total'].sum() if not df_proj.empty else 0
-        
-        # Criamos duas métricas no topo
-        m1, m2 = st.columns(2)
-        with m1:
-            st.metric("Total em projetos", format_br(total_projetos))
-        with m2:
-            qtd_projetos = df_proj['Projeto'].nunique() if not df_proj.empty else 0
-            st.metric("Total de projetos feitos", f"{qtd_projetos}")
+        qtd_projetos = df_proj['Projeto'].nunique() if not df_proj.empty else 0
 
-        st.divider()
-        
+        kpi_row([
+            {"label": "Total em projetos",      "value": format_br(total_projetos)},
+            {"label": "Projetos executados",    "value": qtd_projetos, "accent": True},
+        ])
+
+        section("Detalhamento")
+
         if not df_proj.empty:
             # Filtro de Ano
             anos_lista = ["Todos"] + sorted(df_proj['Ano'].unique().tolist(), reverse=True)
-            ano_escolhido = st.selectbox("Filtrar por ano de recebimento:", anos_lista, key="filtro_proj_ano")
-            
+            ano_escolhido = st.selectbox("Filtrar por ano de recebimento", anos_lista, key="filtro_proj_ano")
+
             df_exibir = df_proj.copy()
             if ano_escolhido != "Todos":
                 df_exibir = df_exibir[df_exibir['Ano'] == ano_escolhido]
 
-            # Formatação para exibição na tabela
             df_exibir_copy = df_exibir.copy()
             df_exibir_copy['Total'] = df_exibir_copy['Total'].apply(format_br)
-            
+
             st.dataframe(df_exibir_copy, use_container_width=True, hide_index=True)
         else:
-            st.info("Ainda não existem doações vinculadas a projetos específicos.")
+            empty_state("📊", "Nenhum projeto vinculado", "Doações sem projeto específico aparecem na categoria GERAL.")
 
 # --- 3. REGISTRAR DOAÇÃO ---
 elif menu == "REGISTRAR DOAÇÃO":
-    st.title("ENTRADA DE RECURSOS")
-    
+    page_header("Entrada de recursos", "Registro de doações recebidas e histórico editável.")
+
+    # Se veio do botão "+ Novo > Doação", mostra aviso
+    _veio_qa_doacao = (st.session_state.open_form == "doacao")
+    if _veio_qa_doacao:
+        st.session_state.open_form = None
+        st.info("✨ Registrando nova doação — preencha os campos abaixo.", icon="💰")
+
     # 1. Buscamos os nomes para o usuário escolher
-    df_p = run_query("SELECT id_parceiro, nome_instituicao FROM Parceiro")
-    
-    if not df_p.empty:
+    df_p = run_query("SELECT id_parceiro, nome_instituicao FROM Parceiro ORDER BY nome_instituicao")
+
+    if df_p.empty:
+        empty_state("🏢", "Nenhum parceiro cadastrado", "Cadastre um parceiro antes de registrar doações.")
+        if st.button("🏢 Cadastrar parceiro agora", type="primary", key="doa_go_parc"):
+            _trigger_quick_add("parceiro"); st.rerun()
+    else:
         with st.form("nova_doacao", clear_on_submit=True):
             col_a, col_b = st.columns(2)
-            
+
             with col_a:
                 opcoes_p = ["Selecione o parceiro..."] + df_p['nome_instituicao'].tolist()
-                nome_sel = st.selectbox("Selecione o parceiro/fonte", opcoes_p)
-                
-                valor = st.number_input("Valor do repasse (R$)", min_value=0.0)
-                data = st.date_input("Data do recebimento", datetime.now())
+                nome_sel = st.selectbox("Parceiro / Fonte *", opcoes_p)
+                valor    = st.number_input("Valor do repasse (R$) *", min_value=0.0, step=100.0, format="%.2f")
+                data     = st.date_input("Data do recebimento", datetime.now())
 
             with col_b:
-                projeto = st.text_input("Nome do Projeto / Emenda / Finalidade", placeholder="Ex: Projeto Vida")
-                tipo = st.selectbox("Tipo de recurso", ["Financeira", "Vestuário", "Alimentos", "Serviços", "Midiática", "Projetos"])
-                
-                # --- NOVIDADE AQUI: Seleção da Estratégia do Plano de Captação ---
+                projeto = st.text_input("Projeto / Emenda / Finalidade", placeholder="ex: Projeto Vida")
+                tipo    = st.selectbox("Tipo de recurso", ["Financeira", "Vestuário", "Alimentos", "Serviços", "Midiática", "Projetos"])
                 origens_plano = ["Selecione...", "Bazar do Caquito", "Campanha Troco", "Parcerias", "Nota Potiguar", "Doações Online", "Projetos", "Troco"]
-                origem_sel = st.selectbox("Origem da Captação (Estratégia)", origens_plano)
-            
-            desc = st.text_area("Observações")
-            
-            # --- BOTÃO COM VALIDAÇÃO AJUSTADA ---
-            if st.form_submit_button("Confirmar doação", type="primary"):
+                origem_sel = st.selectbox("Origem da captação (estratégia)", origens_plano)
+
+            desc = st.text_area("Observações", placeholder="Contexto, forma de pagamento, referências…")
+
+            if st.form_submit_button("Confirmar doação", type="primary", use_container_width=True):
                 if nome_sel == "Selecione o parceiro...":
-                    st.error("ERRO: Você esqueceu de selecionar o Parceiro!")
-                
-                
+                    st.warning("Selecione o parceiro.")
+                elif valor <= 0:
+                    st.warning("Informe um valor maior que zero.")
                 else:
                     projeto_final = projeto.upper() if projeto else "GERAL"
                     id_p = df_p[df_p['nome_instituicao'] == nome_sel]['id_parceiro'].values[0]
-                    
-                    # --- SQL ATUALIZADO: Agora enviamos 7 campos (incluindo origem_captacao) ---
+
                     sql = """
                         INSERT INTO Doacao (
-                            id_parceiro, valor_estimado, tipo_doacao, 
+                            id_parceiro, valor_estimado, tipo_doacao,
                             data_doacao, descricao, nome_projeto, origem_captacao
-                        ) 
+                        )
                         VALUES (?,?,?,?,?,?,?)
                     """
-                    
-                    # Enviamos os 7 valores na ordem correta
                     run_insert(sql, (
-                        int(id_p), 
-                        valor, 
-                        tipo, 
-                        data.strftime('%Y-%m-%d'), 
-                        desc.upper(), 
-                        projeto_final,
-                        origem_sel  # <--- A nova informação sendo salva!
+                        int(id_p), valor, tipo,
+                        data.strftime('%Y-%m-%d'),
+                        desc.upper(), projeto_final, origem_sel
                     ))
-                    
-                    st.success(f"✅ Recurso de '{nome_sel}' registrado com sucesso!")
-                    st.balloons()
+                    st.success(f"Doação de **{nome_sel}** ({format_br(valor)}) registrada!")
                     st.rerun()
 
     # --- CENTRAL DE GESTÃO DE LANÇAMENTOS (EXTRATO POR PARCEIRO) ---
     st.divider()
-    st.subheader("HISTÓRICO E LANÇAMENTOS")
+    section("Histórico e lançamentos")
 
     # 1. Seleção do Parceiro para busca
     lista_busca = ["Todos"] + df_p['nome_instituicao'].tolist()
@@ -1323,7 +1865,7 @@ elif menu == "REGISTRAR DOAÇÃO":
         st.info("Nenhum lançamento encontrado para os critérios selecionados.")
 
 elif menu == "CONTATOS":
-    st.title("AGENDA")
+    page_header("Agenda", "Contatos diretos de parceiros, com acesso rápido a WhatsApp e e-mail.")
     st.markdown("Gerencie sua rede de contatos, parceiros e tomadores de decisão.")
 
     # Busca os dados no banco
@@ -1336,23 +1878,53 @@ elif menu == "CONTATOS":
     """
     df_contatos = run_query(query_view)
 
+    # Se veio do botão "+ Novo > Contato", mostra atalho de cadastro no topo
+    if st.session_state.open_form == "contato":
+        st.session_state.open_form = None  # consome a flag
+        st.info("✨ Cadastrando novo contato — preencha os campos abaixo.", icon="👤")
+        with st.container(border=True):
+            df_p_qa = run_query("SELECT id_parceiro, nome_instituicao FROM Parceiro ORDER BY nome_instituicao")
+            if df_p_qa.empty:
+                st.warning("Cadastre um parceiro antes de adicionar contatos.")
+                if st.button("🏢 Cadastrar parceiro agora", type="primary", key="qa_go_parceiro"):
+                    _trigger_quick_add("parceiro"); st.rerun()
+            else:
+                with st.form("form_qa_contato", clear_on_submit=True):
+                    col1, col2 = st.columns(2)
+                    qa_nome   = col1.text_input("Nome *",            placeholder="ex: João Silva")
+                    qa_cargo  = col2.text_input("Cargo/Função",      placeholder="ex: Diretor de Marketing")
+                    qa_email  = col1.text_input("E-mail",            placeholder="ex: joao@empresa.com")
+                    qa_tel    = col2.text_input("WhatsApp (com DDD) *", placeholder="ex: 84 99999-9999")
+                    qa_parc   = st.selectbox("Instituição vinculada *", options=df_p_qa['nome_instituicao'].tolist())
+                    if st.form_submit_button("Salvar contato", type="primary", use_container_width=True):
+                        if qa_nome and qa_tel:
+                            id_p = int(df_p_qa[df_p_qa['nome_instituicao'] == qa_parc]['id_parceiro'].values[0])
+                            run_insert(
+                                "INSERT INTO Contato_Direto (id_parceiro, nome_pessoa, cargo, telefone, email) VALUES (?, ?, ?, ?, ?)",
+                                (id_p, qa_nome, qa_cargo, qa_tel, qa_email)
+                            )
+                            st.success(f"**{qa_nome}** adicionado à agenda!")
+                            st.rerun()
+                        else:
+                            st.warning("Nome e WhatsApp são obrigatórios.")
+
     # --- NAVEGAÇÃO POR ABAS (Design Limpo) ---
-    tab_lista, tab_novo, tab_gerir = st.tabs(["CONTATOS", "ADICIONAR NOVO", "GERENCIAR"])
+    tab_lista, tab_novo, tab_gerir = st.tabs(["Contatos", "Adicionar novo", "Gerenciar"])
 
     # ==========================================
     # ABA 1: VISUALIZAÇÃO ELEGANTE
     # ==========================================
     with tab_lista:
         if not df_contatos.empty:
-            # 1. Métricas de Resumo
-            c1, c2, c3 = st.columns(3)
-            c1.metric("**Total de contatos**", len(df_contatos))
-            c2.metric("**Empresas vinculadas**", df_contatos['Empresa'].nunique())
-            
-            st.divider()
+            kpi_row([
+                {"label": "Total de contatos",   "value": len(df_contatos)},
+                {"label": "Empresas vinculadas", "value": df_contatos['Empresa'].nunique()},
+            ])
+
+            section("Buscar")
 
             # 2. Barra de Busca
-            busca = st.text_input("Buscar contato por nome, empresa ou cargo...", placeholder="Digite para filtrar a tabela abaixo...")
+            busca = st.text_input("Buscar contato por nome, empresa ou cargo", placeholder="Digite para filtrar...", label_visibility="collapsed")
             
             # Filtra o dataframe se houver busca
             if busca:
@@ -1374,18 +1946,18 @@ elif menu == "CONTATOS":
                     lambda x: f"mailto:{x}" if pd.notnull(x) and x != "" else None
                 )
 
-                # 4. Exibição da Tabela com Column Config (O visual fica incrível)
+                # 4. Exibição da Tabela com Column Config
                 st.dataframe(
                     df_filtrado,
                     column_config={
-                        "id_contato": None, # Esconde o ID para ficar limpo
-                        "Empresa": st.column_config.TextColumn("🏢 Empresa", width="medium"),
-                        "Nome": st.column_config.TextColumn("👤 Nome", width="medium"),
-                        "Cargo": st.column_config.TextColumn("💼 Cargo/Função"),
-                        "WhatsApp": st.column_config.TextColumn("📱 Telefone"),
-                        "Ação_WA": st.column_config.LinkColumn("💬 WhatsApp", display_text="Abrir Conversa"),
-                        "Email": None, # Esconde o texto puro do email
-                        "Ação_Email": st.column_config.LinkColumn("📧 E-mail", display_text="Enviar E-mail")
+                        "id_contato": None,
+                        "Empresa":    st.column_config.TextColumn("Empresa",      width="medium"),
+                        "Nome":       st.column_config.TextColumn("Nome",         width="medium"),
+                        "Cargo":      st.column_config.TextColumn("Cargo/Função"),
+                        "WhatsApp":   st.column_config.TextColumn("Telefone"),
+                        "Ação_WA":    st.column_config.LinkColumn("WhatsApp",     display_text="Abrir conversa"),
+                        "Email":      None,
+                        "Ação_Email": st.column_config.LinkColumn("E-mail",       display_text="Enviar e-mail"),
                     },
                     hide_index=True,
                     use_container_width=True
@@ -1399,38 +1971,38 @@ elif menu == "CONTATOS":
     # ABA 2: FORMULÁRIO LIMPO
     # ==========================================
     with tab_novo:
-        st.subheader("Cadastrar contato")
+        section("Cadastrar contato")
         df_p_contatos = run_query("SELECT id_parceiro, nome_instituicao FROM Parceiro ORDER BY nome_instituicao")
-        
+
         if not df_p_contatos.empty:
             with st.form("form_novo_contato", clear_on_submit=True, border=False):
                 col1, col2 = st.columns(2)
-                nome_f = col1.text_input("Nome*")
-                cargo_f = col2.text_input("Cargo/Função")
-                email_f = col1.text_input("Endereço de E-mail")
-                tel_f = col2.text_input("WhatsApp (com DDD) *")
-                
-                parceiro_nome = st.selectbox("Instituição Vinculada *", options=df_p_contatos['nome_instituicao'].tolist())
-                
-                submit_btn = st.form_submit_button("Salvar contato", type="primary")
-                
+                nome_f  = col1.text_input("Nome *",            placeholder="ex: João Silva")
+                cargo_f = col2.text_input("Cargo/Função",      placeholder="ex: Diretor de Marketing")
+                email_f = col1.text_input("E-mail",            placeholder="ex: joao@empresa.com")
+                tel_f   = col2.text_input("WhatsApp (com DDD) *", placeholder="ex: 84 99999-9999")
+
+                parceiro_nome = st.selectbox("Instituição vinculada *", options=df_p_contatos['nome_instituicao'].tolist())
+
+                submit_btn = st.form_submit_button("Salvar contato", type="primary", use_container_width=True)
+
                 if submit_btn:
                     if nome_f and tel_f:
                         id_p = df_p_contatos[df_p_contatos['nome_instituicao'] == parceiro_nome]['id_parceiro'].values[0]
                         sql = "INSERT INTO Contato_Direto (id_parceiro, nome_pessoa, cargo, telefone, email) VALUES (?, ?, ?, ?, ?)"
                         run_insert(sql, (int(id_p), nome_f, cargo_f, tel_f, email_f))
-                        st.success(f"Contato **{nome_f}** adicionado à agenda!")
+                        st.success(f"**{nome_f}** adicionado à agenda!")
                         st.rerun()
                     else:
-                        st.error("Por favor, preencha o Nome e o WhatsApp.")
+                        st.warning("Nome e WhatsApp são obrigatórios.")
         else:
-            st.warning("É necessário cadastrar um Parceiro na aba 'Parceiros/Projetos' primeiro.")
+            st.warning("Cadastre um parceiro primeiro (use o botão **➕ NOVO** no topo do menu).")
 
     # ==========================================
     # ABA 3: GERENCIAMENTO DE DADOS (Exclusão)
     # ==========================================
     with tab_gerir:
-        st.subheader("Gerenciar Cadastros")
+        section("Gerenciar cadastros")
         if not df_contatos.empty:
             st.write("Selecione um contato abaixo para remover do sistema.")
             
@@ -1458,8 +2030,17 @@ elif menu == "RELACIONAMENTO":
     # 1. BUSCA DE DADOS (Blindagem de Nomes e Colunas)
     df_parceiros = run_query("SELECT id_parceiro, nome_instituicao, UPPER(TRIM(status)) as status_limpo FROM Parceiro")
     
-    # SQL para View com espaços no nome da coluna
-    query_rel = 'SELECT Empresa, [Status_Relacionamento], [Dias Sem Contato] FROM View_Relacionamento_Critico'
+    # SQL para View — usa os nomes reais das colunas do banco
+    query_rel = """
+        SELECT 
+            Empresa, 
+            Status_Relacionamento, 
+            Dias_Sem_Contato, 
+            Ultima_Interacao, 
+            Proxima_Acao_Planejada,
+            Situacao
+        FROM View_Relacionamento_Critico
+    """
     df_rel = run_query(query_rel)
 
     # Buscar última data de retorno agendada
@@ -1467,63 +2048,85 @@ elif menu == "RELACIONAMENTO":
 
     # CSS (.glass-card, .stat-value, .suggestion-box, .date-badge) já está no CSS_GLOBAL
 
-    st.title("MANUTENÇÃO DE RELACIONAMENTO")
+    page_header("Manutenção de relacionamento", "Régua de contato por parceiro e relatório para diretoria.")
 
-    # 3. MÉTRICAS SUPERIORES (Cards de Vidro)
-    m_p = df_parceiros['status_limpo'].str.contains('PROSPEC', na=False)
-    m_a = df_parceiros['status_limpo'].str.contains('ATIVO', na=False)
-    m_i = df_parceiros['status_limpo'].str.contains('INATIVO', na=False)
+    # KPIs com DS (substitui glass-card antigo)
+    m_p = df_parceiros['status_limpo'].str.contains('PROSPEC',  na=False)
+    m_a = df_parceiros['status_limpo'].str.contains('ATIVO',    na=False)
+    m_i = df_parceiros['status_limpo'].str.contains('INATIVO',  na=False)
 
-    c1, c2, c3 = st.columns(3)
-    with c1: st.markdown(f'<div class="glass-card"><small>PROSPECÇÃO</small><div class="stat-value">{len(df_parceiros[m_p])}</div></div>', unsafe_allow_html=True)
-    with c2: st.markdown(f'<div class="glass-card"><small>ATIVOS</small><div class="stat-value">{len(df_parceiros[m_a])}</div></div>', unsafe_allow_html=True)
-    with c3: st.markdown(f'<div class="glass-card"><small>INATIVOS</small><div class="stat-value" style="background:linear-gradient(135deg, #FF6B6B, #9B1B1B);-webkit-background-clip:text;">{len(df_parceiros[m_i])}</div></div>', unsafe_allow_html=True)
+    kpi_row([
+        {"label": "Prospecção", "value": int(m_p.sum())},
+        {"label": "Ativos",     "value": int(m_a.sum()), "accent": True},
+        {"label": "Inativos",   "value": int(m_i.sum())},
+    ])
 
-    # 4. PLANO DE AÇÃO COM TAREFAS DETALHADAS
-    st.markdown("### SUGESTÕES DO MÊS")
+    # 4. Plano de ação — sugestões do mês
+    section("Sugestões do mês")
     semente = int(datetime.now().strftime('%Y%m'))
     cs1, cs2 = st.columns(2)
 
     with cs1:
-        st.markdown('<p style="opacity:0.7; font-size:0.9rem;">FOCO: CONVERSÃO</p>', unsafe_allow_html=True)
+        st.caption("Foco: conversão")
         sug_p = df_parceiros[m_p].sample(min(2, len(df_parceiros[m_p])), random_state=semente) if any(m_p) else pd.DataFrame()
         for _, r in sug_p.iterrows():
-            st.markdown(f"""<div class="suggestion-box"><b>{r['nome_instituicao']}</b><br>
-            <span style="font-size:0.85rem; opacity:0.8;">Ação sugerida: Enviar apresentação atualizada e solicitar agenda de 15min.</span></div>""", unsafe_allow_html=True)
+            action_card(
+                titulo=r['nome_instituicao'],
+                meta_parts=["Enviar apresentação atualizada e solicitar agenda de 15 min."],
+                tom="success",
+            )
+        if sug_p.empty:
+            st.caption("Sem parceiros em prospecção.")
 
     with cs2:
-        st.markdown('<p style="opacity:0.7; font-size:0.9rem;">FOCO: REATIVAÇÃO</p>', unsafe_allow_html=True)
+        st.caption("Foco: reativação")
         sug_i = df_parceiros[m_i].sample(min(2, len(df_parceiros[m_i])), random_state=semente) if any(m_i) else pd.DataFrame()
         for _, r in sug_i.iterrows():
-            st.markdown(f"""<div class="suggestion-box urgent-border"><b>{r['nome_instituicao']}</b><br>
-            <span style="font-size:0.85rem; opacity:0.8;">Ação sugerida: Ligação de cortesia para entender motivo da pausa e oferecer novo benefício.</span></div>""", unsafe_allow_html=True)
+            action_card(
+                titulo=r['nome_instituicao'],
+                meta_parts=["Ligação de cortesia para entender a pausa e oferecer novo benefício."],
+                tom="danger",
+            )
+        if sug_i.empty:
+            st.caption("Sem parceiros inativos.")
 
-    st.markdown("<br>", unsafe_allow_html=True)
-
-    # 5. DIAGNÓSTICO (Rosca Premium + Tabela de Retornos)
-    tab_saude, tab_hist, tab_diretoria = st.tabs(["Saúde e Retornos", "Histórico detalhado", "Relatório para Diretoria"])
+    # 5. Diagnóstico — abas
+    tab_saude, tab_hist, tab_diretoria = st.tabs(["Saúde e retornos", "Histórico detalhado", "Relatório para diretoria"])
 
     with tab_saude:
-        df_join = df_rel.merge(df_parceiros[['nome_instituicao', 'id_parceiro']], left_on='Empresa', right_on='nome_instituicao', how='left')
-        df_final = df_join.merge(df_retornos, on='id_parceiro', how='left')
+        if df_rel.empty:
+            empty_state("📊", "Sem dados de relacionamento", "Cadastre interações em parceiros ativos para popular esta aba.")
+        else:
+            df_join = df_rel.merge(df_parceiros[['nome_instituicao', 'id_parceiro']], left_on='Empresa', right_on='nome_instituicao', how='left')
+            df_final = df_join.merge(df_retornos, on='id_parceiro', how='left')
 
-        cg, ct = st.columns([1, 1.4])
-        with cg:
-            df_g = df_final.groupby('Status_Relacionamento').size().reset_index(name='qtd')
-            fig = go.Figure(data=[go.Pie(labels=df_g['Status_Relacionamento'], values=df_g['qtd'], hole=.78, 
-                                        marker_colors=["#FF4B4B", "#FFA500", "#00CC96"], textinfo='none')])
-            fig.update_layout(height=260, margin=dict(t=10,b=10,l=0,r=0), showlegend=False, paper_bgcolor='rgba(0,0,0,0)',
-                             annotations=[dict(text='STATUS<br>SAÚDE', x=0.5, y=0.5, font_size=14, showarrow=False, font_color="white")])
-            st.plotly_chart(fig, use_container_width=True)
-        
-        with ct:
-            st.markdown("**Cronograma de Follow-up:**")
-            st.dataframe(df_final[['Empresa', 'Dias Sem Contato', 'data_retorno', 'Status_Relacionamento']], 
-                         column_config={
-                             "Dias Sem Contato": st.column_config.NumberColumn("Dias Parado", format="%d d"),
-                             "data_retorno": st.column_config.DateColumn("Próximo Retorno", format="DD/MM/YYYY"),
-                             "Status_Relacionamento": "Saúde"
-                         }, use_container_width=True, hide_index=True, height=250)
+            cg, ct = st.columns([1, 1.4])
+            with cg:
+                df_g = df_final.groupby('Status_Relacionamento').size().reset_index(name='qtd')
+                fig = go.Figure(data=[go.Pie(
+                    labels=df_g['Status_Relacionamento'], values=df_g['qtd'], hole=.78,
+                    marker_colors=["#DC2626", "#D97706", "#059669"], textinfo='none'
+                )])
+                fig.update_layout(
+                    height=260, margin=dict(t=10, b=10, l=0, r=0), showlegend=True,
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5),
+                    annotations=[dict(text='STATUS<br>SAÚDE', x=0.5, y=0.5, font_size=14, showarrow=False)]
+                )
+                st.plotly_chart(fig, use_container_width=True)
+
+            with ct:
+                st.markdown("**Cronograma de follow-up:**")
+                st.dataframe(
+                    df_final[['Empresa', 'Dias_Sem_Contato', 'Proxima_Acao_Planejada', 'Status_Relacionamento']],
+                    column_config={
+                        "Empresa": "Parceiro",
+                        "Dias_Sem_Contato": st.column_config.NumberColumn("Dias parado", format="%d d"),
+                        "Proxima_Acao_Planejada": st.column_config.DateColumn("Próxima ação", format="DD/MM/YYYY"),
+                        "Status_Relacionamento": "Saúde"
+                    },
+                    use_container_width=True, hide_index=True, height=280
+                )
             
 
     with tab_hist:
@@ -1675,21 +2278,43 @@ with open(db_path, "rb") as f:
         data=f,
         file_name="MeusContatos_Nuvem.db",
         mime="application/octet-stream",
+        use_container_width=True,
     )
 
-# 2. Download em Excel (contatos)
-if st.sidebar.button("Gerar planilha Excel"):
+# 2. Download em Excel — tenta múltiplos engines; cai pra CSV se Excel não disponível
+@st.cache_data(ttl=60)
+def _gerar_planilha_contatos():
+    """Gera planilha dos contatos. Retorna (data, extensao, mime).
+    Tenta openpyxl, depois xlsxwriter; se nenhum disponível, usa CSV."""
     df_excel = run_query("SELECT * FROM Contato_Direto")
-    output = BytesIO()
-    with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
-        df_excel.to_excel(writer, index=False, sheet_name="Contatos")
-
-    st.sidebar.download_button(
-        label="Clique para baixar Excel",
-        data=output.getvalue(),
-        file_name="contatos_extraidos.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    # Tenta openpyxl primeiro (costuma vir por padrão com pandas)
+    for engine in ("openpyxl", "xlsxwriter"):
+        try:
+            output = BytesIO()
+            with pd.ExcelWriter(output, engine=engine) as writer:
+                df_excel.to_excel(writer, index=False, sheet_name="Contatos")
+            return (
+                output.getvalue(),
+                "xlsx",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+        except (ImportError, ModuleNotFoundError, ValueError):
+            continue
+    # Fallback final: CSV (sempre funciona, sem dependência externa)
+    return (
+        df_excel.to_csv(index=False).encode("utf-8-sig"),
+        "csv",
+        "text/csv",
     )
+
+_planilha_data, _planilha_ext, _planilha_mime = _gerar_planilha_contatos()
+st.sidebar.download_button(
+    label=f"Baixar contatos ({_planilha_ext.upper()})",
+    data=_planilha_data,
+    file_name=f"contatos.{_planilha_ext}",
+    mime=_planilha_mime,
+    use_container_width=True,
+)
 
 st.sidebar.markdown("---")
 

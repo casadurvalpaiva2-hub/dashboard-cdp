@@ -2,4 +2,5 @@ streamlit
 pandas
 plotly
 streamlit-option-menu
-plotly
+openpyxl
+xlsxwriter
