@@ -4,3 +4,4 @@ plotly
 streamlit-option-menu
 openpyxl
 xlsxwriter
+psycopg2-binary

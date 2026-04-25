@@ -6,11 +6,12 @@
 
 import os
 import re
-import sqlite3
 from datetime import datetime, timedelta
 from io import BytesIO
 
 import pandas as pd
+import psycopg2
+from psycopg2 import pool as pg_pool
 import streamlit as st
 from streamlit_option_menu import option_menu
 
@@ -497,51 +498,72 @@ st.sidebar.markdown("---")
 
 
 # ------------------------------------------------------------
-#  BANCO DE DADOS — caminho e conexão
+#  BANCO DE DADOS — Supabase / PostgreSQL
 # ------------------------------------------------------------
-pasta_atual = os.path.dirname(os.path.abspath(__file__))
-db_path = os.path.join(pasta_atual, "MeusContatos.db")
+def _db_url() -> str:
+    """Lê a URL do banco de variável de ambiente ou st.secrets."""
+    url = os.environ.get("DATABASE_URL", "")
+    if not url:
+        try:
+            url = st.secrets["DATABASE_URL"]
+        except Exception:
+            url = ""
+    # Supabase às vezes retorna postgres:// — psycopg2 precisa de postgresql://
+    if url.startswith("postgres://"):
+        url = url.replace("postgres://", "postgresql://", 1)
+    return url
+
+@st.cache_resource
+def _pool() -> pg_pool.ThreadedConnectionPool:
+    """Pool de conexões (reutilizado entre reruns do Streamlit)."""
+    url = _db_url()
+    return pg_pool.ThreadedConnectionPool(1, 5, url)
 
 
 # ------------------------------------------------------------
 #  ACESSO AO BANCO — funções centrais
 # ------------------------------------------------------------
 def run_query(query, params=()):
-    """Executa SELECT e retorna DataFrame. Silencia erro mostrando na UI."""
+    """Executa SELECT e retorna DataFrame. Compatível com PostgreSQL."""
+    pool = _pool()
+    conn = pool.getconn()
     try:
-        with sqlite3.connect(db_path, timeout=10) as conn:
-            return pd.read_sql_query(query, conn, params=params)
+        q = query.replace('?', '%s')
+        return pd.read_sql_query(q, conn, params=params if params else None)
     except Exception as e:
         st.error(f"Erro na consulta: {e}")
         return pd.DataFrame()
+    finally:
+        pool.putconn(conn)
 
 
 def run_exec(query, params=()):
     """Executa INSERT/UPDATE/DELETE/DDL.
     Registra no Logs mantendo só os últimos 1000 registros (rotação)."""
+    pool = _pool()
+    conn = pool.getconn()
     try:
-        with sqlite3.connect(db_path, timeout=10) as conn:
-            cursor = conn.cursor()
-            cursor.execute(query, params)
+        q = query.replace('?', '%s')
+        with conn.cursor() as cur:
+            cur.execute(q, params if params else None)
             # Log apenas de mutações reais (ignora CREATE/DROP idempotente de setup)
             q_upper = query.lstrip().upper()
             if q_upper.startswith(("INSERT", "UPDATE", "DELETE")):
-                cursor.execute(
-                    "CREATE TABLE IF NOT EXISTS Logs "
-                    "(id INTEGER PRIMARY KEY AUTOINCREMENT, acao TEXT, data_hora DATETIME)"
-                )
-                cursor.execute(
-                    "INSERT INTO Logs (acao, data_hora) VALUES (?,?)",
+                cur.execute(
+                    "INSERT INTO Logs (acao, data_hora) VALUES (%s, %s)",
                     (query[:50], datetime.now().strftime("%d/%m/%Y %H:%M:%S")),
                 )
                 # Rotação: mantém só os últimos 1000 logs
-                cursor.execute(
+                cur.execute(
                     "DELETE FROM Logs WHERE id NOT IN "
                     "(SELECT id FROM Logs ORDER BY id DESC LIMIT 1000)"
                 )
-            conn.commit()
+        conn.commit()
     except Exception as e:
+        conn.rollback()
         st.error(f"Erro ao salvar: {e}")
+    finally:
+        pool.putconn(conn)
 
 
 # Alias para não quebrar as ~20 chamadas existentes no código
@@ -553,153 +575,71 @@ run_insert = run_exec
 #  (adicionar colunas ou criar tabelas ausentes sem explodir)
 # ------------------------------------------------------------
 def setup_schema():
+    """Garante views atualizadas no PostgreSQL a cada deploy."""
+    pool = _pool()
+    conn = pool.getconn()
     try:
-        with sqlite3.connect(db_path) as conn:
-            cur = conn.cursor()
+        with conn.cursor() as cur:
 
-            # Coluna email em Contato_Direto
-            try:
-                cur.execute("ALTER TABLE Contato_Direto ADD COLUMN email TEXT")
-            except sqlite3.OperationalError:
-                pass  # já existe
+            # Adicionar colunas se não existirem (idempotente no PostgreSQL)
+            for ddl in [
+                "ALTER TABLE Contato_Direto ADD COLUMN IF NOT EXISTS email TEXT",
+                "ALTER TABLE Demandas_Estrategicas ADD COLUMN IF NOT EXISTS responsavel TEXT",
+                "ALTER TABLE Demandas_Estrategicas ADD COLUMN IF NOT EXISTS data_prevista DATE",
+                "ALTER TABLE Demandas_Estrategicas ADD COLUMN IF NOT EXISTS is_diaria INTEGER DEFAULT 0",
+                "ALTER TABLE Demandas_Estrategicas ADD COLUMN IF NOT EXISTS data_ultima_conclusao TIMESTAMPTZ",
+                "ALTER TABLE Convidados_Almoco ADD COLUMN IF NOT EXISTS id_parceiro INTEGER REFERENCES Parceiro(id_parceiro)",
+            ]:
+                try:
+                    cur.execute(ddl)
+                    conn.commit()
+                except Exception:
+                    conn.rollback()
 
-            # Coluna responsavel em Demandas_Estrategicas
-            try:
-                cur.execute("ALTER TABLE Demandas_Estrategicas ADD COLUMN responsavel TEXT")
-            except sqlite3.OperationalError:
-                pass  # já existe
-
-            # View unificada de ações (DEMANDAS + TAREFAS) — idempotente
-            cur.execute("DROP VIEW IF EXISTS View_Acoes_Unificadas")
-            cur.execute("""
-                CREATE VIEW View_Acoes_Unificadas AS
-                SELECT
-                    'D' || d.id                                        AS id_uniforme,
-                    'DEMANDA'                                          AS fonte,
-                    d.tarefa                                           AS titulo,
-                    d.setor                                            AS setor,
-                    d.responsavel                                      AS responsavel,
-                    NULL                                               AS parceiro,
-                    NULL                                               AS contato,
-                    d.data_prevista                                    AS data_prazo,
-                    d.score_gut                                        AS score,
-                    d.status                                           AS status,
-                    d.is_diaria                                        AS is_diaria,
-                    d.data_criacao                                     AS data_criacao,
-                    CASE
-                        WHEN d.data_prevista IS NULL THEN '⚪ SEM PRAZO'
-                        WHEN julianday(d.data_prevista) < julianday('now')         THEN '🔴 ATRASADA'
-                        WHEN julianday(d.data_prevista) - julianday('now') <= 2    THEN '🟡 URGENTE'
-                        WHEN julianday(d.data_prevista) - julianday('now') <= 7    THEN '🟢 ESTA SEMANA'
-                        ELSE '⚪ FUTURA'
-                    END                                                AS situacao
-                FROM Demandas_Estrategicas d
-                WHERE d.status IN ('PENDENTE', 'BLOQUEADO')
-
-                UNION ALL
-
-                SELECT
-                    'T' || t.id_tarefa                                 AS id_uniforme,
-                    'TAREFA'                                           AS fonte,
-                    t.tipo_tarefa || ' — ' || t.descricao              AS titulo,
-                    NULL                                               AS setor,
-                    t.responsavel                                      AS responsavel,
-                    p.nome_instituicao                                 AS parceiro,
-                    c.nome_pessoa                                      AS contato,
-                    t.data_prazo                                       AS data_prazo,
-                    CASE t.prioridade
-                        WHEN 'ALTA'  THEN 100
-                        WHEN 'MEDIA' THEN 50
-                        WHEN 'BAIXA' THEN 20
-                        ELSE 0
-                    END                                                AS score,
-                    t.status                                           AS status,
-                    0                                                  AS is_diaria,
-                    t.data_criacao                                     AS data_criacao,
-                    CASE
-                        WHEN julianday(t.data_prazo) < julianday('now')         THEN '🔴 ATRASADA'
-                        WHEN julianday(t.data_prazo) - julianday('now') <= 2    THEN '🟡 URGENTE'
-                        WHEN julianday(t.data_prazo) - julianday('now') <= 7    THEN '🟢 ESTA SEMANA'
-                        ELSE '⚪ FUTURA'
-                    END                                                AS situacao
-                FROM Tarefas_Pendentes t
-                LEFT JOIN Parceiro       p ON t.id_parceiro = p.id_parceiro
-                LEFT JOIN Contato_Direto c ON t.id_contato  = c.id_contato
-                WHERE t.status = 'PENDENTE'
-            """)
-
-            # View auxiliar — Tarefas abertas com campos amigáveis (usada na aba CRM)
-            cur.execute("DROP VIEW IF EXISTS View_Tarefas_Abertas")
-            cur.execute("""
-                CREATE VIEW View_Tarefas_Abertas AS
-                SELECT
-                    t.id_tarefa,
-                    t.tipo_tarefa,
-                    t.descricao,
-                    t.data_criacao,
-                    t.data_prazo,
-                    t.prioridade,
-                    t.status,
-                    t.observacoes,
-                    p.nome_instituicao                AS Parceiro,
-                    c.nome_pessoa                     AS Contato,
-                    CAST(julianday(t.data_prazo) - julianday('now') AS INTEGER) AS Dias_Ate_Prazo,
-                    CASE
-                        WHEN julianday(t.data_prazo) < julianday('now')         THEN '🔴 ATRASADA'
-                        WHEN julianday(t.data_prazo) - julianday('now') <= 2    THEN '🟡 URGENTE'
-                        WHEN julianday(t.data_prazo) - julianday('now') <= 7    THEN '🟢 ESTA SEMANA'
-                        ELSE '⚪ FUTURA'
-                    END                               AS Situacao
-                FROM Tarefas_Pendentes t
-                LEFT JOIN Parceiro       p ON t.id_parceiro = p.id_parceiro
-                LEFT JOIN Contato_Direto c ON t.id_contato  = c.id_contato
-                WHERE t.status = 'PENDENTE'
-            """)
-
-            # Tabela de convidados do almoço
+            # Tabelas que podem não existir ainda
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS Convidados_Almoco (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    id             SERIAL PRIMARY KEY,
                     mes_referencia TEXT,
-                    segmento TEXT,
-                    nome TEXT,
-                    empresa TEXT,
-                    cargo TEXT,
-                    telefone TEXT,
-                    contato_1 BOOLEAN DEFAULT 0,
-                    contato_2 BOOLEAN DEFAULT 0,
-                    contato_3 BOOLEAN DEFAULT 0,
-                    contato_4 BOOLEAN DEFAULT 0,
-                    confirmado BOOLEAN DEFAULT 0,
-                    compareceu BOOLEAN DEFAULT 0,
-                    observacoes TEXT
+                    segmento       TEXT,
+                    nome           TEXT,
+                    empresa        TEXT,
+                    cargo          TEXT,
+                    telefone       TEXT,
+                    contato_1      BOOLEAN DEFAULT FALSE,
+                    contato_2      BOOLEAN DEFAULT FALSE,
+                    contato_3      BOOLEAN DEFAULT FALSE,
+                    contato_4      BOOLEAN DEFAULT FALSE,
+                    confirmado     BOOLEAN DEFAULT FALSE,
+                    compareceu     BOOLEAN DEFAULT FALSE,
+                    observacoes    TEXT,
+                    id_parceiro    INTEGER REFERENCES Parceiro(id_parceiro)
                 )
             """)
-
-            # ── Plano DI 2026 ──────────────────────────────────────────
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS Meta_Fonte_2026 (
-                    id_fonte       INTEGER PRIMARY KEY AUTOINCREMENT,
-                    codigo_fonte   TEXT    UNIQUE NOT NULL,
-                    nome_fonte     TEXT    NOT NULL,
-                    valor_2025     REAL    DEFAULT 0,
-                    meta_2026      REAL    NOT NULL,
-                    tipo           TEXT    DEFAULT 'outros',
-                    ativa          INTEGER DEFAULT 1
+                    id_fonte      SERIAL PRIMARY KEY,
+                    codigo_fonte  TEXT UNIQUE NOT NULL,
+                    nome_fonte    TEXT NOT NULL,
+                    valor_2025    REAL DEFAULT 0,
+                    meta_2026     REAL NOT NULL,
+                    tipo          TEXT DEFAULT 'outros',
+                    ativa         INTEGER DEFAULT 1
                 )
             """)
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS Registro_Captacao_DI (
-                    id             INTEGER PRIMARY KEY AUTOINCREMENT,
-                    id_fonte       INTEGER NOT NULL,
-                    mes_referencia TEXT    NOT NULL,
-                    valor_realizado REAL   NOT NULL,
-                    observacao     TEXT,
-                    data_registro  DATETIME DEFAULT (datetime('now','localtime')),
-                    registrado_por TEXT,
-                    FOREIGN KEY (id_fonte) REFERENCES Meta_Fonte_2026(id_fonte)
+                    id              SERIAL PRIMARY KEY,
+                    id_fonte        INTEGER NOT NULL REFERENCES Meta_Fonte_2026(id_fonte),
+                    mes_referencia  TEXT NOT NULL,
+                    valor_realizado REAL NOT NULL,
+                    observacao      TEXT,
+                    data_registro   TIMESTAMPTZ DEFAULT NOW(),
+                    registrado_por  TEXT
                 )
             """)
+
+            # Seed das fontes de captação (idempotente)
             _fontes_plano = [
                 ('BAZAR_CDP',            'Bazar CDP',                             216639.18,  238000.00, 'evento'),
                 ('BAZAR_RFB',            'Bazar RFB (Mercadorias)',               135138.87,  500000.00, 'evento'),
@@ -714,18 +654,103 @@ def setup_schema():
             ]
             for _f in _fontes_plano:
                 cur.execute(
-                    "INSERT OR IGNORE INTO Meta_Fonte_2026 (codigo_fonte,nome_fonte,valor_2025,meta_2026,tipo) VALUES (?,?,?,?,?)",
+                    "INSERT INTO Meta_Fonte_2026 (codigo_fonte,nome_fonte,valor_2025,meta_2026,tipo) "
+                    "VALUES (%s,%s,%s,%s,%s) ON CONFLICT (codigo_fonte) DO NOTHING",
                     _f
                 )
-            cur.execute("DROP VIEW IF EXISTS View_Progresso_PlanoAnual")
+
+            # ── VIEWS (PostgreSQL: CREATE OR REPLACE VIEW) ─────────────────
             cur.execute("""
-                CREATE VIEW View_Progresso_PlanoAnual AS
+                CREATE OR REPLACE VIEW View_Acoes_Unificadas AS
+                SELECT
+                    'D' || d.id                                        AS id_uniforme,
+                    'DEMANDA'                                          AS fonte,
+                    d.tarefa                                           AS titulo,
+                    d.setor                                            AS setor,
+                    d.responsavel                                      AS responsavel,
+                    NULL::TEXT                                         AS parceiro,
+                    NULL::TEXT                                         AS contato,
+                    d.data_prevista                                    AS data_prazo,
+                    d.score_gut                                        AS score,
+                    d.status                                           AS status,
+                    d.is_diaria                                        AS is_diaria,
+                    d.data_criacao                                     AS data_criacao,
+                    CASE
+                        WHEN d.data_prevista IS NULL                        THEN '⚪ SEM PRAZO'
+                        WHEN d.data_prevista < CURRENT_DATE                 THEN '🔴 ATRASADA'
+                        WHEN (d.data_prevista - CURRENT_DATE) <= 2          THEN '🟡 URGENTE'
+                        WHEN (d.data_prevista - CURRENT_DATE) <= 7          THEN '🟢 ESTA SEMANA'
+                        ELSE '⚪ FUTURA'
+                    END                                                AS situacao
+                FROM Demandas_Estrategicas d
+                WHERE d.status IN ('PENDENTE', 'BLOQUEADO')
+
+                UNION ALL
+
+                SELECT
+                    'T' || t.id_tarefa                                 AS id_uniforme,
+                    'TAREFA'                                           AS fonte,
+                    t.tipo_tarefa || ' — ' || t.descricao              AS titulo,
+                    NULL::TEXT                                         AS setor,
+                    t.responsavel                                      AS responsavel,
+                    p.nome_instituicao                                 AS parceiro,
+                    c.nome_pessoa                                      AS contato,
+                    t.data_prazo                                       AS data_prazo,
+                    CASE t.prioridade
+                        WHEN 'ALTA'  THEN 100
+                        WHEN 'MEDIA' THEN 50
+                        WHEN 'BAIXA' THEN 20
+                        ELSE 0
+                    END                                                AS score,
+                    t.status                                           AS status,
+                    0                                                  AS is_diaria,
+                    t.data_criacao::TIMESTAMPTZ                        AS data_criacao,
+                    CASE
+                        WHEN t.data_prazo < CURRENT_DATE               THEN '🔴 ATRASADA'
+                        WHEN (t.data_prazo - CURRENT_DATE) <= 2        THEN '🟡 URGENTE'
+                        WHEN (t.data_prazo - CURRENT_DATE) <= 7        THEN '🟢 ESTA SEMANA'
+                        ELSE '⚪ FUTURA'
+                    END                                                AS situacao
+                FROM Tarefas_Pendentes t
+                LEFT JOIN Parceiro       p ON t.id_parceiro = p.id_parceiro
+                LEFT JOIN Contato_Direto c ON t.id_contato  = c.id_contato
+                WHERE t.status = 'PENDENTE'
+            """)
+
+            cur.execute("""
+                CREATE OR REPLACE VIEW View_Tarefas_Abertas AS
+                SELECT
+                    t.id_tarefa,
+                    t.tipo_tarefa,
+                    t.descricao,
+                    t.data_criacao,
+                    t.data_prazo,
+                    t.prioridade,
+                    t.status,
+                    t.observacoes,
+                    p.nome_instituicao                           AS "Parceiro",
+                    c.nome_pessoa                                AS "Contato",
+                    (t.data_prazo - CURRENT_DATE)::INTEGER       AS "Dias_Ate_Prazo",
+                    CASE
+                        WHEN t.data_prazo < CURRENT_DATE               THEN '🔴 ATRASADA'
+                        WHEN (t.data_prazo - CURRENT_DATE) <= 2        THEN '🟡 URGENTE'
+                        WHEN (t.data_prazo - CURRENT_DATE) <= 7        THEN '🟢 ESTA SEMANA'
+                        ELSE '⚪ FUTURA'
+                    END                                          AS "Situacao"
+                FROM Tarefas_Pendentes t
+                LEFT JOIN Parceiro       p ON t.id_parceiro = p.id_parceiro
+                LEFT JOIN Contato_Direto c ON t.id_contato  = c.id_contato
+                WHERE t.status = 'PENDENTE'
+            """)
+
+            cur.execute("""
+                CREATE OR REPLACE VIEW View_Progresso_PlanoAnual AS
                 SELECT
                     m.id_fonte, m.codigo_fonte, m.nome_fonte, m.tipo,
                     m.valor_2025, m.meta_2026,
-                    COALESCE(SUM(c.valor_realizado), 0)                          AS captado_2026,
-                    ROUND(COALESCE(SUM(c.valor_realizado),0)/m.meta_2026*100, 1) AS pct_meta,
-                    m.meta_2026 - COALESCE(SUM(c.valor_realizado), 0)            AS saldo_pendente,
+                    COALESCE(SUM(c.valor_realizado), 0)                                              AS captado_2026,
+                    ROUND((COALESCE(SUM(c.valor_realizado),0)/m.meta_2026*100)::NUMERIC, 1)          AS pct_meta,
+                    m.meta_2026 - COALESCE(SUM(c.valor_realizado), 0)                                AS saldo_pendente,
                     CASE
                         WHEN COALESCE(SUM(c.valor_realizado),0) >= m.meta_2026          THEN '🟢 ATINGIDO'
                         WHEN COALESCE(SUM(c.valor_realizado),0) / m.meta_2026 >= 0.7    THEN '🟡 EM PROGRESSO'
@@ -734,18 +759,11 @@ def setup_schema():
                     END AS status_meta
                 FROM Meta_Fonte_2026 m
                 LEFT JOIN (
-                    -- FONTE 1: lançamentos manuais mensais (Bazar, TROCO, eventos)
                     SELECT id_fonte, valor_realizado
                     FROM Registro_Captacao_DI
                     WHERE mes_referencia BETWEEN '2026-01' AND '2026-12'
-
                     UNION ALL
-
-                    -- FONTE 2: doações financeiras individuais já registradas no CRM
-                    -- Mapeamento: origem_captacao (Doacao) → codigo_fonte (Meta_Fonte_2026)
-                    SELECT
-                        m2.id_fonte,
-                        d.valor_estimado AS valor_realizado
+                    SELECT m2.id_fonte, d.valor_estimado AS valor_realizado
                     FROM Doacao d
                     JOIN Meta_Fonte_2026 m2
                         ON m2.codigo_fonte = CASE d.origem_captacao
@@ -761,13 +779,16 @@ def setup_schema():
                       AND d.data_doacao >= '2026-01-01'
                 ) c ON m.id_fonte = c.id_fonte
                 WHERE m.ativa = 1
-                GROUP BY m.id_fonte
+                GROUP BY m.id_fonte, m.codigo_fonte, m.nome_fonte, m.tipo, m.valor_2025, m.meta_2026
                 ORDER BY m.meta_2026 DESC
             """)
 
             conn.commit()
     except Exception as e:
+        conn.rollback()
         st.error(f"Erro ao preparar banco: {e}")
+    finally:
+        pool.putconn(conn)
 
 
 setup_schema()
@@ -1347,28 +1368,14 @@ elif menu == "AÇÕES":
         eh_gerente = user['perfil'] == 'gerencia'
         meu_setor = user['setor']
 
-        # --- 0. AJUSTE E MANUTENÇÃO DO BANCO ---
-        # Adiciona as novas colunas se elas não existirem
-        try:
-            with sqlite3.connect(db_path) as conn:
-                cursor = conn.cursor()
-                try: cursor.execute("ALTER TABLE Demandas_Estrategicas ADD COLUMN data_prevista DATE")
-                except: pass
-                try: cursor.execute("ALTER TABLE Demandas_Estrategicas ADD COLUMN is_diaria INTEGER DEFAULT 0")
-                except: pass
-                try: cursor.execute("ALTER TABLE Demandas_Estrategicas ADD COLUMN data_ultima_conclusao DATETIME")
-                except: pass
-                conn.commit()
-        except: pass
-
         # --- LÓGICA DE TAREFAS DIÁRIAS (RESET) ---
         # Se a tarefa for diária e foi concluída em um dia anterior, volta para PENDENTE
         run_insert("""
-            UPDATE Demandas_Estrategicas 
-            SET status = 'PENDENTE' 
-            WHERE is_diaria = 1 
-              AND status = 'REALIZADO' 
-              AND date(data_ultima_conclusao) < date('now', 'localtime')
+            UPDATE Demandas_Estrategicas
+            SET status = 'PENDENTE'
+            WHERE is_diaria = 1
+              AND status = 'REALIZADO'
+              AND data_ultima_conclusao::date < CURRENT_DATE
         """)
 
         # 1. DEFINIÇÃO DOS DADOS (PITs)
@@ -2550,15 +2557,18 @@ elif menu == "RELACIONAMENTO":
 st.sidebar.markdown("---")
 st.sidebar.subheader("Extrair dados")
 
-# 1. Download do banco completo (.db)
-with open(db_path, "rb") as f:
-    st.sidebar.download_button(
-        label="Baixar arquivo .db",
-        data=f,
-        file_name="MeusContatos_Nuvem.db",
-        mime="application/octet-stream",
-        use_container_width=True,
-    )
+# 1. Download parceiros (CSV rápido — banco agora no Supabase/PostgreSQL)
+@st.cache_data(ttl=120)
+def _csv_parceiros():
+    return run_query("SELECT * FROM Parceiro").to_csv(index=False).encode("utf-8-sig")
+
+st.sidebar.download_button(
+    label="Baixar parceiros (CSV)",
+    data=_csv_parceiros(),
+    file_name="parceiros.csv",
+    mime="text/csv",
+    use_container_width=True,
+)
 
 # 2. Download em Excel — tenta múltiplos engines; cai pra CSV se Excel não disponível
 @st.cache_data(ttl=60)
