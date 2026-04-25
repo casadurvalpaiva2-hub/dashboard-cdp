@@ -919,6 +919,43 @@ with st.sidebar:
         }
     )
 
+    # ── Registro rápido de interação ─────────────────────────────────────────
+    st.markdown("---")
+    with st.expander("⚡ Registrar interação rápida"):
+        _parc_rapido = run_query("SELECT id_parceiro, nome_instituicao FROM Parceiro WHERE UPPER(status) LIKE '%ATIVO%' ORDER BY nome_instituicao")
+        if not _parc_rapido.empty:
+            with st.form("form_interacao_rapida", clear_on_submit=True):
+                _nome_sel = st.selectbox(
+                    "Parceiro",
+                    _parc_rapido['nome_instituicao'].tolist(),
+                    key="ri_parceiro"
+                )
+                _relato = st.text_area(
+                    "O que foi feito?",
+                    placeholder="Ex: Ligação de follow-up, confirmou interesse na cota...",
+                    key="ri_relato",
+                    height=80
+                )
+                _retorno = st.date_input(
+                    "Próximo retorno",
+                    value=datetime.now() + timedelta(days=15),
+                    key="ri_retorno"
+                )
+                if st.form_submit_button("✅ Salvar", use_container_width=True, type="primary"):
+                    if _relato.strip():
+                        _id_p = int(_parc_rapido[_parc_rapido['nome_instituicao'] == _nome_sel]['id_parceiro'].values[0])
+                        run_exec(
+                            """INSERT INTO Registro_Relacionamento
+                               (id_parceiro, data_interacao, descricao_do_que_foi_feito, tipo, proxima_acao_data)
+                               VALUES (%s, CURRENT_DATE, %s, 'Contato', %s)""",
+                            (_id_p, _relato.upper(), _retorno.strftime('%Y-%m-%d'))
+                        )
+                        st.success(f"Salvo! ✅")
+                    else:
+                        st.warning("Descreva o que foi feito.")
+        else:
+            st.caption("Nenhum parceiro ativo encontrado.")
+
 # --- 1. DASHBOARD GERAL ---
 if menu == "PAINEL GERAL":
     page_header("Painel geral", "Visão consolidada do Desenvolvimento Institucional.")
@@ -2643,45 +2680,6 @@ elif menu == "RELACIONAMENTO":
                     st.toast("Registro salvo!"); st.rerun()
 
 
-
-# ============================================================
-#  SIDEBAR — REGISTRO RÁPIDO DE INTERAÇÃO
-# ============================================================
-st.sidebar.markdown("---")
-with st.sidebar.expander("⚡ Registrar interação rápida"):
-    _parc_rapido = run_query("SELECT id_parceiro, nome_instituicao FROM Parceiro WHERE UPPER(status) LIKE '%ATIVO%' ORDER BY nome_instituicao")
-    if not _parc_rapido.empty:
-        with st.form("form_interacao_rapida", clear_on_submit=True):
-            _nome_sel = st.selectbox(
-                "Parceiro",
-                _parc_rapido['nome_instituicao'].tolist(),
-                key="ri_parceiro"
-            )
-            _relato = st.text_area(
-                "O que foi feito?",
-                placeholder="Ex: Ligação de follow-up, confirmou interesse na cota...",
-                key="ri_relato",
-                height=80
-            )
-            _retorno = st.date_input(
-                "Próximo retorno",
-                value=datetime.now() + timedelta(days=15),
-                key="ri_retorno"
-            )
-            if st.form_submit_button("✅ Salvar", use_container_width=True, type="primary"):
-                if _relato.strip():
-                    _id_p = int(_parc_rapido[_parc_rapido['nome_instituicao'] == _nome_sel]['id_parceiro'].values[0])
-                    run_exec(
-                        """INSERT INTO Registro_Relacionamento
-                           (id_parceiro, data_interacao, descricao_do_que_foi_feito, tipo, proxima_acao_data)
-                           VALUES (%s, CURRENT_DATE, %s, 'Contato', %s)""",
-                        (_id_p, _relato.upper(), _retorno.strftime('%Y-%m-%d'))
-                    )
-                    st.success(f"Interação com {_nome_sel} salva!")
-                else:
-                    st.warning("Descreva o que foi feito.")
-    else:
-        st.caption("Nenhum parceiro ativo encontrado.")
 
 # ============================================================
 #  SIDEBAR — FERRAMENTAS FIXAS (sempre visíveis, independente do menu)
