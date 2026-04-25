@@ -1067,15 +1067,42 @@ if menu == "PAINEL GERAL":
 
         if not df_rel_pg.empty:
             df_rel_pg['Dias_Sem_Contato'] = pd.to_numeric(df_rel_pg['Dias_Sem_Contato'], errors='coerce')
-            criticos_30 = int((df_rel_pg['Dias_Sem_Contato'] > 30).sum())
-            criticos_60 = int((df_rel_pg['Dias_Sem_Contato'] > 60).sum())
-            em_dia      = int(df_rel_pg['Status_Relacionamento'].str.contains("DIA", na=False, case=False).sum())
+
+            # Filtra só quem tem histórico
+            df_rel_com = df_rel_pg[df_rel_pg['Status_Relacionamento'] != '⚫ SEM HISTÓRICO'].copy()
+
+            em_dia      = int(df_rel_com['Status_Relacionamento'].str.contains("DIA",    na=False, case=False).sum())
+            atencao     = int(df_rel_com['Status_Relacionamento'].str.contains("ATEN",   na=False, case=False).sum())
+            criticos    = int(df_rel_com['Status_Relacionamento'].str.contains("CRIT",   na=False, case=False).sum())
+            sem_hist    = int((df_rel_pg['Status_Relacionamento'] == '⚫ SEM HISTÓRICO').sum())
 
             kpi_row([
-                {"label": "Em dia",              "value": em_dia},
-                {"label": "Sem contato há 30+ dias", "value": criticos_30},
-                {"label": "Sem contato há 60+ dias", "value": criticos_60, "accent": criticos_60 > 0},
+                {"label": "Em dia",            "value": em_dia},
+                {"label": "Atenção (+45 dias)","value": atencao,  "accent": atencao > 0},
+                {"label": "Crítico (+90 dias)","value": criticos, "accent": criticos > 0},
+                {"label": "Sem histórico",     "value": sem_hist, "hint": "Nunca registrado"},
             ])
+
+            # Alertas nominais — mostra quem precisa de ação imediata
+            alertas = df_rel_com[df_rel_com['Status_Relacionamento'].str.contains("CRIT|ATEN", na=False)].copy()
+            alertas = alertas.sort_values('Dias_Sem_Contato', ascending=False)
+
+            if not alertas.empty:
+                st.markdown("<br>", unsafe_allow_html=True)
+                for _, a in alertas.iterrows():
+                    is_crit = "CRIT" in str(a['Status_Relacionamento'])
+                    cor   = "#DC2626" if is_crit else "#D97706"
+                    icone = "🔴" if is_crit else "🟡"
+                    dias  = int(a['Dias_Sem_Contato']) if pd.notna(a['Dias_Sem_Contato']) else "?"
+                    st.markdown(
+                        f'<div style="display:flex;align-items:center;gap:10px;padding:6px 10px;'
+                        f'border-left:3px solid {cor};margin-bottom:4px;border-radius:0 6px 6px 0;'
+                        f'background:rgba(255,255,255,0.03);">'
+                        f'{icone} <span style="flex:1;font-size:14px;">{a["Empresa"]}</span>'
+                        f'<span style="font-size:12px;color:#888;">{dias} dias sem contato</span>'
+                        f'</div>',
+                        unsafe_allow_html=True
+                    )
         else:
             st.caption("Sem dados de relacionamento.")
 
@@ -1192,32 +1219,39 @@ elif menu == "PLANO DI 2026":
             else:
                 cor_bar = "#94A3B8"
 
-            col_n, col_v, col_p, col_s = st.columns([3, 2, 2, 1])
-            with col_n:
-                st.markdown(f"**{nome}**", unsafe_allow_html=True)
-                barra_val = min(pct / 100, 1.0)
-                st.markdown(
-                    f'<div style="background:#E5E7EB;border-radius:6px;height:8px;margin-top:4px;">'
-                    f'<div style="background:{cor_bar};width:{barra_val*100:.1f}%;height:8px;border-radius:6px;"></div>'
-                    f'</div>',
-                    unsafe_allow_html=True
-                )
-            with col_v:
-                st.markdown(
-                    f'<div style="font-size:13px;color:#555;">Meta: <b>{format_br(meta)}</b></div>'
-                    f'<div style="font-size:13px;color:#059669;">Captado: <b>{format_br(captado)}</b></div>',
-                    unsafe_allow_html=True
-                )
-            with col_p:
-                st.markdown(
-                    f'<div style="font-size:13px;color:#555;">Pró-rata ({mes_atual}m): {format_br(prorate)}</div>'
-                    f'<div style="font-size:13px;color:#888;">Vs pró-rata: <b>{pct_prorate}%</b></div>',
-                    unsafe_allow_html=True
-                )
-            with col_s:
-                st.markdown(f'<div style="font-size:20px;text-align:center;margin-top:4px;">{status.split()[0]}</div>', unsafe_allow_html=True)
+            # Badge pró-rata: no prazo / em risco / atrasado
+            if captado == 0:
+                badge_txt, badge_cor = "⚪ Sem registro", "#94A3B8"
+            elif pct_prorate >= 100:
+                badge_txt, badge_cor = "✅ No prazo", "#059669"
+            elif pct_prorate >= 70:
+                badge_txt, badge_cor = "⚠️ Em risco", "#D97706"
+            else:
+                badge_txt, badge_cor = "🔴 Atrasado", "#DC2626"
 
-            st.markdown("<hr style='margin:6px 0;border-color:#F1F5F9;'>", unsafe_allow_html=True)
+            barra_val   = min(pct / 100, 1.0)
+            prorata_pct = min(prorate / meta, 1.0) if meta > 0 else 0
+
+            st.markdown(
+                f'<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:2px;">'
+                f'  <span style="font-size:14px;font-weight:600;">{nome}</span>'
+                f'  <span style="font-size:12px;font-weight:700;color:{badge_cor};">{badge_txt}</span>'
+                f'</div>'
+                # Barra de progresso com marcador pró-rata
+                f'<div style="position:relative;background:#2D3748;border-radius:8px;height:14px;margin-bottom:4px;">'
+                f'  <div style="background:{cor_bar};width:{barra_val*100:.1f}%;height:14px;border-radius:8px;transition:width .4s;"></div>'
+                f'  <div style="position:absolute;top:0;left:{prorata_pct*100:.1f}%;width:2px;height:14px;background:#F59E0B;opacity:.8;" title="Pró-rata"></div>'
+                f'  <span style="position:absolute;right:6px;top:0;font-size:10px;line-height:14px;color:#fff;font-weight:700;">{pct:.0f}%</span>'
+                f'</div>'
+                f'<div style="display:flex;gap:16px;font-size:12px;color:#888;margin-bottom:8px;">'
+                f'  <span>Meta: <b style="color:#ccc;">{format_br(meta)}</b></span>'
+                f'  <span>Captado: <b style="color:{cor_bar};">{format_br(captado)}</b></span>'
+                f'  <span>Pró-rata ({mes_atual}m): <b style="color:#F59E0B;">{format_br(prorate)}</b></span>'
+                f'  <span>Saldo: <b style="color:#ccc;">{format_br(saldo)}</b></span>'
+                f'</div>',
+                unsafe_allow_html=True
+            )
+            st.markdown("<hr style='margin:4px 0;border-color:rgba(255,255,255,0.06);'>", unsafe_allow_html=True)
 
     else:
         st.info("Nenhuma fonte de captação cadastrada. Execute o setup do banco para popular Meta_Fonte_2026.")
@@ -2609,6 +2643,45 @@ elif menu == "RELACIONAMENTO":
                     st.toast("Registro salvo!"); st.rerun()
 
 
+
+# ============================================================
+#  SIDEBAR — REGISTRO RÁPIDO DE INTERAÇÃO
+# ============================================================
+st.sidebar.markdown("---")
+with st.sidebar.expander("⚡ Registrar interação rápida"):
+    _parc_rapido = run_query("SELECT id_parceiro, nome_instituicao FROM Parceiro WHERE UPPER(status) LIKE '%ATIVO%' ORDER BY nome_instituicao")
+    if not _parc_rapido.empty:
+        with st.form("form_interacao_rapida", clear_on_submit=True):
+            _nome_sel = st.selectbox(
+                "Parceiro",
+                _parc_rapido['nome_instituicao'].tolist(),
+                key="ri_parceiro"
+            )
+            _relato = st.text_area(
+                "O que foi feito?",
+                placeholder="Ex: Ligação de follow-up, confirmou interesse na cota...",
+                key="ri_relato",
+                height=80
+            )
+            _retorno = st.date_input(
+                "Próximo retorno",
+                value=datetime.now() + timedelta(days=15),
+                key="ri_retorno"
+            )
+            if st.form_submit_button("✅ Salvar", use_container_width=True, type="primary"):
+                if _relato.strip():
+                    _id_p = int(_parc_rapido[_parc_rapido['nome_instituicao'] == _nome_sel]['id_parceiro'].values[0])
+                    run_exec(
+                        """INSERT INTO Registro_Relacionamento
+                           (id_parceiro, data_interacao, descricao_do_que_foi_feito, tipo, proxima_acao_data)
+                           VALUES (%s, CURRENT_DATE, %s, 'Contato', %s)""",
+                        (_id_p, _relato.upper(), _retorno.strftime('%Y-%m-%d'))
+                    )
+                    st.success(f"Interação com {_nome_sel} salva!")
+                else:
+                    st.warning("Descreva o que foi feito.")
+    else:
+        st.caption("Nenhum parceiro ativo encontrado.")
 
 # ============================================================
 #  SIDEBAR — FERRAMENTAS FIXAS (sempre visíveis, independente do menu)
