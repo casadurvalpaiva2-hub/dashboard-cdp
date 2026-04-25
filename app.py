@@ -1101,12 +1101,12 @@ if menu == "PAINEL GERAL":
         # ============================================================
         section("Maiores doadores do ano")
         query_top = """
-            SELECT p.nome_instituicao as Parceiro, SUM(d.valor_estimado) as Total, COUNT(*) as Repasses
+            SELECT p.nome_instituicao AS "Parceiro", SUM(d.valor_estimado) AS "Total", COUNT(*) AS "Repasses"
             FROM Doacao d
             JOIN Parceiro p ON d.id_parceiro = p.id_parceiro
-            WHERE strftime('%Y', d.data_doacao) = ?
-            GROUP BY Parceiro
-            ORDER BY Total DESC
+            WHERE TO_CHAR(d.data_doacao, 'YYYY') = %s
+            GROUP BY p.nome_instituicao
+            ORDER BY "Total" DESC
             LIMIT 5
         """
         df_top = run_query(query_top, (str(ano_sel),))
@@ -1546,9 +1546,9 @@ elif menu == "AÇÕES":
         # Query para contar tarefas realizadas por mês/ano
         # Filtramos por setor se o usuário não for gerente
         sql_stats = """
-            SELECT strftime('%m/%Y', data_ultima_conclusao) as MesAno, COUNT(*) as Total 
-            FROM Demandas_Estrategicas 
-            WHERE status = 'REALIZADO' 
+            SELECT TO_CHAR(data_ultima_conclusao, 'MM/YYYY') AS "MesAno", COUNT(*) AS "Total"
+            FROM Demandas_Estrategicas
+            WHERE status = 'REALIZADO'
               AND data_ultima_conclusao IS NOT NULL
         """
         if not eh_gerente:
@@ -2518,7 +2518,8 @@ elif menu == "RELACIONAMENTO":
                 """
 
                 for _, row in df_relatorio.iterrows():
-                    data_reg_fmt = datetime.strptime(row['data_registro'], '%Y-%m-%d').strftime('%d/%m')
+                    _dr = row['data_registro']
+                    data_reg_fmt = (_dr if hasattr(_dr, 'strftime') else datetime.strptime(str(_dr), '%Y-%m-%d')).strftime('%d/%m')
                     nome_parceiro = str(row['nome_instituicao']).upper()
                     descricao = str(row['descricao']).capitalize() if pd.notna(row['descricao']) and str(row['descricao']).strip() != "" else "Sem observações adicionais."
                     tipo = row['tipo']
