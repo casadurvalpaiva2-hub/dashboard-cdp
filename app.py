@@ -143,6 +143,33 @@ if not st.session_state.autenticado:
                 if user_login in CONTAS and CONTAS[user_login]["senha"] == pass_login:
                     st.session_state.autenticado = True
                     st.session_state.user_data = CONTAS[user_login]
+                    # Tela de transição enquanto o app carrega
+                    st.markdown("""
+                    <style>
+                        [data-testid="stMainBlockContainer"], .block-container { opacity: 0 !important; }
+                    </style>
+                    <div style="
+                        position: fixed; inset: 0; z-index: 9999;
+                        background: linear-gradient(135deg, #0f0f0f 0%, #1a0a0a 50%, #0f0f0f 100%);
+                        display: flex; flex-direction: column;
+                        align-items: center; justify-content: center; gap: 20px;
+                    ">
+                        <div style="font-size:13px;letter-spacing:4px;color:#C0392B;font-weight:700;">
+                            CASA DURVAL PAIVA
+                        </div>
+                        <div style="font-size:28px;font-weight:800;color:#fff;letter-spacing:-1px;">
+                            Sistema DI
+                        </div>
+                        <div style="
+                            width: 40px; height: 40px; margin-top: 12px;
+                            border: 3px solid rgba(192,57,43,0.2);
+                            border-top-color: #C0392B;
+                            border-radius: 50%;
+                            animation: spin 0.8s linear infinite;
+                        "></div>
+                        <style>@keyframes spin { to { transform: rotate(360deg); } }</style>
+                    </div>
+                    """, unsafe_allow_html=True)
                     st.rerun()
                 else:
                     st.error("Usuário ou senha incorretos.")
