@@ -2416,33 +2416,62 @@ elif menu == "RELACIONAMENTO":
             df_join = df_rel.merge(df_parceiros[['nome_instituicao', 'id_parceiro']], left_on='Empresa', right_on='nome_instituicao', how='left')
             df_final = df_join.merge(df_retornos, on='id_parceiro', how='left')
 
-            cg, ct = st.columns([1, 1.4])
-            with cg:
-                df_g = df_final.groupby('Status_Relacionamento').size().reset_index(name='qtd')
-                fig = go.Figure(data=[go.Pie(
-                    labels=df_g['Status_Relacionamento'], values=df_g['qtd'], hole=.78,
-                    marker_colors=["#DC2626", "#D97706", "#059669"], textinfo='none'
-                )])
-                fig.update_layout(
-                    height=260, margin=dict(t=10, b=10, l=0, r=0), showlegend=True,
-                    paper_bgcolor='rgba(0,0,0,0)',
-                    legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5),
-                    annotations=[dict(text='STATUS<br>SAÚDE', x=0.5, y=0.5, font_size=14, showarrow=False)]
-                )
-                st.plotly_chart(fig, use_container_width=True)
+            # Separa parceiros COM e SEM histórico
+            df_com_hist  = df_final[df_final['Status_Relacionamento'] != '⚫ SEM HISTÓRICO'].copy()
+            df_sem_hist  = df_final[df_final['Status_Relacionamento'] == '⚫ SEM HISTÓRICO']
+            qtd_sem_hist = len(df_sem_hist)
 
-            with ct:
-                st.markdown("**Cronograma de follow-up:**")
-                st.dataframe(
-                    df_final[['Empresa', 'Dias_Sem_Contato', 'Proxima_Acao_Planejada', 'Status_Relacionamento']],
-                    column_config={
-                        "Empresa": "Parceiro",
-                        "Dias_Sem_Contato": st.column_config.NumberColumn("Dias parado", format="%d d"),
-                        "Proxima_Acao_Planejada": st.column_config.DateColumn("Próxima ação", format="DD/MM/YYYY"),
-                        "Status_Relacionamento": "Saúde"
-                    },
-                    use_container_width=True, hide_index=True, height=280
-                )
+            # Aviso discreto sobre parceiros sem histórico
+            if qtd_sem_hist > 0:
+                st.info(f"**{qtd_sem_hist} parceiros** ainda não têm nenhum contato registrado no sistema e foram ocultados deste painel.")
+
+            if df_com_hist.empty:
+                empty_state("📋", "Nenhum contato registrado", "Registre a primeira interação com um parceiro para ativar o painel de saúde.")
+            else:
+                cg, ct = st.columns([1, 1.4])
+                with cg:
+                    # Ordem de exibição: Crítico → Atenção → Em dia
+                    ordem_status = {'🔴 CRÍTICO (+3 meses)': 0, '🟡 ATENÇÃO (+45 dias)': 1, '🟢 EM DIA': 2}
+                    df_g = (
+                        df_com_hist.groupby('Status_Relacionamento')
+                        .size().reset_index(name='qtd')
+                        .assign(ordem=lambda d: d['Status_Relacionamento'].map(ordem_status))
+                        .sort_values('ordem')
+                    )
+                    cor_map = {
+                        '🔴 CRÍTICO (+3 meses)': '#DC2626',
+                        '🟡 ATENÇÃO (+45 dias)':  '#D97706',
+                        '🟢 EM DIA':              '#059669',
+                    }
+                    cores = [cor_map.get(s, '#888') for s in df_g['Status_Relacionamento']]
+                    fig = go.Figure(data=[go.Pie(
+                        labels=df_g['Status_Relacionamento'], values=df_g['qtd'], hole=.78,
+                        marker_colors=cores, textinfo='none'
+                    )])
+                    fig.update_layout(
+                        height=260, margin=dict(t=10, b=10, l=0, r=0), showlegend=True,
+                        paper_bgcolor='rgba(0,0,0,0)',
+                        legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5),
+                        annotations=[dict(text='STATUS<br>SAÚDE', x=0.5, y=0.5, font_size=14, showarrow=False)]
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
+
+                with ct:
+                    st.markdown("**Cronograma de follow-up:**")
+                    # Ordena: críticos primeiro, depois atenção, depois em dia
+                    df_tabela = df_com_hist.copy()
+                    df_tabela['_ordem'] = df_tabela['Status_Relacionamento'].map(ordem_status).fillna(9)
+                    df_tabela = df_tabela.sort_values(['_ordem', 'Dias_Sem_Contato'], ascending=[True, False])
+                    st.dataframe(
+                        df_tabela[['Empresa', 'Dias_Sem_Contato', 'Proxima_Acao_Planejada', 'Status_Relacionamento']],
+                        column_config={
+                            "Empresa": "Parceiro",
+                            "Dias_Sem_Contato": st.column_config.NumberColumn("Dias parado", format="%d d"),
+                            "Proxima_Acao_Planejada": st.column_config.DateColumn("Próxima ação", format="DD/MM/YYYY"),
+                            "Status_Relacionamento": "Saúde"
+                        },
+                        use_container_width=True, hide_index=True, height=280
+                    )
             
 
     with tab_hist:
