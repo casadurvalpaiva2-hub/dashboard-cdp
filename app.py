@@ -744,6 +744,32 @@ def setup_schema():
             """)
 
             cur.execute("""
+                CREATE OR REPLACE VIEW View_Relacionamento_Critico AS
+                SELECT
+                    p.nome_instituicao                                              AS "Empresa",
+                    p.status                                                        AS "Situacao",
+                    MAX(r.data_interacao)                                           AS "Ultima_Interacao",
+                    (CURRENT_DATE - MAX(r.data_interacao)::date)::INTEGER           AS "Dias_Sem_Contato",
+                    CASE
+                        WHEN MAX(r.data_interacao) IS NULL                          THEN '⚫ SEM HISTÓRICO'
+                        WHEN (CURRENT_DATE - MAX(r.data_interacao)::date) > 90      THEN '🔴 CRÍTICO (+3 meses)'
+                        WHEN (CURRENT_DATE - MAX(r.data_interacao)::date) > 45      THEN '🟡 ATENÇÃO (+45 dias)'
+                        ELSE '🟢 EM DIA'
+                    END                                                             AS "Status_Relacionamento",
+                    (
+                        SELECT proxima_acao_data
+                        FROM Registro_Relacionamento rr
+                        WHERE rr.id_parceiro = p.id_parceiro
+                        ORDER BY rr.data_interacao DESC
+                        LIMIT 1
+                    )                                                               AS "Proxima_Acao_Planejada"
+                FROM Parceiro p
+                LEFT JOIN Registro_Relacionamento r ON p.id_parceiro = r.id_parceiro
+                GROUP BY p.id_parceiro, p.nome_instituicao, p.status
+                ORDER BY "Dias_Sem_Contato" DESC NULLS LAST
+            """)
+
+            cur.execute("""
                 CREATE OR REPLACE VIEW View_Progresso_PlanoAnual AS
                 SELECT
                     m.id_fonte, m.codigo_fonte, m.nome_fonte, m.tipo,
@@ -894,8 +920,8 @@ if menu == "PAINEL GERAL":
     df_parceiros_pg = run_query("SELECT id_parceiro, nome_instituicao, status, data_adesao FROM Parceiro")
     df_acoes_pg = run_query("SELECT fonte, situacao FROM View_Acoes_Unificadas")
     df_eventos_pg = run_query("""
-        SELECT mes_referencia, 
-               SUM(CASE WHEN confirmado=1 THEN 1 ELSE 0 END) as confirmados,
+        SELECT mes_referencia,
+               SUM(CASE WHEN confirmado = TRUE THEN 1 ELSE 0 END) as confirmados,
                COUNT(*) as total
         FROM Convidados_Almoco
         GROUP BY mes_referencia
