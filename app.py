@@ -537,6 +537,13 @@ def run_query(query, params=()):
         pool.putconn(conn)
 
 
+@st.cache_data(ttl=60)
+def run_query_cached(query, params=()):
+    """Versão cacheada de run_query — para leituras que podem ter 60s de delay.
+    Use em consultas pesadas que não precisam ser tempo real (relatórios, listas, views)."""
+    return run_query(query, params)
+
+
 def run_exec(query, params=()):
     """Executa INSERT/UPDATE/DELETE/DDL.
     Registra no Logs mantendo só os últimos 1000 registros (rotação)."""
@@ -817,7 +824,10 @@ def setup_schema():
         pool.putconn(conn)
 
 
-setup_schema()
+# setup_schema roda apenas 1x por sessão (evita round-trips desnecessários ao Supabase)
+if "schema_ok" not in st.session_state:
+    setup_schema()
+    st.session_state.schema_ok = True
 
 
 
