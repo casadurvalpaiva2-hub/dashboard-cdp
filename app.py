@@ -40,17 +40,110 @@ if "autenticado" not in st.session_state:
     st.session_state.user_data = None
 
 if not st.session_state.autenticado:
-    st.title("Sistema DI CDP")
-    with st.form("login"):
-        user_login = st.text_input("Usuário").lower()
-        pass_login = st.text_input("Senha", type="password")
-        if st.form_submit_button("Entrar"):
-            if user_login in CONTAS and CONTAS[user_login]["senha"] == pass_login:
-                st.session_state.autenticado = True
-                st.session_state.user_data = CONTAS[user_login]
-                st.rerun()
-            else:
-                st.error("Utilizador ou senha incorretos.")
+    st.markdown("""
+    <style>
+        [data-testid="stAppViewContainer"] {
+            background: linear-gradient(135deg, #0f0f0f 0%, #1a0a0a 50%, #0f0f0f 100%);
+        }
+        [data-testid="stHeader"] { background: transparent; }
+        .login-wrapper {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 85vh;
+        }
+        .login-logo {
+            font-size: 13px;
+            letter-spacing: 4px;
+            text-transform: uppercase;
+            color: #C0392B;
+            font-weight: 700;
+            margin-bottom: 6px;
+        }
+        .login-title {
+            font-size: 38px;
+            font-weight: 800;
+            color: #ffffff;
+            margin-bottom: 4px;
+            letter-spacing: -1px;
+        }
+        .login-sub {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 40px;
+            letter-spacing: 1px;
+        }
+        .login-divider {
+            width: 40px;
+            height: 3px;
+            background: #C0392B;
+            margin: 0 auto 36px auto;
+            border-radius: 2px;
+        }
+        div[data-testid="stForm"] {
+            background: rgba(255,255,255,0.03) !important;
+            border: 1px solid rgba(255,255,255,0.07) !important;
+            border-radius: 16px !important;
+            padding: 36px 40px !important;
+            backdrop-filter: blur(10px);
+            width: 100%;
+            max-width: 420px;
+        }
+        div[data-testid="stForm"] input {
+            background: rgba(255,255,255,0.05) !important;
+            border: 1px solid rgba(255,255,255,0.1) !important;
+            border-radius: 8px !important;
+            color: #fff !important;
+        }
+        div[data-testid="stForm"] button[kind="primaryFormSubmit"] {
+            background: #C0392B !important;
+            border: none !important;
+            border-radius: 8px !important;
+            font-weight: 700 !important;
+            letter-spacing: 1px !important;
+            height: 48px !important;
+            font-size: 15px !important;
+            width: 100% !important;
+            margin-top: 8px !important;
+        }
+        div[data-testid="stForm"] button[kind="primaryFormSubmit"]:hover {
+            background: #922b21 !important;
+        }
+        .login-footer {
+            font-size: 11px;
+            color: #444;
+            margin-top: 32px;
+            letter-spacing: 1px;
+        }
+        /* Esconde decorações desnecessárias */
+        #MainMenu, footer { visibility: hidden; }
+    </style>
+    """, unsafe_allow_html=True)
+
+    _, col_mid, _ = st.columns([1, 1.2, 1])
+    with col_mid:
+        st.markdown('<div class="login-wrapper">', unsafe_allow_html=True)
+        st.markdown('<div class="login-logo">Casa Durval Paiva</div>', unsafe_allow_html=True)
+        st.markdown('<div class="login-title">Sistema DI</div>', unsafe_allow_html=True)
+        st.markdown('<div class="login-sub">Desenvolvimento Institucional · 2026</div>', unsafe_allow_html=True)
+        st.markdown('<div class="login-divider"></div>', unsafe_allow_html=True)
+
+        with st.form("login"):
+            user_login = st.text_input("Usuário", placeholder="seu usuário", label_visibility="collapsed").lower()
+            pass_login = st.text_input("Senha",   placeholder="sua senha",   label_visibility="collapsed", type="password")
+            st.markdown("<br>", unsafe_allow_html=True)
+            if st.form_submit_button("ENTRAR", use_container_width=True, type="primary"):
+                if user_login in CONTAS and CONTAS[user_login]["senha"] == pass_login:
+                    st.session_state.autenticado = True
+                    st.session_state.user_data = CONTAS[user_login]
+                    st.rerun()
+                else:
+                    st.error("Usuário ou senha incorretos.")
+
+        st.markdown('<div class="login-footer">© 2026 · Acesso restrito à equipe autorizada</div>', unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
+
     st.stop()
 
 # ------------------------------------------------------------
