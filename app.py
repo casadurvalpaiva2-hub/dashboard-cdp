@@ -46,21 +46,18 @@ if not st.session_state.autenticado:
             background: linear-gradient(135deg, #0f0f0f 0%, #1a0a0a 50%, #0f0f0f 100%);
         }
         [data-testid="stHeader"] { background: transparent; }
-        /* Remove padding padrão do Streamlit */
-        [data-testid="stMainBlockContainer"] {
-            padding-top: 0 !important;
-        }
+        /* Centraliza verticalmente removendo padding padrão */
+        [data-testid="stMainBlockContainer"],
         .block-container {
-            padding-top: 0 !important;
+            padding-top: 8vh !important;
             padding-bottom: 0 !important;
+            max-width: 100% !important;
         }
+        [data-testid="stHeader"] { display: none; }
         .login-wrapper {
             display: flex;
             flex-direction: column;
             align-items: center;
-            justify-content: center;
-            height: 100vh;
-            margin-top: -60px;
         }
         .login-logo {
             font-size: 13px;
