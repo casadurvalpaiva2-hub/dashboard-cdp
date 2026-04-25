@@ -216,7 +216,11 @@ if not st.session_state.autenticado:
 # ------------------------------------------------------------
 #  CONFIG DA PÁGINA
 # ------------------------------------------------------------
-st.set_page_config(page_title="GESTÃO DI", layout="wide", page_icon="🏠")
+st.set_page_config(
+    page_title="Casa Durval Paiva · DI",
+    layout="wide",
+    page_icon="https://casadurvalpaiva.org.br/wp-content/themes/durvalpaiva/dist/img/header/logo.png",
+)
 
 
 # ============================================================
