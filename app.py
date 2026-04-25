@@ -925,12 +925,12 @@ if menu == "PAINEL GERAL":
     page_header("Painel geral", "Visão consolidada do Desenvolvimento Institucional.")
 
     # ============================================================
-    # BUSCA DE DADOS TRANSVERSAL
+    # BUSCA DE DADOS TRANSVERSAL (com cache para reduzir latência)
     # ============================================================
-    df_doacoes = run_query("SELECT * FROM Doacao")
-    df_parceiros_pg = run_query("SELECT id_parceiro, nome_instituicao, status, data_adesao FROM Parceiro")
-    df_acoes_pg = run_query("SELECT fonte, situacao FROM View_Acoes_Unificadas")
-    df_eventos_pg = run_query("""
+    df_doacoes      = run_query_cached("SELECT * FROM Doacao")
+    df_parceiros_pg = run_query_cached("SELECT id_parceiro, nome_instituicao, status, data_adesao FROM Parceiro")
+    df_acoes_pg     = run_query_cached("SELECT fonte, situacao FROM View_Acoes_Unificadas")
+    df_eventos_pg   = run_query_cached("""
         SELECT mes_referencia,
                SUM(CASE WHEN confirmado = TRUE THEN 1 ELSE 0 END) as confirmados,
                COUNT(*) as total
@@ -939,7 +939,7 @@ if menu == "PAINEL GERAL":
         ORDER BY mes_referencia DESC
         LIMIT 1
     """)
-    df_rel_pg = run_query("SELECT * FROM View_Relacionamento_Critico")
+    df_rel_pg = run_query_cached("SELECT * FROM View_Relacionamento_Critico")
 
     # ============================================================
     # SELETOR DE ANO
@@ -2101,7 +2101,8 @@ elif menu == "PARCERIAS":
     # ABA 3 — FUNIL DE CONVERSÃO
     # ============================================================
     with tab3:
-        page_header("Funil de conversão", "Acompanhe o pipeline de prospecção e as conversões recentes para parceiro ativo.", level=3)
+        st.markdown("#### Funil de conversão")
+        st.caption("Acompanhe o pipeline de prospecção e as conversões recentes para parceiro ativo.")
 
         df_funil = run_query("""
             SELECT nome_instituicao, status, data_adesao,
@@ -2205,7 +2206,8 @@ elif menu == "PARCERIAS":
     # ABA 4 — IMPORTAÇÃO EM LOTE
     # ============================================================
     with tab4:
-        page_header("Importar parceiros em lote", "Suba uma planilha Excel com múltiplos parceiros para cadastrar de uma vez.", level=3)
+        st.markdown("#### Importar parceiros em lote")
+        st.caption("Suba uma planilha Excel com múltiplos parceiros para cadastrar de uma vez.")
 
         st.markdown("""
         **Como usar:**
@@ -2727,40 +2729,36 @@ elif menu == "RELACIONAMENTO":
         data_fim = c_fim.date_input("Data final", datetime.now(), key="dt_fim_rel")
 
         if st.button("Gerar relatório de atividades", type="primary", use_container_width=True):
-            # A MÁGICA ESTÁ AQUI: União de duas consultas (Doações reais + Interações reais)
-            # Filtramos "Sistema:%" para remover os avisos automáticos
-            sql_relatorio = """
-                SELECT * FROM (
-                    SELECT 
-                        p.nome_instituicao, 
-                        r.data_interacao AS data_registro, 
-                        'RELACIONAMENTO' AS tipo,
-                        r.descricao_do_que_foi_feito AS descricao,
-                        0 AS valor_estimado
-                    FROM Registro_Relacionamento r
-                    JOIN Parceiro p ON r.id_parceiro = p.id_parceiro
-                    WHERE r.data_interacao BETWEEN ? AND ?
-                      AND r.descricao_do_que_foi_feito NOT LIKE 'Sistema:%'
-
-                    UNION ALL
-
-                    SELECT 
-                        p.nome_instituicao, 
-                        d.data_doacao AS data_registro, 
-                        'DOAÇÃO (' || d.tipo_doacao || ')' AS tipo,
-                        d.descricao AS descricao,
-                        d.valor_estimado
-                    FROM Doacao d
-                    JOIN Parceiro p ON d.id_parceiro = p.id_parceiro
-                    WHERE d.data_doacao BETWEEN ? AND ?
-                )
-                ORDER BY data_registro DESC
-            """
-            
-            # Precisamos passar as datas 4 vezes (2 para a primeira parte do UNION, 2 para a segunda)
             d_ini = data_inicio.strftime('%Y-%m-%d')
             d_fim = data_fim.strftime('%Y-%m-%d')
-            df_relatorio = run_query(sql_relatorio, (d_ini, d_fim, d_ini, d_fim))
+
+            # Duas queries separadas para evitar problemas com UNION ALL + psycopg2
+            df_rel_int = run_query("""
+                SELECT p.nome_instituicao,
+                       r.data_interacao AS data_registro,
+                       'RELACIONAMENTO' AS tipo,
+                       r.descricao_do_que_foi_feito AS descricao,
+                       0 AS valor_estimado
+                FROM Registro_Relacionamento r
+                JOIN Parceiro p ON r.id_parceiro = p.id_parceiro
+                WHERE r.data_interacao BETWEEN ? AND ?
+                  AND r.descricao_do_que_foi_feito NOT LIKE 'Sistema:%%'
+            """, (d_ini, d_fim))
+
+            df_rel_doa = run_query("""
+                SELECT p.nome_instituicao,
+                       d.data_doacao AS data_registro,
+                       CONCAT('DOAÇÃO (', d.tipo_doacao, ')') AS tipo,
+                       d.descricao AS descricao,
+                       d.valor_estimado
+                FROM Doacao d
+                JOIN Parceiro p ON d.id_parceiro = p.id_parceiro
+                WHERE d.data_doacao BETWEEN ? AND ?
+            """, (d_ini, d_fim))
+
+            df_relatorio = pd.concat([df_rel_int, df_rel_doa], ignore_index=True)
+            if not df_relatorio.empty:
+                df_relatorio = df_relatorio.sort_values('data_registro', ascending=False)
 
             if not df_relatorio.empty:
                 dt_ini_fmt = data_inicio.strftime('%d/%m/%Y')
@@ -3029,15 +3027,18 @@ def _gerar_backup_completo():
         f"backup_cdp_{datetime.now().strftime('%Y%m%d')}.zip",
     )
 
-_bk_data, _bk_ext, _bk_mime, _bk_nome = _gerar_backup_completo()
-st.sidebar.download_button(
-    label=f"⬇️ Backup completo ({_bk_ext.upper()})",
-    data=_bk_data,
-    file_name=_bk_nome,
-    mime=_bk_mime,
-    use_container_width=True,
-    help="Exporta todas as tabelas do banco em um único arquivo",
-)
+if st.sidebar.button("⬇️ Preparar backup completo", use_container_width=True):
+    st.session_state["_bk_pronto"] = _gerar_backup_completo()
+
+if "_bk_pronto" in st.session_state:
+    _bk_data, _bk_ext, _bk_mime, _bk_nome = st.session_state["_bk_pronto"]
+    st.sidebar.download_button(
+        label=f"📥 Baixar ({_bk_ext.upper()})",
+        data=_bk_data,
+        file_name=_bk_nome,
+        mime=_bk_mime,
+        use_container_width=True,
+    )
 
 st.sidebar.markdown("---")
 
