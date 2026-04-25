@@ -836,88 +836,69 @@ if "schema_ok" not in st.session_state:
 # ============================================================
 
 # ------------------------------------------------------------
-#  ATALHO "+ NOVO" — selectbox único (sóbrio, 1 linha)
+#  NAVEGAÇÃO — session_state como fonte de verdade
 # ------------------------------------------------------------
-if "force_menu" not in st.session_state:
-    st.session_state.force_menu = None
+if "current_page" not in st.session_state:
+    st.session_state.current_page = "PAINEL GERAL"
 if "open_form" not in st.session_state:
-    st.session_state.open_form = None  # 'parceiro' | 'contato' | 'doacao'
+    st.session_state.open_form = None
 if "_qa_nonce" not in st.session_state:
-    st.session_state._qa_nonce = 0  # muda após cada uso, força reset do selectbox
+    st.session_state._qa_nonce = 0
+
+_opcoes_menu = ["PAINEL GERAL", "PLANO DI 2026", "PARCERIAS", "CONTATOS", "EVENTOS", "AÇÕES", "REGISTRAR DOAÇÃO", "RELACIONAMENTO"]
 
 def _trigger_quick_add(tipo: str):
-    """Dispara navegação + abertura automática do formulário."""
+    """Navega para a página certa e sinaliza abertura de formulário."""
     mapa_menu = {
         "parceiro": "PARCERIAS",
         "contato":  "CONTATOS",
         "doacao":   "REGISTRAR DOAÇÃO",
     }
-    st.session_state.force_menu = mapa_menu[tipo]
+    st.session_state.current_page = mapa_menu[tipo]
     st.session_state.open_form = tipo
 
 with st.sidebar:
+    # Selectbox "+ Criar novo"
     _opcoes_add = {
         "Criar novo...": None,
         "Parceiro":      "parceiro",
         "Contato":       "contato",
         "Doação":        "doacao",
     }
-    # Usa key dinâmica (nonce) para que o selectbox reinicie após cada seleção
     _qa_key = f"sel_quick_add_{st.session_state._qa_nonce}"
     _escolha = st.selectbox(
-        "Atalho",
-        options=list(_opcoes_add.keys()),
-        index=0,
-        key=_qa_key,
-        label_visibility="collapsed",
+        "Atalho", options=list(_opcoes_add.keys()),
+        index=0, key=_qa_key, label_visibility="collapsed",
     )
     if _opcoes_add[_escolha] is not None:
         _trigger_quick_add(_opcoes_add[_escolha])
-        st.session_state._qa_nonce += 1  # avança nonce para recriar selectbox limpo
+        st.session_state._qa_nonce += 1
         st.rerun()
 
     st.markdown("---")
 
-    # O menu retorna o texto selecionado para a variável 'menu'
-    _opcoes_menu = ["PAINEL GERAL", "PLANO DI 2026", "PARCERIAS", "CONTATOS", "EVENTOS", "AÇÕES", "REGISTRAR DOAÇÃO", "RELACIONAMENTO"]
-
-    # Se uma ação rápida pediu redirecionamento, força o menu para o destino
-    _idx_forcado = 0
-    _menu_key = "menu_nav"  # key padrão
-    if st.session_state.force_menu in _opcoes_menu:
-        _idx_forcado = _opcoes_menu.index(st.session_state.force_menu)
-        # Usa nonce para recriar o menu (option_menu ignora default_index em re-renders)
-        st.session_state._qa_nonce += 1
-        _menu_key = f"menu_nav_{st.session_state._qa_nonce}"
-        st.session_state.force_menu = None  # consome o redirecionamento
-
-    menu = option_menu(
+    # option_menu — key muda sempre que current_page muda (força re-render no índice certo)
+    _idx_atual = _opcoes_menu.index(st.session_state.current_page) if st.session_state.current_page in _opcoes_menu else 0
+    _menu_resultado = option_menu(
         menu_title="MENU",
         options=_opcoes_menu,
         icons=["bar-chart-fill", "building", "person-lines-fill", "calendar-event", "check2-square", "cash-coin", "heart-fill"],
         menu_icon="cast",
-        default_index=_idx_forcado,
-        key=_menu_key,
+        default_index=_idx_atual,
+        key=f"menu_nav_{_idx_atual}",
         styles={
-            "container": {
-                "padding": "5!important",
-                "background-color": "transparent"
-            },
-            "icon": {
-                "color": "#E31D24",
-                "font-size": "18px"
-            },
-            "nav-link": {
-                "font-size": "14px",
-                "text-align": "left",
-                "margin": "0px",
-            },
-            "nav-link-selected": {
-                "background-color": "#E31D24",
-                "color": "white"
-            },
+            "container":         {"padding": "5!important", "background-color": "transparent"},
+            "icon":              {"color": "#E31D24", "font-size": "18px"},
+            "nav-link":          {"font-size": "14px", "text-align": "left", "margin": "0px"},
+            "nav-link-selected": {"background-color": "#E31D24", "color": "white"},
         }
     )
+    # Quando o usuário clica manualmente no menu, atualiza current_page
+    if _menu_resultado != st.session_state.current_page:
+        st.session_state.current_page = _menu_resultado
+        st.rerun()
+
+menu = st.session_state.current_page
 
 
 # --- 1. DASHBOARD GERAL ---
