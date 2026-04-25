@@ -558,7 +558,7 @@ def run_exec(query, params=()):
             if q_upper.startswith(("INSERT", "UPDATE", "DELETE")):
                 cur.execute(
                     "INSERT INTO Logs (acao, data_hora) VALUES (%s, %s)",
-                    (query[:50], datetime.now().strftime("%d/%m/%Y %H:%M:%S")),
+                    (query[:50], datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
                 )
                 # Rotação: mantém só os últimos 1000 logs
                 cur.execute(
@@ -1500,7 +1500,8 @@ elif menu == "AÇÕES":
                             st.rerun()
                 
                     with col_info:
-                        dt_cad = datetime.strptime(row['data_criacao'], '%Y-%m-%d %H:%M:%S').strftime('%d/%m')
+                        _dc = row['data_criacao']
+                        dt_cad = (_dc if hasattr(_dc, 'strftime') else datetime.strptime(str(_dc), '%Y-%m-%d %H:%M:%S')).strftime('%d/%m')
                         dt_prev = row['data_prevista'] if row['data_prevista'] else "---"
                         tag_d = '<span class="tag-diaria">DIÁRIA</span>' if row['is_diaria'] else ""
                         prefixo = '🚨 <b style="color:#FF4B4B;">[BLOQUEADO]</b> ' if is_b else ''
@@ -2020,17 +2021,17 @@ elif menu == "PARCERIAS":
         
         # 1. Query para a TABELA (Filtra 'GERAL' e vazios)
         query_projetos = """
-            SELECT 
-                UPPER(nome_projeto) as Projeto,
-                strftime('%Y', data_doacao) as Ano,
-                COUNT(*) as 'Qtd Repasses',
-                SUM(valor_estimado) as Total
+            SELECT
+                UPPER(nome_projeto) AS "Projeto",
+                TO_CHAR(data_doacao, 'YYYY') AS "Ano",
+                COUNT(*) AS "Qtd Repasses",
+                SUM(valor_estimado) AS "Total"
             FROM Doacao
-            WHERE nome_projeto IS NOT NULL 
-              AND nome_projeto != '' 
+            WHERE nome_projeto IS NOT NULL
+              AND nome_projeto != ''
               AND UPPER(nome_projeto) != 'GERAL'
-            GROUP BY Projeto, Ano
-            ORDER BY Ano DESC, Total DESC
+            GROUP BY "Projeto", "Ano"
+            ORDER BY "Ano" DESC, "Total" DESC
         """
         df_proj = run_query(query_projetos)
         
@@ -2164,7 +2165,9 @@ elif menu == "REGISTRAR DOAÇÃO":
                     c1, c2, c3 = st.columns(3)
                     
                     novo_valor = c1.number_input("Valor (R$)", value=float(row['valor_estimado']), key=f"v_{row['id_doacao']}")
-                    nova_data = c2.date_input("Data", value=datetime.strptime(row['data_doacao'], '%Y-%m-%d'), key=f"d_{row['id_doacao']}")
+                    _dd = row['data_doacao']
+                    _dd_val = _dd if hasattr(_dd, 'year') else datetime.strptime(str(_dd), '%Y-%m-%d').date()
+                    nova_data = c2.date_input("Data", value=_dd_val, key=f"d_{row['id_doacao']}")
                     novo_projeto = c3.text_input("Projeto", value=row['nome_projeto'], key=f"p_{row['id_doacao']}")
                     
                     nova_desc = st.text_area("Descrição", value=row['descricao'] or "", key=f"desc_{row['id_doacao']}")
@@ -2193,8 +2196,8 @@ elif menu == "CONTATOS":
 
     # Busca os dados no banco
     query_view = """
-        SELECT c.id_contato, p.nome_instituicao as Empresa, c.nome_pessoa as Nome, 
-               c.cargo as Cargo, c.telefone as WhatsApp, c.email as Email
+        SELECT c.id_contato, p.nome_instituicao AS "Empresa", c.nome_pessoa AS "Nome",
+               c.cargo AS "Cargo", c.telefone AS "WhatsApp", c.email AS "Email"
         FROM Contato_Direto c
         LEFT JOIN Parceiro p ON c.id_parceiro = p.id_parceiro
         ORDER BY c.nome_pessoa ASC
