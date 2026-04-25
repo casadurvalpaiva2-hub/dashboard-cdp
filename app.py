@@ -1924,7 +1924,7 @@ elif menu == "EVENTOS":
 # --- 2. PARCEIROS E PROJETOS ---
 elif menu == "PARCERIAS":
     page_header("Gestão de parceiros e projetos", "Cadastro, edição e acompanhamento de parceiros e projetos ativos.")
-    tab1, tab2 = st.tabs(["Parceiros", "Projetos"])
+    tab1, tab2, tab3, tab4 = st.tabs(["Parceiros", "Projetos", "Funil de conversão", "Importar em lote"])
     
     with tab1:
 
@@ -2096,6 +2096,200 @@ elif menu == "PARCERIAS":
             st.dataframe(df_exibir_copy, use_container_width=True, hide_index=True)
         else:
             empty_state("📊", "Nenhum projeto vinculado", "Doações sem projeto específico aparecem na categoria GERAL.")
+
+    # ============================================================
+    # ABA 3 — FUNIL DE CONVERSÃO
+    # ============================================================
+    with tab3:
+        page_header("Funil de conversão", "Acompanhe o pipeline de prospecção e as conversões recentes para parceiro ativo.", level=3)
+
+        df_funil = run_query("""
+            SELECT nome_instituicao, status, data_adesao,
+                   (CURRENT_DATE - data_adesao::date) AS dias_na_base
+            FROM Parceiro
+            WHERE data_adesao IS NOT NULL
+            ORDER BY data_adesao DESC
+        """)
+
+        df_funil_all = run_query("SELECT nome_instituicao, status, data_adesao FROM Parceiro")
+
+        if df_funil_all.empty:
+            empty_state("📊", "Sem dados", "Cadastre parceiros para visualizar o funil.")
+        else:
+            s = df_funil_all['status'].fillna("").str.upper().str.strip()
+            n_prospec  = int(s.str.contains("PROSPEC").sum())
+            n_ativo    = int(s.str.contains("ATIVO").sum())
+            n_inativo  = int(s.str.contains("INATIVO").sum())
+            total      = len(df_funil_all)
+            tx_conv    = round(n_ativo / total * 100, 1) if total > 0 else 0
+
+            # KPIs do funil
+            kpi_row([
+                {"label": "Em prospecção",      "value": n_prospec},
+                {"label": "Convertidos (ativos)","value": n_ativo, "accent": True},
+                {"label": "Inativos",           "value": n_inativo},
+                {"label": "Taxa de conversão",  "value": f"{tx_conv}%", "hint": "Ativos / Total"},
+            ])
+
+            # Barra visual do funil
+            st.markdown("<br>", unsafe_allow_html=True)
+            for label, valor, cor in [
+                ("🔵 Prospecção", n_prospec, "#3B82F6"),
+                ("🟢 Ativo",      n_ativo,   "#059669"),
+                ("⚫ Inativo",    n_inativo,  "#6B7280"),
+            ]:
+                pct = round(valor / total * 100, 1) if total > 0 else 0
+                st.markdown(
+                    f'<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">'
+                    f'  <span style="width:130px;font-size:13px;">{label}</span>'
+                    f'  <div style="flex:1;background:#2D3748;border-radius:6px;height:20px;">'
+                    f'    <div style="background:{cor};width:{pct}%;height:20px;border-radius:6px;"></div>'
+                    f'  </div>'
+                    f'  <span style="width:60px;font-size:13px;color:#888;">{valor} ({pct}%)</span>'
+                    f'</div>',
+                    unsafe_allow_html=True
+                )
+
+            st.markdown("<br>", unsafe_allow_html=True)
+            col_pf, col_pc = st.columns(2)
+
+            with col_pf:
+                section("Em prospecção — tempo na fila")
+                df_prospec = df_funil[df_funil['status'].str.upper().str.contains("PROSPEC", na=False)].copy()
+                if not df_prospec.empty:
+                    df_prospec['dias_na_base'] = pd.to_numeric(df_prospec['dias_na_base'], errors='coerce').fillna(0).astype(int)
+                    df_prospec = df_prospec.sort_values('dias_na_base', ascending=False)
+                    for _, r in df_prospec.iterrows():
+                        dias = r['dias_na_base']
+                        cor_d = "#DC2626" if dias > 180 else "#D97706" if dias > 90 else "#059669"
+                        st.markdown(
+                            f'<div style="display:flex;justify-content:space-between;padding:5px 8px;'
+                            f'border-left:3px solid {cor_d};margin-bottom:3px;border-radius:0 4px 4px 0;'
+                            f'background:rgba(255,255,255,0.02);">'
+                            f'  <span style="font-size:13px;">{r["nome_instituicao"]}</span>'
+                            f'  <span style="font-size:12px;color:{cor_d};">{dias}d</span>'
+                            f'</div>',
+                            unsafe_allow_html=True
+                        )
+                else:
+                    st.caption("Nenhum parceiro em prospecção.")
+
+            with col_pc:
+                section("Convertidos nos últimos 90 dias")
+                df_conv = run_query("""
+                    SELECT nome_instituicao, data_adesao,
+                           (CURRENT_DATE - data_adesao::date) AS dias_na_base
+                    FROM Parceiro
+                    WHERE UPPER(status) LIKE '%ATIVO%'
+                      AND data_adesao IS NOT NULL
+                      AND (CURRENT_DATE - data_adesao::date) <= 90
+                    ORDER BY data_adesao DESC
+                """)
+                if not df_conv.empty:
+                    for _, r in df_conv.iterrows():
+                        _da = r['data_adesao']
+                        _da_fmt = (_da if hasattr(_da, 'strftime') else datetime.strptime(str(_da), '%Y-%m-%d')).strftime('%d/%m/%Y')
+                        st.markdown(
+                            f'<div style="display:flex;justify-content:space-between;padding:5px 8px;'
+                            f'border-left:3px solid #059669;margin-bottom:3px;border-radius:0 4px 4px 0;'
+                            f'background:rgba(5,150,105,0.05);">'
+                            f'  <span style="font-size:13px;">✅ {r["nome_instituicao"]}</span>'
+                            f'  <span style="font-size:12px;color:#059669;">{_da_fmt}</span>'
+                            f'</div>',
+                            unsafe_allow_html=True
+                        )
+                else:
+                    st.caption("Nenhuma conversão nos últimos 90 dias.")
+
+    # ============================================================
+    # ABA 4 — IMPORTAÇÃO EM LOTE
+    # ============================================================
+    with tab4:
+        page_header("Importar parceiros em lote", "Suba uma planilha Excel com múltiplos parceiros para cadastrar de uma vez.", level=3)
+
+        st.markdown("""
+        **Como usar:**
+        1. Baixe o modelo abaixo
+        2. Preencha com os dados dos parceiros
+        3. Suba o arquivo e confirme a importação
+        """)
+
+        # Gera modelo para download
+        df_modelo = pd.DataFrame({
+            'nome_instituicao': ['Exemplo Empresa S.A.', 'Outra Empresa Ltda'],
+            'status':           ['Ativo', 'Prospecção'],
+            'subcategoria':     ['Tecnologia', 'Alimentação'],
+            'data_adesao':      ['2026-01-15', '2026-03-20'],
+        })
+        modelo_csv = df_modelo.to_csv(index=False).encode('utf-8-sig')
+        st.download_button(
+            "⬇️ Baixar modelo CSV",
+            data=modelo_csv,
+            file_name="modelo_importacao_parceiros.csv",
+            mime="text/csv",
+        )
+
+        st.markdown("---")
+        arquivo = st.file_uploader("Suba sua planilha (Excel .xlsx ou CSV .csv)", type=["xlsx", "csv"])
+
+        if arquivo is not None:
+            try:
+                if arquivo.name.endswith('.csv'):
+                    df_import = pd.read_csv(arquivo)
+                else:
+                    df_import = pd.read_excel(arquivo)
+
+                # Valida colunas mínimas
+                if 'nome_instituicao' not in df_import.columns:
+                    st.error("A coluna **nome_instituicao** é obrigatória na planilha.")
+                else:
+                    # Preenche defaults
+                    df_import['status']       = df_import.get('status',       pd.Series(['Prospecção'] * len(df_import))).fillna('Prospecção')
+                    df_import['subcategoria'] = df_import.get('subcategoria', pd.Series([''] * len(df_import))).fillna('')
+                    df_import['data_adesao']  = df_import.get('data_adesao',  pd.Series([None] * len(df_import)))
+
+                    # Remove linhas sem nome
+                    df_import = df_import[df_import['nome_instituicao'].notna() & (df_import['nome_instituicao'].str.strip() != '')]
+
+                    st.success(f"**{len(df_import)} parceiros** identificados na planilha. Confira antes de importar:")
+                    st.dataframe(
+                        df_import[['nome_instituicao', 'status', 'subcategoria', 'data_adesao']],
+                        use_container_width=True, hide_index=True, height=250
+                    )
+
+                    if st.button(f"✅ Confirmar importação de {len(df_import)} parceiros", type="primary", use_container_width=True):
+                        # Busca id_categoria padrão (primeira disponível)
+                        df_cat_imp = run_query("SELECT id_categoria FROM Categoria_Parceiro LIMIT 1")
+                        id_cat_default = int(df_cat_imp['id_categoria'].values[0]) if not df_cat_imp.empty else 1
+
+                        erros = 0
+                        ok = 0
+                        for _, row in df_import.iterrows():
+                            try:
+                                _data = None
+                                if pd.notna(row['data_adesao']) and str(row['data_adesao']).strip() != '':
+                                    try:
+                                        _data = pd.to_datetime(row['data_adesao']).strftime('%Y-%m-%d')
+                                    except Exception:
+                                        _data = None
+                                run_exec(
+                                    """INSERT INTO Parceiro (nome_instituicao, status, id_categoria, subcategoria, data_adesao)
+                                       VALUES (%s, %s, %s, %s, %s)
+                                       ON CONFLICT DO NOTHING""",
+                                    (str(row['nome_instituicao']).strip(), str(row['status']).strip(),
+                                     id_cat_default, str(row['subcategoria']).strip(), _data)
+                                )
+                                ok += 1
+                            except Exception:
+                                erros += 1
+
+                        if ok > 0:
+                            st.success(f"**{ok} parceiros importados** com sucesso! {f'({erros} ignorados por erro)' if erros else ''}")
+                        if erros > 0 and ok == 0:
+                            st.error("Nenhum registro foi importado. Verifique o formato da planilha.")
+
+            except Exception as e:
+                st.error(f"Erro ao ler o arquivo: {e}")
 
 # --- 3. REGISTRAR DOAÇÃO ---
 elif menu == "REGISTRAR DOAÇÃO":
@@ -2617,7 +2811,147 @@ elif menu == "RELACIONAMENTO":
                 # Caixa para o usuário copiar o texto
                 with st.expander("Copiar texto para WhatsApp / E-mail"):
                     st.code(texto_diretoria, language="markdown")
-                    
+
+                # ── Botão PDF ────────────────────────────────────────────
+                st.markdown("<br>", unsafe_allow_html=True)
+
+                def _gerar_pdf_diretoria(df_rel, d_ini_fmt, d_fim_fmt):
+                    from io import BytesIO
+                    from reportlab.lib.pagesizes import A4
+                    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+                    from reportlab.lib import colors
+                    from reportlab.lib.units import cm
+                    from reportlab.platypus import (
+                        SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable
+                    )
+
+                    buf = BytesIO()
+                    doc = SimpleDocTemplate(
+                        buf, pagesize=A4,
+                        leftMargin=2*cm, rightMargin=2*cm,
+                        topMargin=2*cm, bottomMargin=2*cm,
+                    )
+
+                    estilos = getSampleStyleSheet()
+                    cor_principal = colors.HexColor("#C0392B")
+                    cor_cinza     = colors.HexColor("#555555")
+                    cor_fundo     = colors.HexColor("#F7F7F7")
+
+                    st_titulo = ParagraphStyle("titulo", parent=estilos["Title"],
+                        fontSize=20, textColor=cor_principal, spaceAfter=4)
+                    st_subtitulo = ParagraphStyle("sub", parent=estilos["Normal"],
+                        fontSize=11, textColor=cor_cinza, spaceAfter=12)
+                    st_secao = ParagraphStyle("secao", parent=estilos["Heading2"],
+                        fontSize=13, textColor=cor_principal, spaceBefore=14, spaceAfter=6)
+                    st_item = ParagraphStyle("item", parent=estilos["Normal"],
+                        fontSize=10, textColor=colors.HexColor("#222222"), spaceAfter=2, leading=14)
+                    st_detalhe = ParagraphStyle("detalhe", parent=estilos["Normal"],
+                        fontSize=9, textColor=cor_cinza, leftIndent=12, spaceAfter=8, leading=13)
+                    st_rodape = ParagraphStyle("rodape", parent=estilos["Normal"],
+                        fontSize=8, textColor=cor_cinza, alignment=1)
+
+                    story = []
+
+                    # Cabeçalho
+                    story.append(Paragraph("Casa Durval Paiva", st_titulo))
+                    story.append(Paragraph(
+                        f"Relatório Estratégico de Parcerias — {d_ini_fmt} a {d_fim_fmt}",
+                        st_subtitulo
+                    ))
+                    story.append(HRFlowable(width="100%", thickness=1.5, color=cor_principal, spaceAfter=10))
+
+                    # KPIs do período
+                    doacoes_period = df_rel[df_rel['tipo'].str.contains("DOA", na=False, case=False)]
+                    relac_period   = df_rel[df_rel['tipo'] == 'RELACIONAMENTO']
+                    total_fin      = doacoes_period['valor_estimado'].sum()
+                    n_parcerias    = df_rel['nome_instituicao'].nunique()
+
+                    dados_kpi = [
+                        ["Parceiros movimentados", "Interações registradas", "Doações no período"],
+                        [str(n_parcerias), str(len(relac_period)), f"R$ {total_fin:,.2f}".replace(",","X").replace(".",",").replace("X",".")]
+                    ]
+                    t_kpi = Table(dados_kpi, colWidths=[5.5*cm, 5.5*cm, 5.5*cm])
+                    t_kpi.setStyle(TableStyle([
+                        ("BACKGROUND", (0,0), (-1,0), cor_fundo),
+                        ("TEXTCOLOR",  (0,0), (-1,0), cor_cinza),
+                        ("FONTSIZE",   (0,0), (-1,0), 9),
+                        ("FONTSIZE",   (0,1), (-1,1), 14),
+                        ("FONTNAME",   (0,1), (-1,1), "Helvetica-Bold"),
+                        ("TEXTCOLOR",  (0,1), (-1,1), cor_principal),
+                        ("ALIGN",      (0,0), (-1,-1), "CENTER"),
+                        ("VALIGN",     (0,0), (-1,-1), "MIDDLE"),
+                        ("ROWBACKGROUNDS", (0,0), (-1,-1), [cor_fundo, colors.white]),
+                        ("BOX",        (0,0), (-1,-1), 0.5, cor_cinza),
+                        ("INNERGRID",  (0,0), (-1,-1), 0.3, colors.HexColor("#DDDDDD")),
+                        ("TOPPADDING", (0,0), (-1,-1), 8),
+                        ("BOTTOMPADDING", (0,0), (-1,-1), 8),
+                    ]))
+                    story.append(t_kpi)
+                    story.append(Spacer(1, 0.4*cm))
+
+                    # Interações
+                    if not relac_period.empty:
+                        story.append(Paragraph("Interações com parceiros", st_secao))
+                        for _, row in relac_period.iterrows():
+                            _dr = row['data_registro']
+                            drf = (_dr if hasattr(_dr,'strftime') else datetime.strptime(str(_dr),'%Y-%m-%d')).strftime('%d/%m/%Y')
+                            story.append(Paragraph(
+                                f"<b>{str(row['nome_instituicao']).upper()}</b> &nbsp;&nbsp; <font color='#888888' size='9'>{drf}</font>",
+                                st_item
+                            ))
+                            desc = str(row['descricao']).capitalize() if pd.notna(row['descricao']) else "—"
+                            story.append(Paragraph(f"↳ {desc}", st_detalhe))
+
+                    # Doações
+                    if not doacoes_period.empty:
+                        story.append(Paragraph("Doações recebidas no período", st_secao))
+                        dados_doa = [["Parceiro", "Tipo", "Valor"]]
+                        for _, row in doacoes_period.iterrows():
+                            _dr = row['data_registro']
+                            drf = (_dr if hasattr(_dr,'strftime') else datetime.strptime(str(_dr),'%Y-%m-%d')).strftime('%d/%m')
+                            val = row['valor_estimado'] or 0
+                            val_fmt = f"R$ {val:,.2f}".replace(",","X").replace(".",",").replace("X",".")
+                            dados_doa.append([
+                                str(row['nome_instituicao']).upper()[:35],
+                                str(row['tipo']).replace("DOAÇÃO (","").replace(")",""),
+                                val_fmt
+                            ])
+                        t_doa = Table(dados_doa, colWidths=[8*cm, 4*cm, 4.5*cm])
+                        t_doa.setStyle(TableStyle([
+                            ("BACKGROUND",    (0,0), (-1,0), cor_principal),
+                            ("TEXTCOLOR",     (0,0), (-1,0), colors.white),
+                            ("FONTNAME",      (0,0), (-1,0), "Helvetica-Bold"),
+                            ("FONTSIZE",      (0,0), (-1,-1), 9),
+                            ("ROWBACKGROUNDS",(0,1), (-1,-1), [colors.white, cor_fundo]),
+                            ("GRID",          (0,0), (-1,-1), 0.3, colors.HexColor("#CCCCCC")),
+                            ("ALIGN",         (2,0), (2,-1), "RIGHT"),
+                            ("TOPPADDING",    (0,0), (-1,-1), 5),
+                            ("BOTTOMPADDING", (0,0), (-1,-1), 5),
+                        ]))
+                        story.append(t_doa)
+
+                    # Rodapé
+                    story.append(Spacer(1, 1*cm))
+                    story.append(HRFlowable(width="100%", thickness=0.5, color=cor_cinza))
+                    story.append(Spacer(1, 0.2*cm))
+                    story.append(Paragraph(
+                        f"Gerado em {datetime.now().strftime('%d/%m/%Y às %H:%M')} · Sistema de Gestão DI — Casa Durval Paiva",
+                        st_rodape
+                    ))
+
+                    doc.build(story)
+                    buf.seek(0)
+                    return buf.read()
+
+                pdf_bytes = _gerar_pdf_diretoria(df_relatorio, dt_ini_fmt, dt_fim_fmt)
+                st.download_button(
+                    label="📄 Baixar relatório em PDF",
+                    data=pdf_bytes,
+                    file_name=f"relatorio_di_{data_inicio.strftime('%Y%m')}.pdf",
+                    mime="application/pdf",
+                    use_container_width=True,
+                )
+
             else:
                 st.info("Nenhuma ação estratégica manual ou doação foi registrada neste período.")
 
