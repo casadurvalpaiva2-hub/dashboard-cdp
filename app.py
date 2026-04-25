@@ -177,6 +177,40 @@ if not st.session_state.autenticado:
         st.markdown('<div class="login-footer">© 2026 · Acesso restrito à equipe autorizada</div>', unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
+    # JS: mostra overlay imediatamente no clique em ENTRAR e persiste no rerun
+    st.markdown("""
+    <div id="cdp-loading-overlay" style="
+        display:none; position:fixed; inset:0; z-index:99999;
+        background:linear-gradient(135deg,#0f0f0f 0%,#1a0a0a 50%,#0f0f0f 100%);
+        flex-direction:column; align-items:center; justify-content:center; gap:16px;
+    ">
+        <div style="font-size:12px;letter-spacing:4px;color:#C0392B;font-weight:700;">CASA DURVAL PAIVA</div>
+        <div style="font-size:26px;font-weight:800;color:#fff;letter-spacing:-1px;">Sistema DI</div>
+        <div style="width:36px;height:36px;margin-top:10px;border:3px solid rgba(192,57,43,0.2);
+             border-top-color:#C0392B;border-radius:50%;animation:spin .8s linear infinite;"></div>
+        <style>@keyframes spin{to{transform:rotate(360deg)}}</style>
+    </div>
+    <script>
+    (function() {
+        function attachHandler() {
+            const btns = document.querySelectorAll('button');
+            for (const b of btns) {
+                if (b.innerText.trim() === 'ENTRAR' && !b._cdpBound) {
+                    b._cdpBound = true;
+                    b.addEventListener('click', function() {
+                        const ov = document.getElementById('cdp-loading-overlay');
+                        if (ov) ov.style.display = 'flex';
+                    });
+                }
+            }
+        }
+        attachHandler();
+        const obs = new MutationObserver(attachHandler);
+        obs.observe(document.body, {childList:true, subtree:true});
+    })();
+    </script>
+    """, unsafe_allow_html=True)
+
     st.stop()
 
 # ------------------------------------------------------------
@@ -510,6 +544,20 @@ div[data-testid="stMetricLabel"] p {
 </style>
 """
 st.markdown(CSS_GLOBAL, unsafe_allow_html=True)
+
+# Remove o overlay de loading do login se ainda estiver visível
+st.markdown("""
+<script>
+(function() {
+    function removeOverlay() {
+        const ov = document.getElementById('cdp-loading-overlay');
+        if (ov) { ov.style.opacity='0'; ov.style.transition='opacity .3s'; setTimeout(()=>ov.remove(),300); }
+    }
+    if (document.readyState === 'complete') removeOverlay();
+    else window.addEventListener('load', removeOverlay);
+})();
+</script>
+""", unsafe_allow_html=True)
 
 
 # ============================================================
