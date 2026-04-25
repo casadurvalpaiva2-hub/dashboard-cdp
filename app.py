@@ -2586,52 +2586,58 @@ elif menu == "RELACIONAMENTO":
 st.sidebar.markdown("---")
 st.sidebar.subheader("Extrair dados")
 
-# 1. Download parceiros (CSV rápido — banco agora no Supabase/PostgreSQL)
-@st.cache_data(ttl=120)
-def _csv_parceiros():
-    return run_query("SELECT * FROM Parceiro").to_csv(index=False).encode("utf-8-sig")
+# Backup completo — Excel com uma aba por tabela principal
+@st.cache_data(ttl=300)
+def _gerar_backup_completo():
+    """Exporta todas as tabelas principais em um único arquivo Excel (.xlsx).
+    Fallback para ZIP de CSVs se openpyxl/xlsxwriter não estiverem disponíveis."""
+    tabelas = {
+        "Parceiros":        "SELECT * FROM Parceiro",
+        "Contatos":         "SELECT * FROM Contato_Direto",
+        "Doações":          "SELECT * FROM Doacao",
+        "Relacionamentos":  "SELECT * FROM Registro_Relacionamento",
+        "Demandas":         "SELECT * FROM Demandas_Estrategicas",
+        "Tarefas":          "SELECT * FROM Tarefas_Pendentes",
+        "Captacao_DI":      "SELECT * FROM Registro_Captacao_DI",
+    }
+    dfs = {nome: run_query(sql) for nome, sql in tabelas.items()}
 
-st.sidebar.download_button(
-    label="Baixar parceiros (CSV)",
-    data=_csv_parceiros(),
-    file_name="parceiros.csv",
-    mime="text/csv",
-    use_container_width=True,
-)
-
-# 2. Download em Excel — tenta múltiplos engines; cai pra CSV se Excel não disponível
-@st.cache_data(ttl=60)
-def _gerar_planilha_contatos():
-    """Gera planilha dos contatos. Retorna (data, extensao, mime).
-    Tenta openpyxl, depois xlsxwriter; se nenhum disponível, usa CSV."""
-    df_excel = run_query("SELECT * FROM Contato_Direto")
-    # Tenta openpyxl primeiro (costuma vir por padrão com pandas)
     for engine in ("openpyxl", "xlsxwriter"):
         try:
             output = BytesIO()
             with pd.ExcelWriter(output, engine=engine) as writer:
-                df_excel.to_excel(writer, index=False, sheet_name="Contatos")
+                for nome, df in dfs.items():
+                    df.to_excel(writer, index=False, sheet_name=nome[:31])
             return (
                 output.getvalue(),
                 "xlsx",
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                f"backup_cdp_{datetime.now().strftime('%Y%m%d')}.xlsx",
             )
         except (ImportError, ModuleNotFoundError, ValueError):
             continue
-    # Fallback final: CSV (sempre funciona, sem dependência externa)
+
+    # Fallback: ZIP com um CSV por tabela
+    import zipfile
+    zip_buffer = BytesIO()
+    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+        for nome, df in dfs.items():
+            zf.writestr(f"{nome}.csv", df.to_csv(index=False, encoding="utf-8-sig"))
     return (
-        df_excel.to_csv(index=False).encode("utf-8-sig"),
-        "csv",
-        "text/csv",
+        zip_buffer.getvalue(),
+        "zip",
+        "application/zip",
+        f"backup_cdp_{datetime.now().strftime('%Y%m%d')}.zip",
     )
 
-_planilha_data, _planilha_ext, _planilha_mime = _gerar_planilha_contatos()
+_bk_data, _bk_ext, _bk_mime, _bk_nome = _gerar_backup_completo()
 st.sidebar.download_button(
-    label=f"Baixar contatos ({_planilha_ext.upper()})",
-    data=_planilha_data,
-    file_name=f"contatos.{_planilha_ext}",
-    mime=_planilha_mime,
+    label=f"⬇️ Backup completo ({_bk_ext.upper()})",
+    data=_bk_data,
+    file_name=_bk_nome,
+    mime=_bk_mime,
     use_container_width=True,
+    help="Exporta todas as tabelas do banco em um único arquivo",
 )
 
 st.sidebar.markdown("---")
