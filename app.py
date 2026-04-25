@@ -928,7 +928,7 @@ if menu == "PAINEL GERAL":
         ORDER BY mes_referencia DESC
         LIMIT 1
     """)
-    df_rel_pg = run_query("SELECT Dias_Sem_Contato, Status_Relacionamento FROM View_Relacionamento_Critico")
+    df_rel_pg = run_query("SELECT * FROM View_Relacionamento_Critico")
 
     # ============================================================
     # SELETOR DE ANO
@@ -2344,17 +2344,7 @@ elif menu == "RELACIONAMENTO":
     df_parceiros = run_query("SELECT id_parceiro, nome_instituicao, UPPER(TRIM(status)) as status_limpo FROM Parceiro")
     
     # SQL para View — usa os nomes reais das colunas do banco
-    query_rel = """
-        SELECT 
-            Empresa, 
-            Status_Relacionamento, 
-            Dias_Sem_Contato, 
-            Ultima_Interacao, 
-            Proxima_Acao_Planejada,
-            Situacao
-        FROM View_Relacionamento_Critico
-    """
-    df_rel = run_query(query_rel)
+    df_rel = run_query("SELECT * FROM View_Relacionamento_Critico")
 
     # Buscar última data de retorno agendada
     df_retornos = run_query("SELECT id_parceiro, MAX(proxima_acao_data) as data_retorno FROM Registro_Relacionamento GROUP BY id_parceiro")
