@@ -46,12 +46,21 @@ if not st.session_state.autenticado:
             background: linear-gradient(135deg, #0f0f0f 0%, #1a0a0a 50%, #0f0f0f 100%);
         }
         [data-testid="stHeader"] { background: transparent; }
+        /* Remove padding padrão do Streamlit */
+        [data-testid="stMainBlockContainer"] {
+            padding-top: 0 !important;
+        }
+        .block-container {
+            padding-top: 0 !important;
+            padding-bottom: 0 !important;
+        }
         .login-wrapper {
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            min-height: 85vh;
+            height: 100vh;
+            margin-top: -60px;
         }
         .login-logo {
             font-size: 13px;
