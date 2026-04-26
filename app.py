@@ -753,20 +753,20 @@ st.sidebar.markdown("---")
 
 # ── Navegação — inicialização antecipada para o menu renderizar imediatamente ──
 if "current_page" not in st.session_state:
-    st.session_state.current_page = "PAINEL GERAL"
+    st.session_state.current_page = "Painel Geral"
 if "open_form" not in st.session_state:
     st.session_state.open_form = None
 if "_qa_nonce" not in st.session_state:
     st.session_state._qa_nonce = 0
 
-_opcoes_menu = ["PAINEL GERAL", "PLANO DI 2026", "PARCERIAS", "CONTATOS", "EVENTOS", "AÇÕES", "REGISTRAR DOAÇÃO", "RELACIONAMENTO"]
+_opcoes_menu = ["Painel Geral", "Plano DI 2026", "Parcerias", "Contatos", "Eventos", "Ações", "Registrar Doação", "Relacionamento"]
 
 def _trigger_quick_add(tipo: str):
     """Navega para a página certa e sinaliza abertura de formulário."""
     mapa_menu = {
-        "parceiro": "PARCERIAS",
-        "contato":  "CONTATOS",
-        "doacao":   "REGISTRAR DOAÇÃO",
+        "parceiro": "Parcerias",
+        "contato":  "Contatos",
+        "doacao":   "Registrar Doação",
     }
     st.session_state.current_page = mapa_menu[tipo]
     st.session_state.open_form = tipo
@@ -791,17 +791,40 @@ with st.sidebar:
 
     _idx_atual = _opcoes_menu.index(st.session_state.current_page) if st.session_state.current_page in _opcoes_menu else 0
     _menu_resultado = option_menu(
-        menu_title="MENU",
+        menu_title=None,
         options=_opcoes_menu,
-        icons=["bar-chart-fill", "building", "person-lines-fill", "calendar-event", "check2-square", "cash-coin", "heart-fill"],
-        menu_icon="cast",
+        icons=[
+            "speedometer2",       # Painel Geral
+            "graph-up-arrow",     # Plano DI 2026
+            "buildings",          # Parcerias
+            "person-lines-fill",  # Contatos
+            "calendar3",          # Eventos
+            "check2-all",         # Ações
+            "plus-circle",        # Registrar Doação
+            "diagram-3",          # Relacionamento
+        ],
         default_index=_idx_atual,
         key="menu_nav_principal",
         styles={
-            "container":         {"padding": "5!important", "background-color": "transparent"},
-            "icon":              {"color": "#E31D24", "font-size": "18px"},
-            "nav-link":          {"font-size": "14px", "text-align": "left", "margin": "0px"},
-            "nav-link-selected": {"background-color": "#E31D24", "color": "white"},
+            "container":         {"padding": "4px 0", "background-color": "transparent"},
+            "icon":              {"color": "rgba(255,255,255,0.35)", "font-size": "15px"},
+            "nav-link":          {
+                "font-size": "13px",
+                "font-weight": "500",
+                "text-align": "left",
+                "padding": "9px 16px",
+                "margin": "1px 0",
+                "border-radius": "6px",
+                "color": "rgba(255,255,255,0.65)",
+                "--hover-color": "rgba(227,29,36,0.08)",
+            },
+            "nav-link-selected": {
+                "background-color": "rgba(227,29,36,0.12)",
+                "color": "#E31D24",
+                "font-weight": "600",
+                "border-left": "3px solid #E31D24",
+                "border-radius": "0 6px 6px 0",
+            },
         }
     )
     if _menu_resultado and _menu_resultado != st.session_state.current_page:
@@ -1158,7 +1181,7 @@ if "schema_ok" not in st.session_state:
 
 
 # --- 1. DASHBOARD GERAL ---
-if menu == "PAINEL GERAL":
+if menu == "Painel Geral":
     page_header("Painel geral", "Visão consolidada do Desenvolvimento Institucional.")
 
     # ============================================================
@@ -1532,7 +1555,7 @@ if menu == "PAINEL GERAL":
                             st.caption(f"… e mais {_n - 15} registros. Exporte a lista completa pelo relatório PDF.")
 
 
-elif menu == "PLANO DI 2026":
+elif menu == "Plano DI 2026":
     page_header("Plano de Ação DI 2026", "Metas × Realizado por fonte de captação — monitoramento financeiro.")
 
     eh_gerente_plano = st.session_state.user_data["perfil"] == "gerencia"
@@ -1717,7 +1740,7 @@ elif menu == "PLANO DI 2026":
         st.info("Nenhum lançamento registrado ainda. Use o formulário acima para registrar os realizados mensais.")
 
 
-elif menu == "AÇÕES":
+elif menu == "Ações":
     user = st.session_state.user_data
     eh_gerente = user["perfil"] == "gerencia"
     meu_setor = user["setor"]
@@ -2110,7 +2133,7 @@ elif menu == "AÇÕES":
                         st.warning("Preencha a descrição.")
 
 
-elif menu == "EVENTOS":
+elif menu == "Eventos":
     # datetime, timedelta e pandas já importados no topo
     # CSS (.glass-card e .guest-item) já está no CSS_GLOBAL
 
@@ -2300,7 +2323,7 @@ elif menu == "EVENTOS":
                 st.rerun()
 
 # --- 2. PARCEIROS E PROJETOS ---
-elif menu == "PARCERIAS":
+elif menu == "Parcerias":
     page_header("Gestão de parceiros e projetos", "Cadastro, edição e acompanhamento de parceiros e projetos ativos.")
     tab1, tab2, tab3, tab4 = st.tabs(["Parceiros", "Projetos", "Funil de conversão", "Importar em lote"])
     
@@ -2672,7 +2695,7 @@ elif menu == "PARCERIAS":
                 st.error(f"Erro ao ler o arquivo: {e}")
 
 # --- 3. REGISTRAR DOAÇÃO ---
-elif menu == "REGISTRAR DOAÇÃO":
+elif menu == "Registrar Doação":
     page_header("Entrada de recursos", "Registro de doações recebidas e histórico editável.")
 
     # Se veio do botão "+ Novo > Doação", mostra aviso
@@ -2799,7 +2822,7 @@ elif menu == "REGISTRAR DOAÇÃO":
     else:
         st.info("Nenhum lançamento encontrado para os critérios selecionados.")
 
-elif menu == "CONTATOS":
+elif menu == "Contatos":
     page_header("Agenda", "Contatos diretos de parceiros, com acesso rápido a WhatsApp e e-mail.")
     st.markdown("Gerencie sua rede de contatos, parceiros e tomadores de decisão.")
 
@@ -2958,7 +2981,7 @@ elif menu == "CONTATOS":
             st.info("Não há contatos para gerenciar.")
 
 # --- COLOQUE ISSO NO FINAL DO ARQUIVO ---
-elif menu == "RELACIONAMENTO":
+elif menu == "Relacionamento":
     # datetime, timedelta e pandas já importados no topo
     import plotly.graph_objects as go
 
