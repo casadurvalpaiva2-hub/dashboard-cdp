@@ -457,31 +457,70 @@ div[data-baseweb="select"] {
 }
 
 /* ============================================================
-   SIDEBAR — botões de navegação (fallback CSS, JS faz o resto)
+   SIDEBAR — botões nativos ocultos (nav visual injetado via JS)
    ============================================================ */
-section[data-testid="stSidebar"] [data-testid^="stBaseButton"] {
-    background: transparent !important;
-    border: none !important;
-    border-left: 3px solid transparent !important;
-    border-radius: 0 !important;
-    box-shadow: none !important;
-    color: rgba(255,255,255,0.55) !important;
-    font-size: 13.5px !important;
-    font-weight: 400 !important;
-    text-align: left !important;
-    justify-content: flex-start !important;
-    padding: 9px 16px !important;
-    transition: all 0.15s !important;
+/* Esconde os botões nativos que servem apenas como triggers */
+.cdp-nav-hidden {
+    display: none !important;
+    position: absolute !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+    width: 0 !important;
+    height: 0 !important;
+    overflow: hidden !important;
 }
-section[data-testid="stSidebar"] [data-testid^="stBaseButton"]:hover {
-    background: rgba(255,255,255,0.06) !important;
-    color: rgba(255,255,255,0.95) !important;
-    border-left-color: rgba(255,255,255,0.20) !important;
+/* Nav visual injetado */
+.cdp-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 0 10px;
+    margin-top: 4px;
 }
-/* Remove gap entre itens de nav */
-section[data-testid="stSidebar"] [data-testid="stButton"] {
-    margin: 0 !important;
-    padding: 0 !important;
+.cdp-nav-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    border-left: 3px solid transparent;
+    cursor: pointer;
+    transition: background 0.12s, color 0.12s, border-color 0.12s;
+    font-size: 13.5px;
+    font-weight: 400;
+    color: rgba(255,255,255,0.50);
+    letter-spacing: 0.1px;
+    user-select: none;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.cdp-nav-item:hover {
+    background: rgba(255,255,255,0.06);
+    color: rgba(255,255,255,0.85);
+    border-left-color: rgba(255,255,255,0.15);
+}
+.cdp-nav-item.active {
+    background: rgba(55,138,221,0.13);
+    border-left-color: #378ADD;
+    color: rgba(255,255,255,0.95);
+    font-weight: 600;
+}
+.cdp-nav-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+    opacity: 0.4;
+    flex-shrink: 0;
+    transition: opacity 0.12s;
+}
+.cdp-nav-item.active .cdp-nav-dot {
+    opacity: 1;
+    background: #378ADD;
+}
+.cdp-nav-item:hover .cdp-nav-dot {
+    opacity: 0.7;
 }
 
 /* Scrollbar discreta */
@@ -942,45 +981,80 @@ with st.sidebar:
             st.session_state.current_page = _page
             st.rerun()
 
-    # JS — marca o botão ativo pela página atual e remove aparência padrão
+    # JS — substitui botões nativos por nav visual elegante
     _active_page = st.session_state.current_page
+    _nav_labels = [label for label, _ in _nav_items]
+    _nav_labels_js = str(_nav_labels).replace("'", '"')
     st.markdown(f"""
     <script>
     (function() {{
-        function styleNav() {{
-            const sidebar = window.parent.document.querySelector('[data-testid="stSidebar"]');
+        const PAGES   = {_nav_labels_js};
+        const ACTIVE  = {repr(_active_page)};
+        const NAV_ID  = 'cdp-nav-root';
+
+        function buildNav() {{
+            const doc     = window.parent.document;
+            const sidebar = doc.querySelector('[data-testid="stSidebar"]');
             if (!sidebar) return;
-            const btns = sidebar.querySelectorAll('[data-testid^="stBaseButton"]');
-            btns.forEach(btn => {{
-                const txt = btn.innerText.trim();
-                btn.style.cssText = [
-                    'background:transparent',
-                    'border:none',
-                    'border-left:3px solid transparent',
-                    'border-radius:0',
-                    'box-shadow:none',
-                    'color:rgba(255,255,255,0.55)',
-                    'font-size:13.5px',
-                    'font-weight:400',
-                    'text-align:left',
-                    'justify-content:flex-start',
-                    'padding:9px 16px',
-                    'width:100%',
-                    'transition:all 0.15s',
-                ].join('!important;') + '!important';
-                if (txt === '{_active_page}') {{
-                    btn.style.setProperty('background','rgba(55,138,221,0.12)','important');
-                    btn.style.setProperty('border-left','3px solid #378ADD','important');
-                    btn.style.setProperty('color','rgba(255,255,255,0.95)','important');
-                    btn.style.setProperty('font-weight','600','important');
-                }}
+
+            /* Encontra todos os botões nativos de nav */
+            const allBtns = Array.from(sidebar.querySelectorAll('[data-testid^="stBaseButton"]'));
+            const navBtns = allBtns.filter(b => PAGES.includes(b.innerText.trim()));
+            if (navBtns.length === 0) return;
+
+            /* Remove nav anterior se já existir (re-render) */
+            const old = doc.getElementById(NAV_ID);
+            if (old) old.remove();
+
+            /* Oculta os botões nativos */
+            navBtns.forEach(b => {{
+                const wrapper = b.closest('[data-testid="stButton"]') || b.parentElement;
+                wrapper.style.cssText = 'display:none!important;position:absolute!important;visibility:hidden!important;pointer-events:none!important;width:0!important;height:0!important;overflow:hidden!important';
             }});
+
+            /* Cria o nav visual */
+            const nav = doc.createElement('div');
+            nav.id = NAV_ID;
+            nav.className = 'cdp-nav';
+
+            PAGES.forEach(label => {{
+                const origBtn = navBtns.find(b => b.innerText.trim() === label);
+                if (!origBtn) return;
+
+                const item = doc.createElement('div');
+                item.className = 'cdp-nav-item' + (label === ACTIVE ? ' active' : '');
+
+                const dot  = doc.createElement('span');
+                dot.className = 'cdp-nav-dot';
+
+                const text = doc.createElement('span');
+                text.textContent = label;
+
+                item.appendChild(dot);
+                item.appendChild(text);
+
+                item.addEventListener('click', () => {{
+                    /* Clica no botão nativo do Streamlit */
+                    origBtn.click();
+                }});
+
+                nav.appendChild(item);
+            }});
+
+            /* Insere o nav logo antes do primeiro botão oculto */
+            const firstWrapper = navBtns[0].closest('[data-testid="stButton"]') || navBtns[0].parentElement;
+            firstWrapper.parentElement.insertBefore(nav, firstWrapper);
         }}
-        styleNav();
-        setTimeout(styleNav, 400);
-        new MutationObserver(styleNav).observe(
-            window.parent.document.body, {{childList:true, subtree:true}}
-        );
+
+        buildNav();
+        setTimeout(buildNav, 300);
+        setTimeout(buildNav, 800);
+
+        /* Observer para re-renderizações do Streamlit */
+        const obs = new MutationObserver(() => {{
+            if (!window.parent.document.getElementById(NAV_ID)) buildNav();
+        }});
+        obs.observe(window.parent.document.body, {{childList: true, subtree: true}});
     }})();
     </script>
     """, unsafe_allow_html=True)
