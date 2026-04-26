@@ -695,7 +695,7 @@ def _db_url() -> str:
 def _pool() -> pg_pool.ThreadedConnectionPool:
     """Pool de conexões (reutilizado entre reruns do Streamlit)."""
     url = _db_url()
-    return pg_pool.ThreadedConnectionPool(1, 5, url)
+    return pg_pool.ThreadedConnectionPool(2, 10, url)
 
 
 # ------------------------------------------------------------
@@ -717,9 +717,20 @@ def run_query(query, params=()):
 
 @st.cache_data(ttl=60)
 def run_query_cached(query, params=()):
-    """Versão cacheada de run_query — para leituras que podem ter 60s de delay.
-    Use em consultas pesadas que não precisam ser tempo real (relatórios, listas, views)."""
+    """Versão cacheada de run_query — TTL 60s. Para listas e views que mudam com frequência."""
     return run_query(query, params)
+
+
+@st.cache_data(ttl=300)
+def run_query_slow(query, params=()):
+    """Versão cacheada com TTL 5min. Para dados de referência e qualidade que mudam raramente."""
+    return run_query(query, params)
+
+
+@st.cache_data(ttl=120)
+def _parceiros_lista():
+    """Lista de parceiros para dropdowns — cache 2min, reutilizada em vários pontos do app."""
+    return _parceiros_lista()
 
 
 def run_exec(query, params=()):
@@ -1086,7 +1097,7 @@ if menu == "PAINEL GERAL":
     # ============================================================
     # BUSCA DE DADOS TRANSVERSAL (com cache para reduzir latência)
     # ============================================================
-    df_doacoes      = run_query_cached("SELECT * FROM Doacao")
+    df_doacoes      = run_query_cached("SELECT data_doacao, valor_estimado, tipo_doacao, origem_captacao, id_parceiro FROM Doacao")
     df_parceiros_pg = run_query_cached("SELECT id_parceiro, nome_instituicao, status, data_adesao FROM Parceiro")
     df_acoes_pg     = run_query_cached("SELECT fonte, situacao FROM View_Acoes_Unificadas")
     df_eventos_pg   = run_query_cached("""
@@ -1317,7 +1328,7 @@ if menu == "PAINEL GERAL":
         # ============================================================
         section("Qualidade dos dados")
 
-        df_qd_sem_contato = run_query("""
+        df_qd_sem_contato = run_query_slow("""
             SELECT p.nome_instituicao AS "Parceiro"
             FROM Parceiro p
             WHERE UPPER(p.status) LIKE '%ATIVO%'
@@ -1325,7 +1336,7 @@ if menu == "PAINEL GERAL":
             ORDER BY p.nome_instituicao
         """)
 
-        df_qd_sem_doacao = run_query("""
+        df_qd_sem_doacao = run_query_slow("""
             SELECT p.nome_instituicao AS "Parceiro"
             FROM Parceiro p
             WHERE UPPER(p.status) LIKE '%ATIVO%'
@@ -1337,7 +1348,7 @@ if menu == "PAINEL GERAL":
             ORDER BY p.nome_instituicao
         """)
 
-        df_qd_sem_interacao = run_query("""
+        df_qd_sem_interacao = run_query_slow("""
             SELECT p.nome_instituicao AS "Parceiro"
             FROM Parceiro p
             WHERE UPPER(p.status) LIKE '%ATIVO%'
@@ -1345,7 +1356,7 @@ if menu == "PAINEL GERAL":
             ORDER BY p.nome_instituicao
         """)
 
-        df_qd_sem_tipo = run_query("""
+        df_qd_sem_tipo = run_query_slow("""
             SELECT p.nome_instituicao AS "Parceiro",
                    TO_CHAR(d.data_doacao, 'DD/MM/YYYY') AS "Data",
                    d.valor_estimado AS "Valor"
@@ -1999,7 +2010,7 @@ elif menu == "AÇÕES":
         st.markdown("---")
         with st.expander("➕ Criar nova tarefa manual"):
             with st.form("form_nova_tarefa", clear_on_submit=True):
-                df_parceiros_form = run_query("SELECT id_parceiro, nome_instituicao FROM Parceiro ORDER BY nome_instituicao")
+                df_parceiros_form = _parceiros_lista()
                 p_opcoes = ["-- Sem parceiro --"] + df_parceiros_form['nome_instituicao'].tolist()
                 nomes_cdp = ["-- A definir --"] + sorted([c["nome"] for c in CONTAS.values()])
 
@@ -2604,7 +2615,7 @@ elif menu == "REGISTRAR DOAÇÃO":
         st.info("✨ Registrando nova doação — preencha os campos abaixo.", icon="💰")
 
     # 1. Buscamos os nomes para o usuário escolher
-    df_p = run_query("SELECT id_parceiro, nome_instituicao FROM Parceiro ORDER BY nome_instituicao")
+    df_p = _parceiros_lista()
 
     if df_p.empty:
         empty_state("🏢", "Nenhum parceiro cadastrado", "Cadastre um parceiro antes de registrar doações.")
@@ -2740,7 +2751,7 @@ elif menu == "CONTATOS":
         st.session_state.open_form = None  # consome a flag
         st.info("✨ Cadastrando novo contato — preencha os campos abaixo.", icon="👤")
         with st.container(border=True):
-            df_p_qa = run_query("SELECT id_parceiro, nome_instituicao FROM Parceiro ORDER BY nome_instituicao")
+            df_p_qa = _parceiros_lista()
             if df_p_qa.empty:
                 st.warning("Cadastre um parceiro antes de adicionar contatos.")
                 if st.button("🏢 Cadastrar parceiro agora", type="primary", key="qa_go_parceiro"):
@@ -2829,7 +2840,7 @@ elif menu == "CONTATOS":
     # ==========================================
     with tab_novo:
         section("Cadastrar contato")
-        df_p_contatos = run_query("SELECT id_parceiro, nome_instituicao FROM Parceiro ORDER BY nome_instituicao")
+        df_p_contatos = _parceiros_lista()
 
         if not df_p_contatos.empty:
             with st.form("form_novo_contato", clear_on_submit=True, border=False):
@@ -2885,13 +2896,13 @@ elif menu == "RELACIONAMENTO":
     import plotly.graph_objects as go
 
     # 1. BUSCA DE DADOS (Blindagem de Nomes e Colunas)
-    df_parceiros = run_query("SELECT id_parceiro, nome_instituicao, UPPER(TRIM(status)) as status_limpo FROM Parceiro")
-    
+    df_parceiros = run_query_cached("SELECT id_parceiro, nome_instituicao, UPPER(TRIM(status)) as status_limpo FROM Parceiro")
+
     # SQL para View — usa os nomes reais das colunas do banco
-    df_rel = run_query("SELECT * FROM View_Relacionamento_Critico")
+    df_rel = run_query_cached("SELECT * FROM View_Relacionamento_Critico")
 
     # Buscar última data de retorno agendada
-    df_retornos = run_query("SELECT id_parceiro, MAX(proxima_acao_data) as data_retorno FROM Registro_Relacionamento GROUP BY id_parceiro")
+    df_retornos = run_query_cached("SELECT id_parceiro, MAX(proxima_acao_data) as data_retorno FROM Registro_Relacionamento GROUP BY id_parceiro")
 
     # CSS (.glass-card, .stat-value, .suggestion-box, .date-badge) já está no CSS_GLOBAL
 
