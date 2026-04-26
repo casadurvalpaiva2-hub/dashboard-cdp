@@ -106,6 +106,38 @@ def _perfil():
         return "operacional"
 def _is_gerente(): return _perfil() == "gerencia"
 
+def _verificar_senha(login: str, senha_digitada: str) -> bool:
+    """Verifica senha: prioridade DB > CONTAS dict. Seguro a falhas."""
+    if login not in CONTAS:
+        return False
+    # Tenta checar tabela Usuario_Senhas no banco
+    try:
+        _url = os.environ.get("DATABASE_URL", "")
+        if not _url:
+            try:
+                _url = st.secrets["DATABASE_URL"]
+            except Exception:
+                _url = ""
+        if _url.startswith("postgres://"):
+            _url = _url.replace("postgres://", "postgresql://", 1)
+        if _url:
+            import psycopg2 as _pg2
+            _conn = _pg2.connect(_url)
+            with _conn.cursor() as _cur:
+                _cur.execute(
+                    "SELECT senha FROM Usuario_Senhas WHERE login = %s",
+                    (login,)
+                )
+                _row = _cur.fetchone()
+            _conn.close()
+            if _row:
+                return _row[0] == senha_digitada
+    except Exception:
+        pass
+    # Fallback: CONTAS dict
+    return CONTAS[login]["senha"] == senha_digitada
+
+
 if "autenticado" not in st.session_state:
     st.session_state.autenticado = False
     st.session_state.user_data = None
@@ -211,7 +243,7 @@ if not st.session_state.autenticado:
             pass_login = st.text_input("Senha",   placeholder="sua senha",   label_visibility="collapsed", type="password")
             st.markdown("<br>", unsafe_allow_html=True)
             if st.form_submit_button("ENTRAR", use_container_width=True, type="primary"):
-                if user_login in CONTAS and CONTAS[user_login]["senha"] == pass_login:
+                if user_login in CONTAS and _verificar_senha(user_login, pass_login):
                     st.session_state.autenticado = True
                     st.session_state.user_data = CONTAS[user_login]
                     # Tela de transição enquanto o app carrega
@@ -873,7 +905,8 @@ st.sidebar.markdown(
     unsafe_allow_html=True,
 )
 
-if st.sidebar.button("Sair", key="logout_btn", use_container_width=True):
+if st.sidebar.button("↩ Sair", key="logout_btn", use_container_width=False,
+                     help="Encerrar sessão", type="secondary"):
     st.session_state.autenticado = False
     st.session_state.user_data = None
     st.rerun()
@@ -889,7 +922,7 @@ if "_qa_nonce" not in st.session_state:
     st.session_state._qa_nonce = 0
 
 _menus_gerencia = ["Painel Geral", "Plano DI 2026", "Parcerias", "Contatos", "Eventos", "Ações", "Entrada de Recursos", "Relacionamento"]
-_menus_operacional = ["Painel Geral", "Parcerias", "Contatos", "Eventos", "Ações", "Entrada de Recursos", "Relacionamento"]
+_menus_operacional = ["Painel Geral", "Plano DI 2026", "Parcerias", "Contatos", "Eventos", "Ações", "Entrada de Recursos", "Relacionamento"]
 _opcoes_menu = _menus_gerencia if _is_gerente() else _menus_operacional
 
 def _trigger_quick_add(tipo: str):
@@ -919,11 +952,8 @@ with st.sidebar:
     color:rgba(255,255,255,0.25);font-weight:600;margin:20px 0 2px 4px;">Navegação</p>""",
     unsafe_allow_html=True)
 
-    _opcoes_nav = (["Painel Geral", "Plano DI 2026", "Parcerias", "Contatos",
-                    "Eventos", "Ações", "Entrada de Recursos", "Relacionamento"]
-                   if _is_gerente() else
-                   ["Painel Geral", "Parcerias", "Contatos",
-                    "Eventos", "Ações", "Entrada de Recursos", "Relacionamento"])
+    _opcoes_nav = ["Painel Geral", "Plano DI 2026", "Parcerias", "Contatos",
+                   "Eventos", "Ações", "Entrada de Recursos", "Relacionamento"]
     _nav_items = [(p, p) for p in _opcoes_nav]
 
     _nav_idx = _opcoes_nav.index(st.session_state.current_page) \
@@ -1325,7 +1355,7 @@ if menu == "Painel Geral":
         # ════════════════════════════════════════════════════════════════════════
         # BLOCO 0 — VELOCÍMETRO DO PLANO DI 2026
         # ════════════════════════════════════════════════════════════════════════
-        if not df_prog_plano.empty and ano_sel == 2026 and _is_gerente():
+        if not df_prog_plano.empty and ano_sel == 2026:
             section("Plano DI 2026 — progresso geral")
             meta_total    = float(df_prog_plano['meta_2026'].sum())
             captado_total = float(df_prog_plano['captado_2026'].sum())
@@ -1816,9 +1846,9 @@ elif menu == "Ações":
     page_header("Centro de ações", "Tudo que está pendente — operação interna e relacionamento.")
 
     if _is_gerente():
-        tab_mim, tab_op, tab_rel, tab_users = st.tabs(["Pra mim", "Planejamento operacional", "Relacionamento", "👥 Usuários"])
+        tab_mim, tab_op, tab_rel, tab_senha, tab_users = st.tabs(["Pra mim", "Planejamento operacional", "Relacionamento", "🔑 Minha Senha", "👥 Usuários"])
     else:
-        tab_mim, tab_op, tab_rel = st.tabs(["Pra mim", "Planejamento operacional", "Relacionamento"])
+        tab_mim, tab_op, tab_rel, tab_senha = st.tabs(["Pra mim", "Planejamento operacional", "Relacionamento", "🔑 Minha Senha"])
         tab_users = None
 
     # ========== ABA 1: PRA MIM (inbox unificado) ==========
@@ -2061,7 +2091,7 @@ elif menu == "Ações":
         if not eh_gerente:
             sql_stats += f" AND setor = '{meu_setor}'"
     
-        sql_stats += " GROUP BY MesAno ORDER BY data_ultima_conclusao DESC LIMIT 6"
+        sql_stats += " GROUP BY TO_CHAR(data_ultima_conclusao, 'MM/YYYY') ORDER BY MIN(data_ultima_conclusao) DESC LIMIT 6"
     
         df_stats = run_query(sql_stats)
     
@@ -2204,7 +2234,69 @@ elif menu == "Ações":
                         st.warning("Preencha a descrição.")
 
 
-    # ── Aba Usuários (somente gerência) ──────────────────────────────────────
+    # ── Aba Minha Senha (todos os usuários) ─────────────────────────────────
+    with tab_senha:
+        section("Alterar minha senha")
+
+        _login_atual = None
+        for _k, _v in CONTAS.items():
+            if _v.get("nome") == _ud.get("nome"):
+                _login_atual = _k
+                break
+
+        # Garante tabela de senhas no banco
+        run_exec("""
+            CREATE TABLE IF NOT EXISTS Usuario_Senhas (
+                login TEXT PRIMARY KEY,
+                senha TEXT NOT NULL
+            )
+        """)
+
+        with st.form("form_troca_senha", clear_on_submit=True):
+            st.markdown("**Senha atual**")
+            _senha_atual_input = st.text_input("Senha atual", type="password",
+                                               label_visibility="collapsed",
+                                               placeholder="Digite sua senha atual")
+            st.markdown("**Nova senha**")
+            _nova_senha = st.text_input("Nova senha", type="password",
+                                        label_visibility="collapsed",
+                                        placeholder="Mínimo 6 caracteres")
+            _confirma_senha = st.text_input("Confirmar nova senha", type="password",
+                                            label_visibility="collapsed",
+                                            placeholder="Repita a nova senha")
+            _btn_salvar = st.form_submit_button("Salvar nova senha",
+                                                use_container_width=True, type="primary")
+
+        if _btn_salvar:
+            # Verificar senha atual (DB tem prioridade, fallback para CONTAS)
+            _df_db_senha = run_query(
+                "SELECT senha FROM Usuario_Senhas WHERE login = %s",
+                (_login_atual,)
+            )
+            _senha_correta = (
+                _df_db_senha.iloc[0]["senha"]
+                if not _df_db_senha.empty
+                else CONTAS.get(_login_atual, {}).get("senha", "")
+            )
+
+            if not _senha_atual_input:
+                st.error("Informe sua senha atual.")
+            elif _senha_atual_input != _senha_correta:
+                st.error("Senha atual incorreta.")
+            elif len(_nova_senha) < 6:
+                st.error("A nova senha deve ter pelo menos 6 caracteres.")
+            elif _nova_senha != _confirma_senha:
+                st.error("As senhas não conferem.")
+            else:
+                run_exec(
+                    """INSERT INTO Usuario_Senhas (login, senha)
+                       VALUES (%s, %s)
+                       ON CONFLICT (login) DO UPDATE SET senha = EXCLUDED.senha""",
+                    (_login_atual, _nova_senha)
+                )
+                st.success("✅ Senha alterada com sucesso!")
+
+        # ── Aba Usuários (somente gerência) ──────────────────────────────────────
     if tab_users is not None:
         with tab_users:
             section("Gerenciar usuários do sistema")
