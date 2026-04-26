@@ -359,6 +359,34 @@ div[data-baseweb="select"] {
     border-color: rgba(255,255,255,0.10) !important;
 }
 
+/* ============================================================
+   SIDEBAR — botões de navegação (fallback CSS, JS faz o resto)
+   ============================================================ */
+section[data-testid="stSidebar"] [data-testid^="stBaseButton"] {
+    background: transparent !important;
+    border: none !important;
+    border-left: 3px solid transparent !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    color: rgba(255,255,255,0.55) !important;
+    font-size: 13.5px !important;
+    font-weight: 400 !important;
+    text-align: left !important;
+    justify-content: flex-start !important;
+    padding: 9px 16px !important;
+    transition: all 0.15s !important;
+}
+section[data-testid="stSidebar"] [data-testid^="stBaseButton"]:hover {
+    background: rgba(227,29,36,0.07) !important;
+    color: rgba(255,255,255,0.90) !important;
+    border-left-color: rgba(227,29,36,0.3) !important;
+}
+/* Remove gap entre itens de nav */
+section[data-testid="stSidebar"] [data-testid="stButton"] {
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
 /* Scrollbar discreta */
 ::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
@@ -772,10 +800,9 @@ def _trigger_quick_add(tipo: str):
 
 with st.sidebar:
     # ── Atalho rápido ──────────────────────────────────────────
-    st.markdown("""
-    <p style="font-size:10px;letter-spacing:1.8px;text-transform:uppercase;
-    color:rgba(255,255,255,0.25);font-weight:600;margin:8px 0 6px 4px;">
-    Acesso rápido</p>""", unsafe_allow_html=True)
+    st.markdown("""<p style="font-size:10px;letter-spacing:1.8px;text-transform:uppercase;
+    color:rgba(255,255,255,0.25);font-weight:600;margin:8px 0 6px 4px;">Acesso rápido</p>""",
+    unsafe_allow_html=True)
     _opcoes_add = {"Criar novo...": None, "Parceiro": "parceiro", "Contato": "contato", "Doação": "doacao"}
     _qa_key = f"sel_quick_add_{st.session_state._qa_nonce}"
     _escolha = st.selectbox("Atalho", options=list(_opcoes_add.keys()), index=0, key=_qa_key, label_visibility="collapsed")
@@ -784,10 +811,9 @@ with st.sidebar:
         st.session_state._qa_nonce += 1
 
     # ── Navegação principal ────────────────────────────────────
-    st.markdown("""
-    <p style="font-size:10px;letter-spacing:1.8px;text-transform:uppercase;
-    color:rgba(255,255,255,0.25);font-weight:600;margin:16px 0 4px 4px;">
-    Navegação</p>""", unsafe_allow_html=True)
+    st.markdown("""<p style="font-size:10px;letter-spacing:1.8px;text-transform:uppercase;
+    color:rgba(255,255,255,0.25);font-weight:600;margin:20px 0 4px 4px;">Navegação</p>""",
+    unsafe_allow_html=True)
 
     _nav_items = [
         ("Painel Geral",     "Painel Geral"),
@@ -800,61 +826,51 @@ with st.sidebar:
         ("Relacionamento",   "Relacionamento"),
     ]
 
-    # Monta toda a nav como HTML puro — sem depender de botões Streamlit
-    _nav_html = ""
     for _label, _page in _nav_items:
-        _is_active = st.session_state.current_page == _page
-        if _is_active:
-            _style = (
-                "background:rgba(227,29,36,0.10);"
-                "border-left:3px solid #E31D24;"
-                "color:#E31D24;"
-                "font-weight:600;"
-                "cursor:default;"
-            )
-        else:
-            _style = (
-                "border-left:3px solid transparent;"
-                "color:rgba(255,255,255,0.55);"
-                "cursor:pointer;"
-            )
-        _nav_html += (
-            f'<div style="padding:9px 16px;font-size:13.5px;'
-            f'letter-spacing:0.1px;transition:color 0.15s;{_style}">'
-            f'{_label}</div>'
-        )
-    st.markdown(_nav_html, unsafe_allow_html=True)
-
-    # Botões invisíveis fora do fluxo visual — apenas para capturar cliques
-    st.markdown('<div style="display:none">', unsafe_allow_html=True)
-    for _label, _page in _nav_items:
-        if st.button(_label, key=f"nav_{_page}"):
+        if st.button(_label, key=f"nav_{_page}", use_container_width=True):
             st.session_state.current_page = _page
             st.rerun()
-    st.markdown('</div>', unsafe_allow_html=True)
 
-    # Overlay clicável sobre cada item — JS mapeia cliques para botões ocultos
-    st.markdown("""
+    # JS — marca o botão ativo pela página atual e remove aparência padrão
+    _active_page = st.session_state.current_page
+    st.markdown(f"""
     <script>
-    (function() {
-        function bindNav() {
-            const items = window.parent.document.querySelectorAll(
-                '[data-testid="stSidebar"] div[style*="padding:9px 16px"]'
-            );
-            items.forEach((el, i) => {
-                el.style.userSelect = 'none';
-                el.onclick = () => {
-                    const btns = window.parent.document.querySelectorAll(
-                        '[data-testid="stSidebar"] div[style*="display:none"] button'
-                    );
-                    if (btns[i]) btns[i].click();
-                };
-            });
-        }
-        setTimeout(bindNav, 300);
-        const obs = new MutationObserver(() => setTimeout(bindNav, 100));
-        obs.observe(window.parent.document.body, {childList:true, subtree:true});
-    })();
+    (function() {{
+        function styleNav() {{
+            const sidebar = window.parent.document.querySelector('[data-testid="stSidebar"]');
+            if (!sidebar) return;
+            const btns = sidebar.querySelectorAll('[data-testid^="stBaseButton"]');
+            btns.forEach(btn => {{
+                const txt = btn.innerText.trim();
+                btn.style.cssText = [
+                    'background:transparent',
+                    'border:none',
+                    'border-left:3px solid transparent',
+                    'border-radius:0',
+                    'box-shadow:none',
+                    'color:rgba(255,255,255,0.55)',
+                    'font-size:13.5px',
+                    'font-weight:400',
+                    'text-align:left',
+                    'justify-content:flex-start',
+                    'padding:9px 16px',
+                    'width:100%',
+                    'transition:all 0.15s',
+                ].join('!important;') + '!important';
+                if (txt === '{_active_page}') {{
+                    btn.style.setProperty('background','rgba(227,29,36,0.10)','important');
+                    btn.style.setProperty('border-left','3px solid #E31D24','important');
+                    btn.style.setProperty('color','#E31D24','important');
+                    btn.style.setProperty('font-weight','600','important');
+                }}
+            }});
+        }}
+        styleNav();
+        setTimeout(styleNav, 400);
+        new MutationObserver(styleNav).observe(
+            window.parent.document.body, {{childList:true, subtree:true}}
+        );
+    }})();
     </script>
     """, unsafe_allow_html=True)
 
