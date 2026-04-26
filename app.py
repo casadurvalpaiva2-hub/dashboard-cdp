@@ -17,9 +17,9 @@ from psycopg2 import pool as pg_pool
 import streamlit as st
 
 
-# ------------------------------------------------------------
+# -----------------------------------------------------------
 #  HELPERS GLOBAIS
-# ------------------------------------------------------------
+# -----------------------------------------------------------
 def _chart_layout(height=240, margin=None):
     """Layout padrão para gráficos Plotly — tema escuro integrado ao app."""
     return dict(
