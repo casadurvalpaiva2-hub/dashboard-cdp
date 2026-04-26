@@ -715,22 +715,22 @@ def run_query(query, params=()):
         pool.putconn(conn)
 
 
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=60, show_spinner=False)
 def run_query_cached(query, params=()):
     """Versão cacheada de run_query — TTL 60s. Para listas e views que mudam com frequência."""
     return run_query(query, params)
 
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=300, show_spinner=False)
 def run_query_slow(query, params=()):
     """Versão cacheada com TTL 5min. Para dados de referência e qualidade que mudam raramente."""
     return run_query(query, params)
 
 
-@st.cache_data(ttl=120)
+@st.cache_data(ttl=120, show_spinner=False)
 def _parceiros_lista():
     """Lista de parceiros para dropdowns — cache 2min, reutilizada em vários pontos do app."""
-    return _parceiros_lista()
+    return run_query("SELECT id_parceiro, nome_instituicao FROM Parceiro ORDER BY nome_instituicao")
 
 
 def run_exec(query, params=()):
@@ -3295,7 +3295,7 @@ st.sidebar.markdown("---")
 st.sidebar.subheader("Extrair dados")
 
 # Backup completo — Excel com uma aba por tabela principal
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=300, show_spinner=False)
 def _gerar_backup_completo():
     """Exporta todas as tabelas principais em um único arquivo Excel (.xlsx).
     Fallback para ZIP de CSVs se openpyxl/xlsxwriter não estiverem disponíveis."""
