@@ -92,6 +92,9 @@ CONTAS = {
     "gerencia": {"nome": "Helder Coutinho", "setor": "GERÊNCIA",          "senha": "Hc!24601","perfil": "gerencia"},
 }
 
+def _perfil(): return (st.session_state.user_data or {}).get("perfil", "operacional")
+def _is_gerente(): return _perfil() == "gerencia"
+
 if "autenticado" not in st.session_state:
     st.session_state.autenticado = False
     st.session_state.user_data = None
@@ -923,6 +926,26 @@ def empty_state(icone: str, titulo: str, mensagem: str = ""):
 # ------------------------------------------------------------
 LOGO_URL = "https://casadurvalpaiva.org.br/wp-content/themes/durvalpaiva/dist/img/header/logo.png"
 st.sidebar.image(LOGO_URL, width=150)
+
+# ── Identidade do usuário logado ──────────────────────────────────────────────
+_ud = st.session_state.user_data or {}
+_badge_cor = "#C0392B" if _ud.get("perfil") == "gerencia" else "#378ADD"
+_badge_txt = "GERÊNCIA" if _ud.get("perfil") == "gerencia" else "OPERACIONAL"
+st.sidebar.markdown(
+    f'<div style="padding:8px 10px;margin:6px 0 2px;border-radius:8px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);">' +
+    f'<div style="font-size:12px;font-weight:600;color:#E5E7EB;">{_ud.get("nome","")}</div>' +
+    f'<div style="font-size:10px;color:#94A3B8;">{_ud.get("setor","")}</div>' +
+    f'<div style="margin-top:4px;display:inline-block;font-size:9px;font-weight:700;letter-spacing:1px;' +
+    f'padding:2px 7px;border-radius:20px;background:{_badge_cor}22;color:{_badge_cor};border:1px solid {_badge_cor}55;">{_badge_txt}</div>' +
+    f'</div>',
+    unsafe_allow_html=True,
+)
+
+if st.sidebar.button("Sair", key="logout_btn", use_container_width=True):
+    st.session_state.autenticado = False
+    st.session_state.user_data = None
+    st.rerun()
+
 st.sidebar.markdown("---")
 
 # ── Navegação — inicialização antecipada para o menu renderizar imediatamente ──
@@ -933,7 +956,9 @@ if "open_form" not in st.session_state:
 if "_qa_nonce" not in st.session_state:
     st.session_state._qa_nonce = 0
 
-_opcoes_menu = ["Painel Geral", "Plano DI 2026", "Parcerias", "Contatos", "Eventos", "Ações", "Entrada de Recursos", "Relacionamento"]
+_menus_gerencia = ["Painel Geral", "Plano DI 2026", "Parcerias", "Contatos", "Eventos", "Ações", "Entrada de Recursos", "Relacionamento"]
+_menus_operacional = ["Painel Geral", "Parcerias", "Contatos", "Eventos", "Ações", "Entrada de Recursos", "Relacionamento"]
+_opcoes_menu = _menus_gerencia if _is_gerente() else _menus_operacional
 
 def _trigger_quick_add(tipo: str):
     """Navega para a página certa e sinaliza abertura de formulário."""
@@ -962,8 +987,11 @@ with st.sidebar:
     color:rgba(255,255,255,0.25);font-weight:600;margin:20px 0 2px 4px;">Navegação</p>""",
     unsafe_allow_html=True)
 
-    _opcoes_nav = ["Painel Geral", "Plano DI 2026", "Parcerias", "Contatos",
-                   "Eventos", "Ações", "Entrada de Recursos", "Relacionamento"]
+    _opcoes_nav = (["Painel Geral", "Plano DI 2026", "Parcerias", "Contatos",
+                    "Eventos", "Ações", "Entrada de Recursos", "Relacionamento"]
+                   if _is_gerente() else
+                   ["Painel Geral", "Parcerias", "Contatos",
+                    "Eventos", "Ações", "Entrada de Recursos", "Relacionamento"])
     _nav_items = [(p, p) for p in _opcoes_nav]
 
     _nav_idx = _opcoes_nav.index(st.session_state.current_page) \
@@ -1365,7 +1393,7 @@ if menu == "Painel Geral":
         # ════════════════════════════════════════════════════════════════════════
         # BLOCO 0 — VELOCÍMETRO DO PLANO DI 2026
         # ════════════════════════════════════════════════════════════════════════
-        if not df_prog_plano.empty and ano_sel == 2026:
+        if not df_prog_plano.empty and ano_sel == 2026 and _is_gerente():
             section("Plano DI 2026 — progresso geral")
             meta_total    = float(df_prog_plano['meta_2026'].sum())
             captado_total = float(df_prog_plano['captado_2026'].sum())
@@ -1855,7 +1883,11 @@ elif menu == "Ações":
 
     page_header("Centro de ações", "Tudo que está pendente — operação interna e relacionamento.")
 
-    tab_mim, tab_op, tab_rel = st.tabs(["Pra mim", "Planejamento operacional", "Relacionamento"])
+    if _is_gerente():
+        tab_mim, tab_op, tab_rel, tab_users = st.tabs(["Pra mim", "Planejamento operacional", "Relacionamento", "👥 Usuários"])
+    else:
+        tab_mim, tab_op, tab_rel = st.tabs(["Pra mim", "Planejamento operacional", "Relacionamento"])
+        tab_users = None
 
     # ========== ABA 1: PRA MIM (inbox unificado) ==========
     with tab_mim:
@@ -2238,6 +2270,72 @@ elif menu == "Ações":
                         st.rerun()
                     else:
                         st.warning("Preencha a descrição.")
+
+
+    # ── Aba Usuários (somente gerência) ──────────────────────────────────────
+    if tab_users is not None:
+        with tab_users:
+            section("Gerenciar usuários do sistema")
+
+            # Estado local para edição
+            if "contas_editadas" not in st.session_state:
+                st.session_state.contas_editadas = {k: dict(v) for k, v in CONTAS.items()}
+
+            contas = st.session_state.contas_editadas
+
+            # Tabela de usuários
+            st.markdown("**Usuários cadastrados:**")
+            for login, dados in contas.items():
+                badge_c = "#C0392B" if dados["perfil"] == "gerencia" else "#378ADD"
+                badge_t = "GERÊNCIA" if dados["perfil"] == "gerencia" else "OPERACIONAL"
+                st.markdown(
+                    f'<div style="display:flex;align-items:center;gap:12px;padding:8px 12px;' +
+                    f'background:rgba(255,255,255,0.03);border-radius:8px;margin-bottom:6px;' +
+                    f'border:1px solid rgba(255,255,255,0.06);">' +
+                    f'<div style="flex:1;">' +
+                    f'<span style="font-weight:600;font-size:13px;">{dados["nome"]}</span> ' +
+                    f'<span style="font-size:11px;color:#94A3B8;">@{login}</span><br>' +
+                    f'<span style="font-size:11px;color:#94A3B8;">{dados["setor"]}</span></div>' +
+                    f'<div style="font-size:9px;font-weight:700;letter-spacing:1px;padding:2px 8px;' +
+                    f'border-radius:20px;background:{badge_c}22;color:{badge_c};border:1px solid {badge_c}55;">{badge_t}</div>' +
+                    f'</div>',
+                    unsafe_allow_html=True
+                )
+
+            st.divider()
+
+            # Alterar senha
+            section("Alterar senha de um usuário")
+            login_sel = st.selectbox("Usuário:", list(contas.keys()), key="usr_sel")
+            with st.form("form_senha"):
+                nova_senha = st.text_input("Nova senha:", type="password", key="usr_nova_senha")
+                confirma   = st.text_input("Confirmar senha:", type="password", key="usr_confirma")
+                if st.form_submit_button("Salvar senha", type="primary"):
+                    if not nova_senha:
+                        st.warning("Digite uma senha.")
+                    elif nova_senha != confirma:
+                        st.error("As senhas não coincidem.")
+                    elif len(nova_senha) < 4:
+                        st.warning("Senha muito curta (mínimo 4 caracteres).")
+                    else:
+                        st.session_state.contas_editadas[login_sel]["senha"] = nova_senha
+                        CONTAS[login_sel]["senha"] = nova_senha
+                        st.success(f"Senha de @{login_sel} atualizada para esta sessão.")
+                        st.caption("⚠️ Para tornar a mudança permanente, atualize o dicionário CONTAS no código-fonte.")
+
+            st.divider()
+
+            # Alterar perfil
+            section("Alterar perfil de acesso")
+            login_p = st.selectbox("Usuário:", [l for l in contas.keys() if l != "gerencia"], key="usr_perfil_sel")
+            novo_perfil = st.radio("Perfil:", ["operacional", "gerencia"],
+                index=0 if contas[login_p]["perfil"] == "operacional" else 1,
+                horizontal=True, key="usr_novo_perfil")
+            if st.button("Salvar perfil", key="usr_save_perfil"):
+                st.session_state.contas_editadas[login_p]["perfil"] = novo_perfil
+                CONTAS[login_p]["perfil"] = novo_perfil
+                st.success(f"Perfil de @{login_p} atualizado para {novo_perfil.upper()}.")
+                st.caption("⚠️ Para tornar a mudança permanente, atualize o dicionário CONTAS no código-fonte.")
 
 
 elif menu == "Eventos":
@@ -3941,8 +4039,9 @@ def _gerar_backup_completo():
             zf.writestr(f"{nome}.csv", df.to_csv(index=False))
     return output.getvalue(), "zip", "application/zip"
 
-_backup = _gerar_backup_completo()
-if _backup:
+if _is_gerente():
+    _backup = _gerar_backup_completo()
+if _is_gerente() and _backup:
     _b_data, _b_ext, _b_mime = _backup
     _b_nome = "CDP_backup_" + datetime.now().strftime("%Y%m%d") + "." + _b_ext
     st.sidebar.download_button(
