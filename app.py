@@ -457,18 +457,67 @@ div[data-baseweb="select"] {
 }
 
 /* ============================================================
-   SIDEBAR — botões de navegação (JS aplica estilos inline,
-   CSS remove o gap entre wrappers e faz fallback de hover)
+   SIDEBAR — navegação via st.radio (CSS puro)
+   Lição: [data-baseweb="radio"] = CADA OPÇÃO — não esconder!
    ============================================================ */
-section[data-testid="stSidebar"] [data-testid="stButton"] {
-    margin: 0 !important;
-    padding: 1px 0 !important;
+
+/* Remove gap do radiogroup e padding extra */
+section[data-testid="stSidebar"] [data-testid="stRadio"] [role="radiogroup"] {
+    gap: 1px !important;
+    padding: 0 !important;
 }
-/* Hover via CSS como fallback (JS também lida com isso) */
-section[data-testid="stSidebar"] [data-testid^="stBaseButton"]:hover {
-    background: rgba(255,255,255,0.07) !important;
-    color: rgba(255,255,255,0.85) !important;
-    border-left-color: rgba(255,255,255,0.15) !important;
+section[data-testid="stSidebar"] [data-testid="stRadio"] {
+    padding: 0 !important;
+    margin: 0 !important;
+}
+section[data-testid="stSidebar"] [data-testid="stRadio"] > div {
+    gap: 0 !important;
+}
+
+/* Cada opção do radio — estilo de nav item */
+section[data-testid="stSidebar"] [data-testid="stRadio"] label[data-baseweb="radio"] {
+    display: flex !important;
+    align-items: center !important;
+    width: 100% !important;
+    padding: 8px 14px 8px 16px !important;
+    margin: 0 !important;
+    border-radius: 8px !important;
+    border-left: 3px solid transparent !important;
+    cursor: pointer !important;
+    color: rgba(255,255,255,0.48) !important;
+    font-size: 13.5px !important;
+    font-weight: 400 !important;
+    letter-spacing: 0.1px !important;
+    line-height: 1.2 !important;
+    transition: background 0.12s, color 0.12s, border-color 0.12s !important;
+    background: transparent !important;
+    box-sizing: border-box !important;
+}
+section[data-testid="stSidebar"] [data-testid="stRadio"] label[data-baseweb="radio"]:hover {
+    background: rgba(255,255,255,0.06) !important;
+    color: rgba(255,255,255,0.82) !important;
+    border-left-color: rgba(255,255,255,0.14) !important;
+}
+/* Item selecionado */
+section[data-testid="stSidebar"] [data-testid="stRadio"] label[data-baseweb="radio"]:has(input:checked) {
+    background: rgba(55,138,221,0.13) !important;
+    border-left-color: #378ADD !important;
+    color: rgba(255,255,255,0.95) !important;
+    font-weight: 600 !important;
+}
+/* Esconde APENAS o círculo indicador (primeiro filho do label) */
+section[data-testid="stSidebar"] [data-testid="stRadio"] label[data-baseweb="radio"] > div:first-child {
+    display: none !important;
+}
+/* Esconde input nativo */
+section[data-testid="stSidebar"] [data-testid="stRadio"] input[type="radio"] {
+    display: none !important;
+}
+/* O div com o texto da opção — ocupa o espaço todo */
+section[data-testid="stSidebar"] [data-testid="stRadio"] label[data-baseweb="radio"] > div:last-child {
+    width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
 }
 
 /* Scrollbar discreta */
@@ -917,66 +966,19 @@ with st.sidebar:
                    "Eventos", "Ações", "Registrar Doação", "Relacionamento"]
     _nav_items = [(p, p) for p in _opcoes_nav]
 
-    for _label, _page in _nav_items:
-        if st.button(_label, key=f"nav_{_page}", use_container_width=True):
-            st.session_state.current_page = _page
-            # sem st.rerun() — Streamlit já reroda automaticamente no clique
+    _nav_idx = _opcoes_nav.index(st.session_state.current_page) \
+               if st.session_state.current_page in _opcoes_nav else 0
+    _nav_choice = st.radio(
+        "nav",
+        options=_opcoes_nav,
+        index=_nav_idx,
+        label_visibility="collapsed",
+        key="sidebar_nav_radio",
+    )
+    if _nav_choice != st.session_state.current_page:
+        st.session_state.current_page = _nav_choice
 
     _active_page = st.session_state.current_page
-
-    # JS — aplica visual de nav limpo sobre os botões nativos
-    # (usa style.cssText com !important — abordagem que funcionava antes)
-    st.markdown(f"""<script>
-    (function(){{
-        var ACTIVE = {repr(_active_page)};
-        function applyNav(){{
-            try {{
-                var doc = (window.parent && window.parent.document) ? window.parent.document : document;
-                var sb  = doc.querySelector('[data-testid="stSidebar"]');
-                if (!sb) return;
-                var btns = sb.querySelectorAll('[data-testid^="stBaseButton"]');
-                if (!btns.length) return;
-                btns.forEach(function(b){{
-                    var txt = (b.innerText||b.textContent||'').trim();
-                    var base = [
-                        'background:transparent',
-                        'border:none',
-                        'border-left:3px solid transparent',
-                        'border-radius:6px',
-                        'box-shadow:none',
-                        'color:rgba(255,255,255,0.48)',
-                        'font-size:13.5px',
-                        'font-weight:400',
-                        'letter-spacing:0.1px',
-                        'text-align:left',
-                        'justify-content:flex-start',
-                        'padding:8px 14px 8px 16px',
-                        'width:100%',
-                        'height:auto',
-                        'min-height:0',
-                        'transition:background 0.12s,color 0.12s,border-color 0.12s'
-                    ].join('!important;')+'!important';
-                    b.style.cssText = base;
-                    if (txt === ACTIVE){{
-                        b.style.setProperty('background','rgba(55,138,221,0.13)','important');
-                        b.style.setProperty('border-left','3px solid #378ADD','important');
-                        b.style.setProperty('color','rgba(255,255,255,0.95)','important');
-                        b.style.setProperty('font-weight','600','important');
-                    }}
-                }});
-                /* Remove gap entre wrappers */
-                sb.querySelectorAll('[data-testid="stButton"]').forEach(function(w){{
-                    w.style.cssText = 'margin:0!important;padding:1px 0!important;';
-                }});
-            }}catch(e){{}}
-        }}
-        applyNav();
-        setTimeout(applyNav, 200);
-        setTimeout(applyNav, 600);
-        var obs = new MutationObserver(applyNav);
-        try{{ obs.observe((window.parent||window).document.body,{{childList:true,subtree:true}}); }}catch(e){{}}
-    }})();
-    </script>""", unsafe_allow_html=True)
 
 menu = st.session_state.current_page
 
