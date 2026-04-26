@@ -26,22 +26,39 @@ def _chart_layout(height=240, margin=None):
         height=height,
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
-        font=dict(color="rgba(255,255,255,0.55)", size=11),
-        margin=margin or dict(l=0, r=0, t=8, b=0),
+        font=dict(
+            family="'Inter', -apple-system, sans-serif",
+            color="rgba(255,255,255,0.50)",
+            size=11,
+        ),
+        margin=margin or dict(l=0, r=8, t=12, b=0),
         xaxis=dict(
-            showgrid=True, gridcolor="rgba(255,255,255,0.05)",
-            zeroline=False, tickfont=dict(size=10),
+            showgrid=False,
+            zeroline=False,
+            tickfont=dict(size=10, color="rgba(255,255,255,0.40)"),
+            linecolor="rgba(255,255,255,0.08)",
+            tickcolor="rgba(255,255,255,0)",
         ),
         yaxis=dict(
-            showgrid=True, gridcolor="rgba(255,255,255,0.05)",
-            zeroline=False, tickfont=dict(size=10),
+            showgrid=True,
+            gridcolor="rgba(255,255,255,0.06)",
+            gridwidth=1,
+            zeroline=False,
+            tickfont=dict(size=10, color="rgba(255,255,255,0.40)"),
+            linecolor="rgba(0,0,0,0)",
         ),
         hoverlabel=dict(
-            bgcolor="rgba(15,17,22,0.97)",
-            bordercolor="rgba(255,255,255,0.15)",
-            font=dict(color="white", size=12),
+            bgcolor="rgba(18,20,28,0.97)",
+            bordercolor="rgba(55,138,221,0.40)",
+            font=dict(
+                family="'Inter', sans-serif",
+                color="white",
+                size=12,
+            ),
+            namelength=0,
         ),
         showlegend=False,
+        bargap=0.30,
     )
 
 # ── Paleta de dados — Opção A ───────────────────────────────────────────────
@@ -286,10 +303,14 @@ COLOR_NEUTRAL  = "#888780"       # estimado / neutro
 CSS_GLOBAL = """
 <style>
 /* ============================================================
-   TIPOGRAFIA — Helvetica Neue como fonte principal
+   TIPOGRAFIA — Inter (Google Fonts) — padrão de dashboards modernos
    ============================================================ */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
 html, body, [class*="css"], * {
-    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif !important;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
 }
 
 /* ============================================================
@@ -1348,45 +1369,96 @@ if menu == "Painel Geral":
 
         col_esq, col_dir = st.columns(2)
         with col_esq:
-            st.caption("Financeiro por tipo")
+            st.caption("Captação por tipo")
             if not df_fin.empty:
-                dados_cat = df_fin.groupby('tipo_doacao')['valor_estimado'].sum().sort_values(ascending=False).reset_index()
+                dados_cat = (
+                    df_fin.groupby('tipo_doacao')['valor_estimado']
+                    .sum().sort_values(ascending=False).reset_index()
+                )
                 dados_cat.columns = ["Tipo", "Valor"]
-                fig_cat = px.bar(dados_cat, x="Tipo", y="Valor",
-                                 color_discrete_sequence=[_CDP_BAR])
-                fig_cat.update_traces(marker_line_width=0)
-                fig_cat.update_layout(**_chart_layout(240))
+                # Paleta sequencial: azul mais forte nos maiores valores
+                n = len(dados_cat)
+                palette = [f"rgba(55,138,221,{0.55 + 0.45*(1-(i/max(n-1,1))):.2f})" for i in range(n)]
+                fig_cat = px.bar(
+                    dados_cat, x="Tipo", y="Valor",
+                    color="Tipo",
+                    color_discrete_sequence=palette,
+                    text=dados_cat["Valor"].apply(lambda v: f"R$ {v:,.0f}".replace(",",".")),
+                )
+                fig_cat.update_traces(
+                    marker_line_width=0,
+                    textposition="outside",
+                    textfont=dict(size=10, color="rgba(255,255,255,0.70)"),
+                    hovertemplate="<b>%{x}</b><br>R$ %{y:,.2f}<extra></extra>",
+                    cliponaxis=False,
+                )
+                _ly = _chart_layout(260)
+                _ly["yaxis"]["tickformat"] = ",.0f"
+                _ly["yaxis"]["tickprefix"] = "R$ "
+                _ly["showlegend"] = False
+                fig_cat.update_layout(**_ly)
                 st.plotly_chart(fig_cat, use_container_width=True, config={"displayModeBar": False})
             else:
                 st.caption("Sem registros financeiros no período.")
+
         with col_dir:
-            st.caption("Evolução mensal — financeiro")
+            st.caption("Evolução mensal")
             if not df_fin.empty:
                 df_fin_plot = df_fin.copy()
-                df_fin_plot['Mês'] = df_fin_plot['data_doacao'].dt.strftime('%Y-%m')
-                dados_mes = df_fin_plot.groupby('Mês')['valor_estimado'].sum().sort_index().reset_index()
-                dados_mes.columns = ["Mês", "Valor"]
-                fig_mes = px.area(dados_mes, x="Mês", y="Valor",
-                                  color_discrete_sequence=[_CDP_LINE])
-                fig_mes.update_traces(
-                    line=dict(width=2),
-                    fillcolor="rgba(55,138,221,0.12)",
-                )
-                fig_mes.update_layout(**_chart_layout(240))
+                df_fin_plot['Mês'] = df_fin_plot['data_doacao'].dt.strftime('%b/%y')
+                dados_mes = df_fin_plot.groupby(
+                    df_fin_plot['data_doacao'].dt.to_period('M')
+                )['valor_estimado'].sum().reset_index()
+                dados_mes.columns = ["Período", "Valor"]
+                dados_mes["Mês"] = dados_mes["Período"].dt.strftime('%b/%y')
+                dados_mes = dados_mes.sort_values("Período")
+                fig_mes = go.Figure()
+                fig_mes.add_trace(go.Scatter(
+                    x=dados_mes["Mês"],
+                    y=dados_mes["Valor"],
+                    mode="lines+markers",
+                    line=dict(color="#378ADD", width=2.5, shape="spline", smoothing=0.8),
+                    marker=dict(color="#378ADD", size=6, line=dict(color="rgba(15,17,22,0.95)", width=2)),
+                    fill="tozeroy",
+                    fillcolor="rgba(55,138,221,0.08)",
+                    hovertemplate="<b>%{x}</b><br>R$ %{y:,.2f}<extra></extra>",
+                ))
+                _ly = _chart_layout(260)
+                _ly["yaxis"]["tickformat"] = "~s"
+                _ly["yaxis"]["tickprefix"] = "R$ "
+                fig_mes.update_layout(**_ly)
                 st.plotly_chart(fig_mes, use_container_width=True, config={"displayModeBar": False})
             else:
                 st.caption("Sem dados financeiros mensais.")
 
         df_origem_fin = df_fin[df_fin['origem_captacao'].notna() & (df_fin['origem_captacao'] != 'Selecione...')]
         if not df_origem_fin.empty:
-            st.caption("Mix por origem — financeiro")
-            dados_orig = df_origem_fin.groupby('origem_captacao')['valor_estimado'].sum().sort_values().reset_index()
+            st.caption("Mix por origem")
+            dados_orig = (
+                df_origem_fin.groupby('origem_captacao')['valor_estimado']
+                .sum().sort_values(ascending=True).reset_index()
+            )
             dados_orig.columns = ["Origem", "Valor"]
-            fig_orig = px.bar(dados_orig, x="Valor", y="Origem", orientation='h',
-                              color_discrete_sequence=[_CDP_BAR])
-            fig_orig.update_traces(marker_line_width=0)
-            _ly = _chart_layout(max(160, len(dados_orig) * 40), margin=dict(l=0, r=0, t=4, b=0))
-            fig_orig.update_layout(**_ly)
+            n2 = len(dados_orig)
+            palette2 = [f"rgba(55,138,221,{0.45 + 0.55*(i/max(n2-1,1)):.2f})" for i in range(n2)]
+            fig_orig = px.bar(
+                dados_orig, x="Valor", y="Origem", orientation='h',
+                color="Origem",
+                color_discrete_sequence=palette2,
+                text=dados_orig["Valor"].apply(lambda v: f"R$ {v:,.0f}".replace(",",".")),
+            )
+            fig_orig.update_traces(
+                marker_line_width=0,
+                textposition="outside",
+                textfont=dict(size=10, color="rgba(255,255,255,0.70)"),
+                hovertemplate="<b>%{y}</b><br>R$ %{x:,.2f}<extra></extra>",
+                cliponaxis=False,
+            )
+            _ly2 = _chart_layout(max(180, n2 * 44), margin=dict(l=0, r=80, t=8, b=0))
+            _ly2["xaxis"]["tickformat"] = ",.0f"
+            _ly2["xaxis"]["tickprefix"] = "R$ "
+            _ly2["showlegend"] = False
+            fig_orig.update_layout(**_ly2)
             st.plotly_chart(fig_orig, use_container_width=True, config={"displayModeBar": False})
 
         # Doações estimadas: colapsado, informativo
@@ -1395,10 +1467,23 @@ if menu == "Painel Geral":
                 st.caption("Valores declarados pelos parceiros (espaço de mídia, sessões de foto, materiais etc.). Contam para impacto e relacionamento, não para metas financeiras.")
                 dados_est = df_est.groupby('tipo_doacao')['valor_estimado'].sum().sort_values(ascending=False).reset_index()
                 dados_est.columns = ["Tipo", "Valor"]
-                fig_est = px.bar(dados_est, x="Tipo", y="Valor",
-                                 color_discrete_sequence=[_CDP_BLUE])
-                fig_est.update_traces(marker_line_width=0)
-                fig_est.update_layout(**_chart_layout(180))
+                ne = len(dados_est)
+                palette_e = [f"rgba(136,135,128,{0.45 + 0.45*(1-(i/max(ne-1,1))):.2f})" for i in range(ne)]
+                fig_est = px.bar(
+                    dados_est, x="Tipo", y="Valor",
+                    color="Tipo", color_discrete_sequence=palette_e,
+                    text=dados_est["Valor"].apply(lambda v: f"R$ {v:,.0f}".replace(",",".")),
+                )
+                fig_est.update_traces(
+                    marker_line_width=0,
+                    textposition="outside",
+                    textfont=dict(size=10, color="rgba(255,255,255,0.60)"),
+                    hovertemplate="<b>%{x}</b><br>R$ %{y:,.2f}<extra></extra>",
+                    cliponaxis=False,
+                )
+                _lye = _chart_layout(200)
+                _lye["showlegend"] = False
+                fig_est.update_layout(**_lye)
                 st.plotly_chart(fig_est, use_container_width=True, config={"displayModeBar": False})
 
         # ============================================================
