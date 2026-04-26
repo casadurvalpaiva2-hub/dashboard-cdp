@@ -1315,7 +1315,7 @@ if menu == "PAINEL GERAL":
         # ============================================================
         # BLOCO 7 — QUALIDADE DOS DADOS
         # ============================================================
-        section("🔍 Qualidade dos dados")
+        section("Qualidade dos dados")
 
         df_qd_sem_contato = run_query("""
             SELECT p.nome_instituicao AS "Parceiro"
@@ -1359,7 +1359,7 @@ if menu == "PAINEL GERAL":
         # ── Cartões de pendência ──────────────────────────────────────────────
         _checks = [
             {
-                "icone": "💰",
+                "icone": "",
                 "titulo": "Doações de 2026 não registradas",
                 "acao": "Vá em Registrar Doação e lance os repasses pendentes.",
                 "impacto": "Alta — afeta diretamente as metas do Plano DI",
@@ -1368,7 +1368,7 @@ if menu == "PAINEL GERAL":
                 "tipo": "lista",
             },
             {
-                "icone": "🏷️",
+                "icone": "",
                 "titulo": "Doações sem tipo definido",
                 "acao": "Abra cada doação e defina se é Financeira, Mídia, Projetos etc.",
                 "impacto": "Alta — distorce o cálculo das metas",
@@ -1377,7 +1377,7 @@ if menu == "PAINEL GERAL":
                 "tipo": "tabela",
             },
             {
-                "icone": "👤",
+                "icone": "",
                 "titulo": "Parceiros sem contato cadastrado",
                 "acao": "Vá em Contatos e cadastre ao menos uma pessoa de referência.",
                 "impacto": "Média — dificulta o follow-up e o relacionamento",
@@ -1386,7 +1386,7 @@ if menu == "PAINEL GERAL":
                 "tipo": "lista",
             },
             {
-                "icone": "💬",
+                "icone": "",
                 "titulo": "Parceiros sem nenhuma interação",
                 "acao": "Registre a primeira interação pelo sidebar ou pela aba Relacionamento.",
                 "impacto": "Média — parceiro ativo sem histórico é invisível para o sistema",
@@ -1425,7 +1425,7 @@ if menu == "PAINEL GERAL":
 
             for _chk in _com_pend:
                 _n = len(_chk["df"])
-                _label = f"{_chk['icone']} {_chk['titulo']} — {_n} {'registro' if _n == 1 else 'registros'}"
+                _label = f"{_chk['titulo']} — {_n} {'registro' if _n == 1 else 'registros'}"
                 with st.expander(_label):
                     _c1, _c2 = st.columns([1, 1])
                     with _c1:
@@ -1434,7 +1434,7 @@ if menu == "PAINEL GERAL":
                         st.markdown(
                             f'<div style="font-size:12px;padding:4px 10px;border-radius:4px;'
                             f'background:rgba(255,255,255,0.05);color:{_chk["cor"]};">'
-                            f'⚡ Impacto: {_chk["impacto"]}</div>',
+                            f'Impacto: {_chk["impacto"]}</div>',
                             unsafe_allow_html=True
                         )
                     st.divider()
