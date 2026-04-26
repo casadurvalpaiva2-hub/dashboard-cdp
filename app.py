@@ -92,7 +92,11 @@ CONTAS = {
     "gerencia": {"nome": "Helder Coutinho", "setor": "GERÊNCIA",          "senha": "Hc!24601","perfil": "gerencia"},
 }
 
-def _perfil(): return (st.session_state.user_data or {}).get("perfil", "operacional")
+def _perfil():
+    try:
+        return (st.session_state.get("user_data") or {}).get("perfil", "operacional")
+    except Exception:
+        return "operacional"
 def _is_gerente(): return _perfil() == "gerencia"
 
 if "autenticado" not in st.session_state:
@@ -4041,14 +4045,14 @@ def _gerar_backup_completo():
 
 if _is_gerente():
     _backup = _gerar_backup_completo()
-if _is_gerente() and _backup:
-    _b_data, _b_ext, _b_mime = _backup
-    _b_nome = "CDP_backup_" + datetime.now().strftime("%Y%m%d") + "." + _b_ext
-    st.sidebar.download_button(
-        "Backup completo",
-        data=_b_data,
-        file_name=_b_nome,
-        mime=_b_mime,
-        use_container_width=True,
-        key="sidebar_backup_dl",
-    )
+    if _backup:
+        _b_data, _b_ext, _b_mime = _backup
+        _b_nome = "CDP_backup_" + datetime.now().strftime("%Y%m%d") + "." + _b_ext
+        st.sidebar.download_button(
+            "Backup completo",
+            data=_b_data,
+            file_name=_b_nome,
+            mime=_b_mime,
+            use_container_width=True,
+            key="sidebar_backup_dl",
+        )
