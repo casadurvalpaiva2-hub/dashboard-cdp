@@ -2996,7 +2996,7 @@ elif menu == "Entrada de Recursos":
                     "Valores declarados pelos parceiros — espaco de midia, materiais, alimentos etc. "
                     "Sao registrados para controle de impacto e relacionamento, mas **nao entram no caixa** "
                     "e **nao contam para as metas financeiras** do Plano DI.",
-                    icon="i",
+                    icon="📌",
                 )
                 _tipos_estimado = ["Midiatica", "Vestuario", "Alimentos", "Servicos", "Outros (estimado)"]
                 with st.form("form_entrada_estimada", clear_on_submit=True):
