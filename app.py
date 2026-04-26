@@ -10,6 +10,8 @@ from datetime import datetime, timedelta
 from io import BytesIO
 
 import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
 import psycopg2
 from psycopg2 import pool as pg_pool
 import streamlit as st
@@ -18,6 +20,35 @@ import streamlit as st
 # ------------------------------------------------------------
 #  HELPERS GLOBAIS
 # ------------------------------------------------------------
+def _chart_layout(height=240, margin=None):
+    """Layout padrão para gráficos Plotly — tema escuro integrado ao app."""
+    return dict(
+        height=height,
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        font=dict(color="rgba(255,255,255,0.55)", size=11),
+        margin=margin or dict(l=0, r=0, t=8, b=0),
+        xaxis=dict(
+            showgrid=True, gridcolor="rgba(255,255,255,0.05)",
+            zeroline=False, tickfont=dict(size=10),
+        ),
+        yaxis=dict(
+            showgrid=True, gridcolor="rgba(255,255,255,0.05)",
+            zeroline=False, tickfont=dict(size=10),
+        ),
+        hoverlabel=dict(
+            bgcolor="rgba(20,5,5,0.95)",
+            bordercolor="rgba(227,29,36,0.4)",
+            font=dict(color="white", size=12),
+        ),
+        showlegend=False,
+    )
+
+_CDP_BAR   = "#9B1C1C"       # vermelho escuro para áreas grandes
+_CDP_LINE  = "#E31D24"       # vermelho CDP para linhas finas
+_CDP_BLUE  = "#1E3A5F"       # azul escuro para doações estimadas
+
+
 def format_br(valor):
     """Formata número como moeda brasileira: 1234.5 -> 'R$ 1.234,50'."""
     return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
@@ -1298,8 +1329,13 @@ if menu == "Painel Geral":
         with col_esq:
             st.caption("Financeiro por tipo")
             if not df_fin.empty:
-                dados_cat = df_fin.groupby('tipo_doacao')['valor_estimado'].sum().sort_values(ascending=False)
-                st.bar_chart(dados_cat, color="#E31D24", height=240)
+                dados_cat = df_fin.groupby('tipo_doacao')['valor_estimado'].sum().sort_values(ascending=False).reset_index()
+                dados_cat.columns = ["Tipo", "Valor"]
+                fig_cat = px.bar(dados_cat, x="Tipo", y="Valor",
+                                 color_discrete_sequence=[_CDP_BAR])
+                fig_cat.update_traces(marker_line_width=0)
+                fig_cat.update_layout(**_chart_layout(240))
+                st.plotly_chart(fig_cat, use_container_width=True, config={"displayModeBar": False})
             else:
                 st.caption("Sem registros financeiros no período.")
         with col_dir:
@@ -1307,23 +1343,42 @@ if menu == "Painel Geral":
             if not df_fin.empty:
                 df_fin_plot = df_fin.copy()
                 df_fin_plot['Mês'] = df_fin_plot['data_doacao'].dt.strftime('%Y-%m')
-                dados_mes = df_fin_plot.groupby('Mês')['valor_estimado'].sum().sort_index()
-                st.line_chart(dados_mes, color="#E31D24", height=240)
+                dados_mes = df_fin_plot.groupby('Mês')['valor_estimado'].sum().sort_index().reset_index()
+                dados_mes.columns = ["Mês", "Valor"]
+                fig_mes = px.area(dados_mes, x="Mês", y="Valor",
+                                  color_discrete_sequence=[_CDP_LINE])
+                fig_mes.update_traces(
+                    line=dict(width=2),
+                    fillcolor="rgba(155,28,28,0.15)",
+                )
+                fig_mes.update_layout(**_chart_layout(240))
+                st.plotly_chart(fig_mes, use_container_width=True, config={"displayModeBar": False})
             else:
                 st.caption("Sem dados financeiros mensais.")
 
         df_origem_fin = df_fin[df_fin['origem_captacao'].notna() & (df_fin['origem_captacao'] != 'Selecione...')]
         if not df_origem_fin.empty:
             st.caption("Mix por origem — financeiro")
-            dados_orig = df_origem_fin.groupby('origem_captacao')['valor_estimado'].sum().sort_values(ascending=False)
-            st.bar_chart(dados_orig, color="#E31D24", height=200, horizontal=True)
+            dados_orig = df_origem_fin.groupby('origem_captacao')['valor_estimado'].sum().sort_values().reset_index()
+            dados_orig.columns = ["Origem", "Valor"]
+            fig_orig = px.bar(dados_orig, x="Valor", y="Origem", orientation='h',
+                              color_discrete_sequence=[_CDP_BAR])
+            fig_orig.update_traces(marker_line_width=0)
+            _ly = _chart_layout(max(160, len(dados_orig) * 40), margin=dict(l=0, r=0, t=4, b=0))
+            fig_orig.update_layout(**_ly)
+            st.plotly_chart(fig_orig, use_container_width=True, config={"displayModeBar": False})
 
         # Doações estimadas: colapsado, informativo
         if total_est > 0:
-            with st.expander(f"📊 Doações estimadas (mídia/espécie) — {_fmt(total_est)} declarados — não entram no caixa"):
+            with st.expander(f"Doações estimadas (mídia/espécie) — {_fmt(total_est)} declarados — não entram no caixa"):
                 st.caption("Valores declarados pelos parceiros (espaço de mídia, sessões de foto, materiais etc.). Contam para impacto e relacionamento, não para metas financeiras.")
-                dados_est = df_est.groupby('tipo_doacao')['valor_estimado'].sum().sort_values(ascending=False)
-                st.bar_chart(dados_est, color="#0284C7", height=180)
+                dados_est = df_est.groupby('tipo_doacao')['valor_estimado'].sum().sort_values(ascending=False).reset_index()
+                dados_est.columns = ["Tipo", "Valor"]
+                fig_est = px.bar(dados_est, x="Tipo", y="Valor",
+                                 color_discrete_sequence=[_CDP_BLUE])
+                fig_est.update_traces(marker_line_width=0)
+                fig_est.update_layout(**_chart_layout(180))
+                st.plotly_chart(fig_est, use_container_width=True, config={"displayModeBar": False})
 
         # ============================================================
         # BLOCO 2 — PARCEIROS (saúde da base)
