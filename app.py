@@ -3485,14 +3485,14 @@ elif menu == "Relacionamento":
     # ── Dados base ──────────────────────────────────────────────────────────
     df_parceiros = run_query_cached(
         "SELECT id_parceiro, nome_instituicao, UPPER(TRIM(status)) AS status_limpo, "
-        "data_inicio_parceria FROM Parceiro"
+        "data_adesao FROM Parceiro"
     )
 
     df_rel = run_query_cached("SELECT * FROM View_Relacionamento_Critico")
 
     df_interacoes = run_query_cached(
-        "SELECT id_parceiro, data_interacao, tipo_interacao, descricao_do_que_foi_feito, "
-        "proxima_acao_data, proxima_acao_descricao "
+        "SELECT id_parceiro, data_interacao, descricao_do_que_foi_feito, "
+        "proxima_acao_data "
         "FROM Registro_Relacionamento ORDER BY data_interacao DESC"
     )
 
@@ -3568,8 +3568,8 @@ elif menu == "Relacionamento":
 
             # Dias de parceria
             parc_c = df_parceiros.copy()
-            if 'data_inicio_parceria' in parc_c.columns:
-                parc_c['_inicio'] = pd.to_datetime(parc_c['data_inicio_parceria'], errors='coerce')
+            if 'data_adesao' in parc_c.columns:
+                parc_c['_inicio'] = pd.to_datetime(parc_c['data_adesao'], errors='coerce')
                 parc_c['dias_parceria'] = (pd.Timestamp.now() - parc_c['_inicio']).dt.days.fillna(0)
             else:
                 parc_c['dias_parceria'] = 0
@@ -3669,9 +3669,9 @@ elif menu == "Relacionamento":
 
             # Busca interações
             hist_int = run_query(
-                "SELECT data_interacao AS data, tipo_interacao AS tipo, "
+                "SELECT data_interacao AS data, "
                 "descricao_do_que_foi_feito AS descricao, "
-                "proxima_acao_data, proxima_acao_descricao "
+                "proxima_acao_data "
                 "FROM Registro_Relacionamento WHERE id_parceiro = %s "
                 "ORDER BY data_interacao DESC",
                 (id_p,)
@@ -3695,10 +3695,10 @@ elif menu == "Relacionamento":
                         eventos.append({
                             'data': pd.to_datetime(r['data'], errors='coerce'),
                             'tipo_icon': '💬',
-                            'tipo_label': str(r['tipo']) if pd.notna(r['tipo']) else 'Interação',
+                            'tipo_label': 'Interação',
                             'descricao': str(r['descricao']) if pd.notna(r['descricao']) else '—',
-                            'extra': (f"⏭ Próxima ação: {r['proxima_acao_descricao']} ({r['proxima_acao_data']})"
-                                      if pd.notna(r.get('proxima_acao_descricao')) else None),
+                            'extra': (f"⏭ Próxima ação: {r['proxima_acao_data']}"
+                                      if pd.notna(r.get('proxima_acao_data')) else None),
                             'cor': '#3B82F6',
                         })
                 if not hist_doa.empty:
@@ -3760,7 +3760,7 @@ elif menu == "Relacionamento":
         section("Agenda de follow-ups")
 
         df_fu = run_query_cached(
-            "SELECT r.proxima_acao_data, r.proxima_acao_descricao, "
+            "SELECT r.proxima_acao_data, "
             "p.nome_instituicao, r.id_parceiro, r.data_interacao "
             "FROM Registro_Relacionamento r "
             "JOIN Parceiro p ON r.id_parceiro = p.id_parceiro "
@@ -3814,7 +3814,7 @@ elif menu == "Relacionamento":
                         tom = "info"
                         badge = f"Em {dias}d"
 
-                    acao = str(row['proxima_acao_descricao']) if pd.notna(row.get('proxima_acao_descricao')) else "Ação não especificada"
+                    acao = "Fazer follow-up"
                     data_fmt = row['_data'].strftime('%d/%m/%Y') if row['_data'] else '—'
                     action_card(
                         titulo=str(row['nome_instituicao']),
