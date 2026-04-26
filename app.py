@@ -1321,7 +1321,7 @@ if menu == "PAINEL GERAL":
             SELECT p.nome_instituicao AS "Parceiro"
             FROM Parceiro p
             WHERE UPPER(p.status) LIKE '%ATIVO%'
-              AND NOT EXISTS (SELECT 1 FROM Contato c WHERE c.id_parceiro = p.id_parceiro)
+              AND NOT EXISTS (SELECT 1 FROM Contato_Direto c WHERE c.id_parceiro = p.id_parceiro)
             ORDER BY p.nome_instituicao
         """)
 
@@ -1356,54 +1356,102 @@ if menu == "PAINEL GERAL":
             ORDER BY d.data_doacao DESC
         """)
 
-        _total_pend = (
-            len(df_qd_sem_contato) + len(df_qd_sem_doacao) +
-            len(df_qd_sem_interacao) + len(df_qd_sem_tipo)
-        )
+        # ── Cartões de pendência ──────────────────────────────────────────────
+        _checks = [
+            {
+                "icone": "💰",
+                "titulo": "Doações de 2026 não registradas",
+                "acao": "Vá em Registrar Doação e lance os repasses pendentes.",
+                "impacto": "Alta — afeta diretamente as metas do Plano DI",
+                "cor": "#E31D24",
+                "df": df_qd_sem_doacao,
+                "tipo": "lista",
+            },
+            {
+                "icone": "🏷️",
+                "titulo": "Doações sem tipo definido",
+                "acao": "Abra cada doação e defina se é Financeira, Mídia, Projetos etc.",
+                "impacto": "Alta — distorce o cálculo das metas",
+                "cor": "#E31D24",
+                "df": df_qd_sem_tipo,
+                "tipo": "tabela",
+            },
+            {
+                "icone": "👤",
+                "titulo": "Parceiros sem contato cadastrado",
+                "acao": "Vá em Contatos e cadastre ao menos uma pessoa de referência.",
+                "impacto": "Média — dificulta o follow-up e o relacionamento",
+                "cor": "#D97706",
+                "df": df_qd_sem_contato,
+                "tipo": "lista",
+            },
+            {
+                "icone": "💬",
+                "titulo": "Parceiros sem nenhuma interação",
+                "acao": "Registre a primeira interação pelo sidebar ou pela aba Relacionamento.",
+                "impacto": "Média — parceiro ativo sem histórico é invisível para o sistema",
+                "cor": "#D97706",
+                "df": df_qd_sem_interacao,
+                "tipo": "lista",
+            },
+        ]
 
-        if _total_pend == 0:
+        _com_pend = [c for c in _checks if not c["df"].empty]
+        _total_cats = len(_com_pend)
+
+        if _total_cats == 0:
             st.markdown(
-                '<div style="padding:10px 14px;background:rgba(34,197,94,0.1);'
+                '<div style="padding:12px 16px;background:rgba(34,197,94,0.1);'
                 'border-left:3px solid #22C55E;border-radius:0 8px 8px 0;font-size:14px;">'
-                '✅ Todos os dados estão completos e consistentes.</div>',
+                '✅ <strong>Banco de dados completo.</strong> Todos os campos críticos estão preenchidos.</div>',
                 unsafe_allow_html=True
             )
         else:
+            # Score de completude
+            _score = round((4 - _total_cats) / 4 * 100)
             st.markdown(
-                f'<div style="padding:10px 14px;background:rgba(234,179,8,0.1);'
-                f'border-left:3px solid #EAB308;border-radius:0 8px 8px 0;'
-                f'font-size:14px;margin-bottom:12px;">'
-                f'⚠️ <strong>{_total_pend} pendência(s)</strong> de dados identificadas '
-                f'— expanda para ver o detalhe e corrigir.</div>',
+                f'<div style="margin-bottom:16px;padding:12px 16px;background:rgba(255,255,255,0.03);'
+                f'border-radius:8px;border:1px solid rgba(255,255,255,0.07);">'
+                f'<div style="font-size:13px;color:#888;margin-bottom:6px;">Completude do banco de dados</div>'
+                f'<div style="display:flex;align-items:center;gap:12px;">'
+                f'<div style="flex:1;height:8px;background:rgba(255,255,255,0.1);border-radius:4px;">'
+                f'<div style="width:{_score}%;height:100%;background:#22C55E;border-radius:4px;"></div></div>'
+                f'<span style="font-size:16px;font-weight:700;color:#fff;">{_score}%</span></div>'
+                f'<div style="font-size:12px;color:#888;margin-top:6px;">'
+                f'{_total_cats} categoria(s) com pendências — priorize as de impacto alto primeiro.</div>'
+                f'</div>',
                 unsafe_allow_html=True
             )
-            _cq1, _cq2 = st.columns(2)
-            with _cq1:
-                if not df_qd_sem_contato.empty:
-                    with st.expander(f"👤 Sem contato cadastrado ({len(df_qd_sem_contato)})"):
-                        st.caption("Parceiros ativos que ainda não têm nenhuma pessoa de contato vinculada.")
-                        for _, _r in df_qd_sem_contato.iterrows():
-                            st.markdown(f"• {_r['Parceiro']}")
-                if not df_qd_sem_interacao.empty:
-                    with st.expander(f"💬 Sem interação registrada ({len(df_qd_sem_interacao)})"):
-                        st.caption("Parceiros ativos sem nenhum registro de relacionamento no histórico.")
-                        for _, _r in df_qd_sem_interacao.iterrows():
-                            st.markdown(f"• {_r['Parceiro']}")
-            with _cq2:
-                if not df_qd_sem_doacao.empty:
-                    with st.expander(f"💰 Sem doação registrada em 2026 ({len(df_qd_sem_doacao)})"):
-                        st.caption("Parceiros ativos que não têm nenhuma doação lançada no ano — verifique se há repasses pendentes de registro.")
-                        for _, _r in df_qd_sem_doacao.iterrows():
-                            st.markdown(f"• {_r['Parceiro']}")
-                if not df_qd_sem_tipo.empty:
-                    with st.expander(f"🏷️ Doações sem tipo definido ({len(df_qd_sem_tipo)})"):
-                        st.caption("Doações de 2026 sem tipo (Financeira, Mídia, etc.) — afetam as metas do Plano DI.")
-                        st.dataframe(
-                            df_qd_sem_tipo, hide_index=True, use_container_width=True,
-                            column_config={
-                                "Valor": st.column_config.NumberColumn("Valor (R$)", format="%.2f")
-                            }
+
+            for _chk in _com_pend:
+                _n = len(_chk["df"])
+                _label = f"{_chk['icone']} {_chk['titulo']} — {_n} {'registro' if _n == 1 else 'registros'}"
+                with st.expander(_label):
+                    _c1, _c2 = st.columns([1, 1])
+                    with _c1:
+                        st.markdown(f"**O que fazer:** {_chk['acao']}")
+                    with _c2:
+                        st.markdown(
+                            f'<div style="font-size:12px;padding:4px 10px;border-radius:4px;'
+                            f'background:rgba(255,255,255,0.05);color:{_chk["cor"]};">'
+                            f'⚡ Impacto: {_chk["impacto"]}</div>',
+                            unsafe_allow_html=True
                         )
+                    st.divider()
+                    if _chk["tipo"] == "tabela":
+                        st.dataframe(
+                            _chk["df"], hide_index=True, use_container_width=True,
+                            column_config={"Valor": st.column_config.NumberColumn("Valor (R$)", format="%.2f")}
+                        )
+                    else:
+                        # Mostra os primeiros 15, com aviso se houver mais
+                        _lista = _chk["df"]["Parceiro"].tolist()
+                        _cols = st.columns(2)
+                        _metade = (len(_lista[:15]) + 1) // 2
+                        for _i, _nome in enumerate(_lista[:15]):
+                            _cols[_i // _metade].markdown(f"• {_nome}")
+                        if _n > 15:
+                            st.caption(f"… e mais {_n - 15} registros. Exporte a lista completa pelo relatório PDF.")
 
 
 elif menu == "PLANO DI 2026":
