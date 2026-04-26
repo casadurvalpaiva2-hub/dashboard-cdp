@@ -770,68 +770,24 @@ def _trigger_quick_add(tipo: str):
     st.session_state.current_page = mapa_menu[tipo]
     st.session_state.open_form = tipo
 
-st.sidebar.markdown("""
-<style>
-/* ── Nav customizado ── */
-div[data-testid="stSidebar"] .cdp-nav-btn > div > button {
-    background: transparent !important;
-    border: none !important;
-    border-left: 3px solid transparent !important;
-    border-radius: 0 !important;
-    color: rgba(255,255,255,0.55) !important;
-    font-size: 13.5px !important;
-    font-weight: 400 !important;
-    letter-spacing: 0.1px !important;
-    text-align: left !important;
-    padding: 10px 20px !important;
-    width: 100% !important;
-    transition: all 0.15s ease !important;
-    box-shadow: none !important;
-}
-div[data-testid="stSidebar"] .cdp-nav-btn > div > button:hover {
-    background: rgba(227,29,36,0.07) !important;
-    color: rgba(255,255,255,0.90) !important;
-    border-left-color: rgba(227,29,36,0.35) !important;
-}
-div[data-testid="stSidebar"] .cdp-nav-active > div > button {
-    background: rgba(227,29,36,0.10) !important;
-    border-left: 3px solid #E31D24 !important;
-    color: #E31D24 !important;
-    font-weight: 600 !important;
-}
-div[data-testid="stSidebar"] .cdp-nav-section {
-    font-size: 10px;
-    letter-spacing: 1.8px;
-    text-transform: uppercase;
-    color: rgba(255,255,255,0.25);
-    padding: 16px 20px 6px 20px;
-    font-weight: 600;
-}
-div[data-testid="stSidebar"] .cdp-quick-add select,
-div[data-testid="stSidebar"] .cdp-quick-add > div > div {
-    background: rgba(255,255,255,0.05) !important;
-    border: 1px solid rgba(255,255,255,0.10) !important;
-    border-radius: 6px !important;
-    font-size: 13px !important;
-    color: rgba(255,255,255,0.70) !important;
-}
-</style>
-""", unsafe_allow_html=True)
-
 with st.sidebar:
     # ── Atalho rápido ──────────────────────────────────────────
-    st.markdown('<div class="cdp-nav-section">Acesso rápido</div>', unsafe_allow_html=True)
-    st.markdown('<div class="cdp-quick-add">', unsafe_allow_html=True)
+    st.markdown("""
+    <p style="font-size:10px;letter-spacing:1.8px;text-transform:uppercase;
+    color:rgba(255,255,255,0.25);font-weight:600;margin:8px 0 6px 4px;">
+    Acesso rápido</p>""", unsafe_allow_html=True)
     _opcoes_add = {"Criar novo...": None, "Parceiro": "parceiro", "Contato": "contato", "Doação": "doacao"}
     _qa_key = f"sel_quick_add_{st.session_state._qa_nonce}"
     _escolha = st.selectbox("Atalho", options=list(_opcoes_add.keys()), index=0, key=_qa_key, label_visibility="collapsed")
-    st.markdown('</div>', unsafe_allow_html=True)
     if _opcoes_add[_escolha] is not None:
         _trigger_quick_add(_opcoes_add[_escolha])
         st.session_state._qa_nonce += 1
 
     # ── Navegação principal ────────────────────────────────────
-    st.markdown('<div class="cdp-nav-section" style="margin-top:8px;">Navegação</div>', unsafe_allow_html=True)
+    st.markdown("""
+    <p style="font-size:10px;letter-spacing:1.8px;text-transform:uppercase;
+    color:rgba(255,255,255,0.25);font-weight:600;margin:16px 0 4px 4px;">
+    Navegação</p>""", unsafe_allow_html=True)
 
     _nav_items = [
         ("Painel Geral",     "Painel Geral"),
@@ -843,14 +799,64 @@ with st.sidebar:
         ("Registrar Doação", "Registrar Doação"),
         ("Relacionamento",   "Relacionamento"),
     ]
+
+    # Monta toda a nav como HTML puro — sem depender de botões Streamlit
+    _nav_html = ""
     for _label, _page in _nav_items:
         _is_active = st.session_state.current_page == _page
-        _cls = "cdp-nav-active" if _is_active else "cdp-nav-btn"
-        st.markdown(f'<div class="{_cls}">', unsafe_allow_html=True)
-        if st.button(_label, key=f"nav_{_page}", use_container_width=True):
+        if _is_active:
+            _style = (
+                "background:rgba(227,29,36,0.10);"
+                "border-left:3px solid #E31D24;"
+                "color:#E31D24;"
+                "font-weight:600;"
+                "cursor:default;"
+            )
+        else:
+            _style = (
+                "border-left:3px solid transparent;"
+                "color:rgba(255,255,255,0.55);"
+                "cursor:pointer;"
+            )
+        _nav_html += (
+            f'<div style="padding:9px 16px;font-size:13.5px;'
+            f'letter-spacing:0.1px;transition:color 0.15s;{_style}">'
+            f'{_label}</div>'
+        )
+    st.markdown(_nav_html, unsafe_allow_html=True)
+
+    # Botões invisíveis fora do fluxo visual — apenas para capturar cliques
+    st.markdown('<div style="display:none">', unsafe_allow_html=True)
+    for _label, _page in _nav_items:
+        if st.button(_label, key=f"nav_{_page}"):
             st.session_state.current_page = _page
             st.rerun()
-        st.markdown('</div>', unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    # Overlay clicável sobre cada item — JS mapeia cliques para botões ocultos
+    st.markdown("""
+    <script>
+    (function() {
+        function bindNav() {
+            const items = window.parent.document.querySelectorAll(
+                '[data-testid="stSidebar"] div[style*="padding:9px 16px"]'
+            );
+            items.forEach((el, i) => {
+                el.style.userSelect = 'none';
+                el.onclick = () => {
+                    const btns = window.parent.document.querySelectorAll(
+                        '[data-testid="stSidebar"] div[style*="display:none"] button'
+                    );
+                    if (btns[i]) btns[i].click();
+                };
+            });
+        }
+        setTimeout(bindNav, 300);
+        const obs = new MutationObserver(() => setTimeout(bindNav, 100));
+        obs.observe(window.parent.document.body, {childList:true, subtree:true});
+    })();
+    </script>
+    """, unsafe_allow_html=True)
 
 menu = st.session_state.current_page
 
