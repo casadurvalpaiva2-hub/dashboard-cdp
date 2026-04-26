@@ -303,14 +303,36 @@ COLOR_NEUTRAL  = "#888780"       # estimado / neutro
 CSS_GLOBAL = """
 <style>
 /* ============================================================
-   TIPOGRAFIA — Inter (Google Fonts) — padrão de dashboards modernos
+   TIPOGRAFIA — Inter + Material Symbols preservados
    ============================================================ */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
-html, body, [class*="css"], * {
+/* Aplica Inter em todos os elementos de texto — MAS não em spans nus
+   usados pelo Streamlit para renderizar ícones Material Symbols */
+html, body,
+h1, h2, h3, h4, h5, h6,
+p, div, label, a, td, th, li, dt, dd,
+input, textarea, select, option, button,
+[data-testid],
+[data-testid] p,
+.stMarkdown, .stText, .stMetric,
+[data-testid="stMarkdownContainer"],
+[data-testid="stWidgetLabel"],
+[data-testid="stMetricLabel"],
+[data-testid="stMetricValue"],
+[data-testid="stMetricDelta"] {
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
+}
+
+/* Preserva Material Symbols para ícones do Streamlit */
+span.material-symbols-rounded,
+[data-testid="stIconMaterial"],
+[data-testid="stBaseButton-secondary"] > div > div > span:first-child,
+[data-testid="stBaseButton-primary"] > div > div > span:first-child,
+[data-testid="stSidebarCollapsedControl"] > div > span {
+    font-family: 'Material Symbols Rounded', 'Material Icons' !important;
 }
 
 /* ============================================================
@@ -496,7 +518,7 @@ section[data-testid="stSidebar"] [data-testid="stButton"] {
     color: white !important;
     font-weight: 600 !important;
     font-size: 14px !important;
-    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif !important;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
     letter-spacing: 0.5px;
 }
 .main .block-container { padding-top: 4rem !important; }
@@ -584,22 +606,31 @@ div[data-testid="stMetricLabel"] p {
     border: 1px solid var(--ds-border-soft);
     border-radius: var(--ds-radius-md);
     padding: 14px 16px;
+    min-width: 0;
 }
 .ds-kpi-label {
-    font-size: 11px;
+    font-size: 10px;
     text-transform: uppercase;
-    letter-spacing: 0.5px;
+    letter-spacing: 0.6px;
     color: var(--ds-text-muted);
     font-weight: 600;
     margin-bottom: 6px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 .ds-kpi-value {
-    font-size: 1.8rem;
+    font-size: 1.55rem;
     font-weight: 700;
-    line-height: 1.1;
-    color: var(--ds-text);
+    line-height: 1.15;
+    color: rgba(255,255,255,0.92);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    letter-spacing: -0.5px;
 }
-.ds-kpi-value.accent { color: var(--ds-info); }
+/* accent = destaque neutro (branco brilhante), não cor de dado */
+.ds-kpi-value.accent { color: rgba(255,255,255,0.95); }
 .ds-kpi-hint {
     font-size: 11px;
     color: var(--ds-text-subtle);
