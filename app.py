@@ -330,10 +330,17 @@ CSS_GLOBAL = """
     background: transparent !important;
 }
 
-/* Toolbar e decorações do Streamlit */
-[data-testid="stToolbar"],
+/* Remove só a decoração "Made with Streamlit" — toolbar mantida para o toggle da sidebar */
 [data-testid="stDecoration"] {
     display: none !important;
+}
+/* Esconde o menu ⋮ da toolbar mas mantém o botão de sidebar */
+[data-testid="stToolbarActions"] {
+    display: none !important;
+}
+/* Garante que o botão de reabrir sidebar sempre aparece */
+[data-testid="stSidebarCollapsedControl"] {
+    display: flex !important;
 }
 
 /* Dataframes e tabelas — fundo escuro consistente */
