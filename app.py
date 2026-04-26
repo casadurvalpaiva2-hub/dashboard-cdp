@@ -2932,13 +2932,13 @@ elif menu == "Entrada de Recursos":
                 "Bazar RFB (Brinquedos)":"BAZAR_RFB_BRINQUEDOS",
                 "Campanha Troco":         "TROCO",
                 "Nota Potiguar":          "NOTA_POTIGUAR",
+                "Doação On-line (site)":  "DOACAO_ONLINE",
             }
             _CATEGORIAS = {
-                "Evento / Campanha (Bazar, Troco, Nota Potiguar)": "evento",
-                "Parceria institucional (repasse de empresa)":      "parceria",
-                "Projeto / Emenda parlamentar":                     "projeto",
-                "Doação online (pessoa física)":                    "online",
-                "Outros":                                           "outros",
+                "Evento / Campanha (Bazar, Troco, Nota Potiguar, Site)": "evento",
+                "Parceria institucional (repasse de empresa)":            "parceria",
+                "Projeto / Emenda parlamentar":                           "projeto",
+                "Outros":                                                 "outros",
             }
 
             categoria = st.selectbox(
@@ -3878,14 +3878,14 @@ def _gerar_backup_completo():
             zf.writestr(f"{nome}.csv", df.to_csv(index=False))
     return output.getvalue(), "zip", "application/zip"
 
-
 _backup = _gerar_backup_completo()
 if _backup:
     _b_data, _b_ext, _b_mime = _backup
+    _b_nome = "CDP_backup_" + datetime.now().strftime("%Y%m%d") + "." + _b_ext
     st.sidebar.download_button(
         "Backup completo",
         data=_b_data,
-        file_name=f"CDP_backup_{__import__('datetime').datetime.now().strftime('%Y%m%d_%H%M')}.{_b_ext}",
+        file_name=_b_nome,
         mime=_b_mime,
         use_container_width=True,
         key="sidebar_backup_dl",
