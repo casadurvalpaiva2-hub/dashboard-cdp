@@ -2934,15 +2934,8 @@ elif menu == "Parcerias":
 
 # --- 3. REGISTRAR DOAÇÃO ---
 elif menu == "Registrar Doação":
-    page_header("Entrada de recursos", "Registro de doações recebidas e histórico editável.")
+    page_header("Entrada de recursos", "Registro de doações recebidas, histórico editável e alertas de recorrência.")
 
-    # Se veio do botão "+ Novo > Doação", mostra aviso
-    _veio_qa_doacao = (st.session_state.open_form == "doacao")
-    if _veio_qa_doacao:
-        st.session_state.open_form = None
-        st.info("✨ Registrando nova doação — preencha os campos abaixo.", icon="💰")
-
-    # 1. Buscamos os nomes para o usuário escolher
     df_p = _parceiros_lista()
 
     if df_p.empty:
@@ -2950,115 +2943,314 @@ elif menu == "Registrar Doação":
         if st.button("🏢 Cadastrar parceiro agora", type="primary", key="doa_go_parc"):
             _trigger_quick_add("parceiro"); st.rerun()
     else:
-        with st.form("nova_doacao", clear_on_submit=True):
-            col_a, col_b = st.columns(2)
+        # Inicializa estado para edição de registro
+        if "doa_edit_id" not in st.session_state:
+            st.session_state.doa_edit_id = None
 
-            with col_a:
-                opcoes_p = ["Selecione o parceiro..."] + df_p['nome_instituicao'].tolist()
-                nome_sel = st.selectbox("Parceiro / Fonte *", opcoes_p)
-                valor    = st.number_input("Valor do repasse (R$) *", min_value=0.0, step=100.0, format="%.2f")
-                data     = st.date_input("Data do recebimento", datetime.now())
+        _tab_idx = 0
+        if st.session_state.open_form == "doacao":
+            st.session_state.open_form = None
+            _tab_idx = 0
 
-            with col_b:
-                projeto = st.text_input("Projeto / Emenda / Finalidade", placeholder="ex: Projeto Vida")
-                tipo    = st.selectbox("Tipo de recurso", ["Financeira", "Vestuário", "Alimentos", "Serviços", "Midiática", "Projetos"])
-                origens_plano = ["Selecione...", "Bazar do Caquito", "Campanha Troco", "Parcerias", "Nota Potiguar", "Doações Online", "Projetos", "Troco"]
-                origem_sel = st.selectbox("Origem da captação (estratégia)", origens_plano)
+        tab_novo, tab_hist, tab_alertas = st.tabs([
+            "➕ Registrar nova",
+            "📋 Histórico",
+            "🔔 Doadores recorrentes",
+        ])
 
-            desc = st.text_area("Observações", placeholder="Contexto, forma de pagamento, referências…")
+        # ════════════════════════════════════════════════════════
+        # ABA 1 — REGISTRAR NOVA DOAÇÃO
+        # ════════════════════════════════════════════════════════
+        with tab_novo:
+            section("Nova entrada de recurso")
+            with st.form("nova_doacao", clear_on_submit=True):
+                col_a, col_b = st.columns(2)
 
-            if st.form_submit_button("Confirmar doação", type="primary", use_container_width=True):
-                if nome_sel == "Selecione o parceiro...":
-                    st.warning("Selecione o parceiro.")
-                elif valor <= 0:
-                    st.warning("Informe um valor maior que zero.")
-                else:
-                    projeto_final = projeto.upper() if projeto else "GERAL"
-                    id_p = df_p[df_p['nome_instituicao'] == nome_sel]['id_parceiro'].values[0]
+                with col_a:
+                    opcoes_p = ["Selecione o parceiro..."] + df_p['nome_instituicao'].tolist()
+                    nome_sel = st.selectbox("Parceiro / Fonte *", opcoes_p)
+                    valor    = st.number_input("Valor do repasse (R$) *", min_value=0.0, step=100.0, format="%.2f")
+                    data     = st.date_input("Data do recebimento", datetime.now())
 
-                    sql = """
-                        INSERT INTO Doacao (
-                            id_parceiro, valor_estimado, tipo_doacao,
-                            data_doacao, descricao, nome_projeto, origem_captacao
+                with col_b:
+                    projeto = st.text_input("Projeto / Emenda / Finalidade", placeholder="ex: Projeto Vida")
+                    tipo    = st.selectbox("Tipo de recurso", [
+                        "Financeira", "Projetos", "Vestuário", "Alimentos", "Serviços", "Midiática",
+                    ])
+                    origens_plano = [
+                        "Selecione...", "Bazar do Caquito", "Campanha Troco", "Parcerias",
+                        "Nota Potiguar", "Doações Online", "Projetos", "Troco",
+                    ]
+                    origem_sel = st.selectbox("Origem da captação (estratégia)", origens_plano)
+
+                desc = st.text_area("Observações", placeholder="Contexto, forma de pagamento, referências…")
+
+                if st.form_submit_button("Confirmar doação", type="primary", use_container_width=True):
+                    if nome_sel == "Selecione o parceiro...":
+                        st.warning("Selecione o parceiro.")
+                    elif valor <= 0:
+                        st.warning("Informe um valor maior que zero.")
+                    else:
+                        projeto_final = projeto.upper() if projeto else "GERAL"
+                        id_p = df_p[df_p['nome_instituicao'] == nome_sel]['id_parceiro'].values[0]
+                        run_insert(
+                            """INSERT INTO Doacao (
+                                id_parceiro, valor_estimado, tipo_doacao,
+                                data_doacao, descricao, nome_projeto, origem_captacao
+                            ) VALUES (?,?,?,?,?,?,?)""",
+                            (int(id_p), valor, tipo, data.strftime('%Y-%m-%d'),
+                             desc.upper() if desc else "", projeto_final, origem_sel),
                         )
-                        VALUES (?,?,?,?,?,?,?)
-                    """
-                    run_insert(sql, (
-                        int(id_p), valor, tipo,
-                        data.strftime('%Y-%m-%d'),
-                        desc.upper(), projeto_final, origem_sel
-                    ))
-                    st.success(f"Doação de **{nome_sel}** ({format_br(valor)}) registrada!")
-                    st.rerun()
-
-    # --- CENTRAL DE GESTÃO DE LANÇAMENTOS (EXTRATO POR PARCEIRO) ---
-    st.divider()
-    section("Histórico e lançamentos")
-
-    # 1. Seleção do Parceiro para busca
-    lista_busca = ["Todos"] + df_p['nome_instituicao'].tolist()
-    parceiro_busca = st.selectbox("Filtrar histórico por parceiro:", lista_busca)
-
-    # 2. Query Dinâmica para buscar doações
-    if parceiro_busca == "Todos":
-        query_h = """
-            SELECT d.id_doacao, p.nome_instituicao, d.valor_estimado, d.data_doacao, 
-                   d.nome_projeto, d.descricao, d.tipo_doacao, d.origem_captacao
-            FROM Doacao d
-            JOIN Parceiro p ON d.id_parceiro = p.id_parceiro
-            ORDER BY d.data_doacao DESC LIMIT 20
-        """
-        params_h = ()
-    else:
-        query_h = """
-            SELECT d.id_doacao, p.nome_instituicao, d.valor_estimado, d.data_doacao, 
-                   d.nome_projeto, d.descricao, d.tipo_doacao, d.origem_captacao
-            FROM Doacao d
-            JOIN Parceiro p ON d.id_parceiro = p.id_parceiro
-            WHERE p.nome_instituicao = ?
-            ORDER BY d.data_doacao DESC
-        """
-        params_h = (parceiro_busca,)
-
-    df_h = run_query(query_h, params_h)
-
-    if not df_h.empty:
-        st.write(f"Exibindo **{len(df_h)}** lançamentos encontrados:")
-        
-        for _, row in df_h.iterrows():
-            # Card principal usando Expander para não poluir a tela
-            with st.expander(f"{row['data_doacao']} | {row['nome_instituicao']} | {format_br(row['valor_estimado'])}"):
-                
-                # Criamos um mini-formulário de edição dentro do expander
-                with st.form(key=f"edit_form_{row['id_doacao']}"):
-                    st.markdown(f"**Editando Lançamento #{row['id_doacao']}**")
-                    c1, c2, c3 = st.columns(3)
-                    
-                    novo_valor = c1.number_input("Valor (R$)", value=float(row['valor_estimado']), key=f"v_{row['id_doacao']}")
-                    _dd = row['data_doacao']
-                    _dd_val = _dd if hasattr(_dd, 'year') else datetime.strptime(str(_dd), '%Y-%m-%d').date()
-                    nova_data = c2.date_input("Data", value=_dd_val, key=f"d_{row['id_doacao']}")
-                    novo_projeto = c3.text_input("Projeto", value=row['nome_projeto'], key=f"p_{row['id_doacao']}")
-                    
-                    nova_desc = st.text_area("Descrição", value=row['descricao'] or "", key=f"desc_{row['id_doacao']}")
-                    
-                    col_btn1, col_btn2 = st.columns([1, 1])
-                    
-                    if col_btn1.form_submit_button("💾 Salvar alterações", use_container_width=True):
-                        sql_upd = """
-                            UPDATE Doacao SET valor_estimado=?, data_doacao=?, nome_projeto=?, descricao=?
-                            WHERE id_doacao=?
-                        """
-                        run_insert(sql_upd, (novo_valor, str(nova_data), novo_projeto, nova_desc, row['id_doacao']))
-                        st.success("Alterado com sucesso!")
+                        st.success(f"✅ Doação de **{nome_sel}** ({format_br(valor)}) registrada com sucesso!")
                         st.rerun()
 
-                    if col_btn2.form_submit_button("🗑️ Excluir registro", type="secondary", use_container_width=True):
-                        run_insert("DELETE FROM Doacao WHERE id_doacao = ?", (row['id_doacao'],))
-                        st.warning("Registro excluído.")
-                        st.rerun()
-    else:
-        st.info("Nenhum lançamento encontrado para os critérios selecionados.")
+        # ════════════════════════════════════════════════════════
+        # ABA 2 — HISTÓRICO COM BUSCA E EDIÇÃO
+        # ════════════════════════════════════════════════════════
+        with tab_hist:
+            # ── KPIs do período ────────────────────────────────
+            df_kpi_doa = run_query_cached("""
+                SELECT
+                    COUNT(*)                                                   AS total_registros,
+                    COALESCE(SUM(CASE WHEN tipo_doacao IN ('Financeira','Projetos')
+                                     THEN valor_estimado END), 0)              AS total_financeiro,
+                    COALESCE(SUM(valor_estimado), 0)                           AS total_geral,
+                    MAX(data_doacao)                                           AS ultima_entrada
+                FROM Doacao
+                WHERE data_doacao >= (CURRENT_DATE - INTERVAL '365 days')
+            """)
+            if not df_kpi_doa.empty:
+                _r = df_kpi_doa.iloc[0]
+                _ult = str(_r['ultima_entrada'])[:10] if _r['ultima_entrada'] else "—"
+                kpi_row([
+                    {"label": "Registros (12 meses)",   "value": int(_r['total_registros'])},
+                    {"label": "Financeiro (12 meses)",  "value": format_br(float(_r['total_financeiro'])), "accent": True},
+                    {"label": "Total c/ estimado",      "value": format_br(float(_r['total_geral']))},
+                    {"label": "Última entrada",         "value": _ult},
+                ])
+
+            st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
+            section("Filtros")
+
+            # ── Filtros ────────────────────────────────────────
+            fc1, fc2, fc3, fc4 = st.columns([2, 1, 1, 1])
+            busca_txt   = fc1.text_input("Buscar por parceiro, projeto ou descrição",
+                                         placeholder="Digite para filtrar…", label_visibility="collapsed")
+            tipo_filtro = fc2.selectbox("Tipo", ["Todos", "Financeira", "Projetos", "Estimado"], label_visibility="collapsed")
+            origem_filtro = fc3.selectbox("Origem", ["Todas", "Bazar do Caquito", "Campanha Troco", "Parcerias",
+                                                      "Nota Potiguar", "Doações Online", "Projetos", "Troco"],
+                                          label_visibility="collapsed")
+            periodo = fc4.selectbox("Período", ["Últimos 12 meses", "2026", "2025", "Todos"], label_visibility="collapsed")
+
+            # ── Query base ─────────────────────────────────────
+            query_hist = """
+                SELECT d.id_doacao, p.nome_instituicao AS parceiro, d.valor_estimado,
+                       d.data_doacao, d.nome_projeto, d.descricao, d.tipo_doacao, d.origem_captacao
+                FROM Doacao d
+                JOIN Parceiro p ON d.id_parceiro = p.id_parceiro
+                ORDER BY d.data_doacao DESC
+            """
+            df_h = run_query_cached(query_hist)
+
+            if not df_h.empty:
+                df_h['data_doacao'] = pd.to_datetime(df_h['data_doacao'])
+
+                # Aplica filtros em memória (mais rápido que round-trips ao banco)
+                if busca_txt:
+                    mask = (
+                        df_h['parceiro'].str.contains(busca_txt, case=False, na=False) |
+                        df_h['nome_projeto'].str.contains(busca_txt, case=False, na=False) |
+                        df_h['descricao'].str.contains(busca_txt, case=False, na=False) |
+                        df_h['origem_captacao'].str.contains(busca_txt, case=False, na=False)
+                    )
+                    df_h = df_h[mask]
+
+                if tipo_filtro == "Estimado":
+                    df_h = df_h[~df_h['tipo_doacao'].isin(['Financeira', 'Projetos'])]
+                elif tipo_filtro != "Todos":
+                    df_h = df_h[df_h['tipo_doacao'] == tipo_filtro]
+
+                if origem_filtro != "Todas":
+                    df_h = df_h[df_h['origem_captacao'] == origem_filtro]
+
+                hoje = pd.Timestamp.now()
+                if periodo == "Últimos 12 meses":
+                    df_h = df_h[df_h['data_doacao'] >= hoje - pd.DateOffset(months=12)]
+                elif periodo == "2026":
+                    df_h = df_h[df_h['data_doacao'].dt.year == 2026]
+                elif periodo == "2025":
+                    df_h = df_h[df_h['data_doacao'].dt.year == 2025]
+
+            section("Registros")
+
+            if df_h is not None and not df_h.empty:
+                total_filtrado = df_h['valor_estimado'].sum()
+                st.caption(f"**{len(df_h)} registros** encontrados · Total: **{format_br(total_filtrado)}**")
+
+                # Tabela limpa
+                df_exib = df_h.copy()
+                df_exib['data_doacao'] = df_exib['data_doacao'].dt.strftime('%d/%m/%Y')
+                df_exib['valor_fmt']   = df_exib['valor_estimado'].apply(format_br)
+
+                sel = st.dataframe(
+                    df_exib[['id_doacao', 'data_doacao', 'parceiro', 'valor_fmt',
+                              'tipo_doacao', 'nome_projeto', 'origem_captacao', 'descricao']],
+                    column_config={
+                        "id_doacao":       st.column_config.NumberColumn("ID",         width="small"),
+                        "data_doacao":     st.column_config.TextColumn("Data",         width="small"),
+                        "parceiro":        st.column_config.TextColumn("Parceiro",     width="medium"),
+                        "valor_fmt":       st.column_config.TextColumn("Valor",        width="small"),
+                        "tipo_doacao":     st.column_config.TextColumn("Tipo",         width="small"),
+                        "nome_projeto":    st.column_config.TextColumn("Projeto"),
+                        "origem_captacao": st.column_config.TextColumn("Origem"),
+                        "descricao":       st.column_config.TextColumn("Observações"),
+                    },
+                    hide_index=True,
+                    use_container_width=True,
+                    height=320,
+                )
+
+                # ── Edição por ID ──────────────────────────────
+                section("Editar / excluir registro")
+                _ids_disp = df_h['id_doacao'].tolist()
+                _id_sel = st.number_input(
+                    "ID do registro para editar",
+                    min_value=1, step=1, value=_ids_disp[0] if _ids_disp else 1,
+                    help="Veja o ID na coluna 'ID' da tabela acima.",
+                )
+
+                _row_edit = df_h[df_h['id_doacao'] == _id_sel]
+                if not _row_edit.empty:
+                    row = _row_edit.iloc[0]
+                    with st.form(f"edit_doa_{_id_sel}"):
+                        st.markdown(
+                            f"<span style='font-size:12px;color:var(--ds-text-muted);'>"
+                            f"Editando: <strong>{row['parceiro']}</strong> · "
+                            f"{row['data_doacao'].strftime('%d/%m/%Y')} · {format_br(row['valor_estimado'])}"
+                            f"</span>",
+                            unsafe_allow_html=True,
+                        )
+                        st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+                        ea, eb, ec = st.columns(3)
+                        novo_valor   = ea.number_input("Valor (R$)", value=float(row['valor_estimado']))
+                        _dv          = row['data_doacao'].date()
+                        nova_data    = eb.date_input("Data", value=_dv)
+                        novo_projeto = ec.text_input("Projeto", value=row['nome_projeto'] or "")
+                        nova_desc    = st.text_area("Observações", value=row['descricao'] or "")
+
+                        cb1, cb2 = st.columns(2)
+                        if cb1.form_submit_button("💾 Salvar alterações", use_container_width=True, type="primary"):
+                            run_exec(
+                                "UPDATE Doacao SET valor_estimado=%s, data_doacao=%s, nome_projeto=%s, descricao=%s WHERE id_doacao=%s",
+                                (novo_valor, str(nova_data), novo_projeto.upper(), nova_desc.upper() if nova_desc else "", int(_id_sel)),
+                            )
+                            st.success("Registro atualizado com sucesso!")
+                            st.rerun()
+                        if cb2.form_submit_button("🗑️ Excluir registro", use_container_width=True):
+                            run_exec("DELETE FROM Doacao WHERE id_doacao=%s", (int(_id_sel),))
+                            st.warning("Registro excluído.")
+                            st.rerun()
+                else:
+                    st.caption("ID não encontrado nos registros filtrados.")
+            else:
+                empty_state("📋", "Nenhum registro encontrado", "Ajuste os filtros ou registre uma nova entrada na aba ao lado.")
+
+        # ════════════════════════════════════════════════════════
+        # ABA 3 — ALERTAS DE RECORRÊNCIA
+        # ════════════════════════════════════════════════════════
+        with tab_alertas:
+            section("Doadores que pararam de contribuir")
+            st.caption("Parceiros com histórico financeiro em 2025 que ainda não registraram entrada em 2026.")
+
+            df_inativos = run_query_cached("""
+                SELECT
+                    p.nome_instituicao                          AS parceiro,
+                    p.status,
+                    COUNT(DISTINCT EXTRACT(YEAR FROM d25.data_doacao))::INT AS anos_ativo,
+                    SUM(d25.valor_estimado)                     AS total_2025,
+                    MAX(d25.data_doacao)::DATE                  AS ultima_doacao,
+                    (CURRENT_DATE - MAX(d25.data_doacao)::DATE)::INT AS dias_sem_doacao
+                FROM Parceiro p
+                JOIN Doacao d25
+                    ON d25.id_parceiro = p.id_parceiro
+                   AND d25.tipo_doacao IN ('Financeira','Projetos')
+                   AND EXTRACT(YEAR FROM d25.data_doacao) = 2025
+                WHERE p.id_parceiro NOT IN (
+                    SELECT DISTINCT id_parceiro FROM Doacao
+                    WHERE tipo_doacao IN ('Financeira','Projetos')
+                      AND EXTRACT(YEAR FROM data_doacao) = 2026
+                )
+                GROUP BY p.id_parceiro, p.nome_instituicao, p.status
+                ORDER BY total_2025 DESC
+            """)
+
+            if df_inativos.empty:
+                st.success("✅ Todos os doadores recorrentes de 2025 já registraram entrada em 2026!")
+            else:
+                kpi_row([
+                    {"label": "Doadores em alerta",       "value": len(df_inativos)},
+                    {"label": "Valor em risco (base 2025)",
+                     "value": format_br(float(df_inativos['total_2025'].sum()))},
+                ])
+                st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+
+                for _, r in df_inativos.iterrows():
+                    dias = int(r['dias_sem_doacao']) if r['dias_sem_doacao'] else 999
+                    if dias > 180:
+                        tom = "danger"
+                    elif dias > 90:
+                        tom = "warning"
+                    else:
+                        tom = "info"
+
+                    ultima = str(r['ultima_doacao'])[:10] if r['ultima_doacao'] else "—"
+                    action_card(
+                        titulo=r['parceiro'],
+                        meta_parts=[
+                            f"Última entrada: {ultima}",
+                            f"{dias} dias sem doação",
+                            f"Total 2025: {format_br(float(r['total_2025']))}",
+                            f"Status: {r['status'] or 'N/D'}",
+                        ],
+                        tom=tom,
+                        extra_badges=[(f"{dias}d sem entrada", tom)],
+                    )
+
+            # ── Doadores mais recorrentes ───────────────────────
+            st.markdown("<div style='height:16px'></div>", unsafe_allow_html=True)
+            section("Maiores contribuidores históricos")
+            st.caption("Top 10 parceiros por volume financeiro acumulado.")
+
+            df_top = run_query_cached("""
+                SELECT
+                    p.nome_instituicao                          AS parceiro,
+                    COUNT(DISTINCT EXTRACT(YEAR FROM d.data_doacao)) AS anos_ativo,
+                    COUNT(*)                                    AS num_entradas,
+                    SUM(d.valor_estimado)                       AS total_acumulado,
+                    MAX(d.data_doacao)::DATE                    AS ultima_entrada
+                FROM Doacao d
+                JOIN Parceiro p ON d.id_parceiro = p.id_parceiro
+                WHERE d.tipo_doacao IN ('Financeira','Projetos')
+                GROUP BY p.id_parceiro, p.nome_instituicao
+                ORDER BY total_acumulado DESC
+                LIMIT 10
+            """)
+
+            if not df_top.empty:
+                df_top['total_fmt'] = df_top['total_acumulado'].apply(format_br)
+                df_top['ultima_entrada'] = df_top['ultima_entrada'].astype(str).str[:10]
+                st.dataframe(
+                    df_top[['parceiro', 'anos_ativo', 'num_entradas', 'total_fmt', 'ultima_entrada']],
+                    column_config={
+                        "parceiro":       st.column_config.TextColumn("Parceiro",          width="large"),
+                        "anos_ativo":     st.column_config.NumberColumn("Anos ativo",      width="small"),
+                        "num_entradas":   st.column_config.NumberColumn("Entradas",        width="small"),
+                        "total_fmt":      st.column_config.TextColumn("Total acumulado",   width="medium"),
+                        "ultima_entrada": st.column_config.TextColumn("Última entrada",    width="small"),
+                    },
+                    hide_index=True,
+                    use_container_width=True,
+                )
 
 elif menu == "Contatos":
     page_header("Agenda", "Contatos diretos de parceiros, com acesso rápido a WhatsApp e e-mail.")
