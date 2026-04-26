@@ -1335,463 +1335,370 @@ if "schema_ok" not in st.session_state:
 if menu == "Painel Geral":
     page_header("Painel geral", "Visão consolidada do Desenvolvimento Institucional.")
 
-    # ============================================================
-    # BUSCA DE DADOS TRANSVERSAL (com cache para reduzir latência)
-    # ============================================================
-    df_doacoes      = run_query_cached("SELECT data_doacao, valor_estimado, tipo_doacao, origem_captacao, id_parceiro FROM Doacao")
+    # ── Dados transversais ────────────────────────────────────────────────────
+    df_doacoes      = run_query_cached("SELECT data_doacao, valor_estimado, tipo_doacao, origem_captacao FROM Doacao")
     df_parceiros_pg = run_query_cached("SELECT id_parceiro, nome_instituicao, status, data_adesao FROM Parceiro")
     df_acoes_pg     = run_query_cached("SELECT fonte, situacao FROM View_Acoes_Unificadas")
-    df_eventos_pg   = run_query_cached("""
-        SELECT mes_referencia,
-               SUM(CASE WHEN confirmado = TRUE THEN 1 ELSE 0 END) as confirmados,
-               COUNT(*) as total
-        FROM Convidados_Almoco
-        GROUP BY mes_referencia
-        ORDER BY mes_referencia DESC
-        LIMIT 1
-    """)
-    df_rel_pg = run_query_cached("SELECT * FROM View_Relacionamento_Critico")
+    df_rel_pg       = run_query_cached("SELECT * FROM View_Relacionamento_Critico")
+    df_prog_plano   = run_query_cached("SELECT nome_fonte, meta_2026, captado_2026, pct_meta FROM View_Progresso_PlanoAnual")
 
-    # ============================================================
-    # SELETOR DE ANO
-    # ============================================================
-    if df_doacoes.empty:
+    _tipos_fin = ['Financeira', 'Projetos']
+
+    if df_doacoes.empty and df_prog_plano.empty:
         empty_state("📋", "Nenhum dado cadastrado", "Comece registrando doações, parceiros e eventos.")
     else:
-        df_doacoes['data_doacao'] = pd.to_datetime(df_doacoes['data_doacao'])
-        anos = sorted(df_doacoes['data_doacao'].dt.year.unique(), reverse=True)
+        df_doacoes['data_doacao'] = pd.to_datetime(df_doacoes['data_doacao'], errors='coerce')
+
+        # ── ANO DE REFERÊNCIA ─────────────────────────────────────────────────
+        anos = sorted(df_doacoes['data_doacao'].dt.year.dropna().unique().astype(int), reverse=True) if not df_doacoes.empty else [datetime.now().year]
         ano_sel = st.selectbox("Ano de referência", anos, key="pg_ano")
 
-        df_atual  = df_doacoes[df_doacoes['data_doacao'].dt.year == ano_sel]
+        df_atual   = df_doacoes[df_doacoes['data_doacao'].dt.year == ano_sel]
         df_passado = df_doacoes[df_doacoes['data_doacao'].dt.year == (ano_sel - 1)]
+        df_fin     = df_atual[df_atual['tipo_doacao'].isin(_tipos_fin)]
+        df_fin_pa  = df_passado[df_passado['tipo_doacao'].isin(_tipos_fin)]
 
-        # Separação crítica: financeiro (entra na conta) vs estimado (mídia/espécie)
-        _tipos_fin = ['Financeira', 'Projetos']
-        df_fin    = df_atual[df_atual['tipo_doacao'].isin(_tipos_fin)]
-        df_est    = df_atual[~df_atual['tipo_doacao'].isin(_tipos_fin)]
-        df_fin_pa = df_passado[df_passado['tipo_doacao'].isin(_tipos_fin)]
-
-        total_fin    = df_fin['valor_estimado'].sum()
-        total_est    = df_est['valor_estimado'].sum()
-        total_fin_pa = df_fin_pa['valor_estimado'].sum()
-        qtd_atual    = len(df_atual)
-        qtd_passada  = len(df_passado)
-        media_fin    = total_fin / len(df_fin) if len(df_fin) > 0 else 0
-
-        # ============================================================
-        # BLOCO 1 — ARRECADAÇÃO (somente financeiro — entra na conta)
-        # ============================================================
-        section("Arrecadação financeira (entra na conta)")
-
+        total_fin    = float(df_fin['valor_estimado'].sum())
+        total_fin_pa = float(df_fin_pa['valor_estimado'].sum())
         def _fmt(v): return format_br(v)
 
-        diff_fin = total_fin - total_fin_pa
-        c1, c2, c3 = st.columns(3)
-        c1.metric(
-            "Financeiro no ano", _fmt(total_fin),
-            delta=(f"{'+' if diff_fin >= 0 else '-'} {_fmt(abs(diff_fin))}" if (ano_sel - 1) in anos else None)
-        )
-        c2.metric("Registros financeiros", f"{len(df_fin)} un")
-        c3.metric("Ticket médio financeiro", _fmt(media_fin))
+        # ════════════════════════════════════════════════════════════════════════
+        # BLOCO 0 — VELOCÍMETRO DO PLANO DI 2026
+        # ════════════════════════════════════════════════════════════════════════
+        if not df_prog_plano.empty and ano_sel == 2026:
+            section("Plano DI 2026 — progresso geral")
+            meta_total    = float(df_prog_plano['meta_2026'].sum())
+            captado_total = float(df_prog_plano['captado_2026'].sum())
+            pct_total     = (captado_total / meta_total * 100) if meta_total > 0 else 0
+            saldo         = meta_total - captado_total
 
-        col_esq, col_dir = st.columns(2)
-        with col_esq:
-            st.caption("Captação por tipo")
-            if not df_fin.empty:
-                dados_cat = (
-                    df_fin.groupby('tipo_doacao')['valor_estimado']
-                    .sum().sort_values(ascending=False).reset_index()
-                )
-                dados_cat.columns = ["Tipo", "Valor"]
-                # Paleta sequencial: azul mais forte nos maiores valores
-                n = len(dados_cat)
-                palette = [f"rgba(55,138,221,{0.55 + 0.45*(1-(i/max(n-1,1))):.2f})" for i in range(n)]
-                fig_cat = px.bar(
-                    dados_cat, x="Tipo", y="Valor",
-                    color="Tipo",
-                    color_discrete_sequence=palette,
-                    text=dados_cat["Valor"].apply(lambda v: f"R$ {v:,.0f}".replace(",",".")),
-                )
-                fig_cat.update_traces(
-                    marker_line_width=0,
-                    textposition="outside",
-                    textfont=dict(size=10, color="rgba(255,255,255,0.70)"),
-                    hovertemplate="<b>%{x}</b><br>R$ %{y:,.2f}<extra></extra>",
-                    cliponaxis=False,
-                )
-                _ly = _chart_layout(260)
-                _ly["yaxis"]["tickformat"] = ",.0f"
-                _ly["yaxis"]["tickprefix"] = "R$ "
-                _ly["showlegend"] = False
-                fig_cat.update_layout(**_ly)
-                st.plotly_chart(fig_cat, use_container_width=True, config={"displayModeBar": False})
-            else:
-                st.caption("Sem registros financeiros no período.")
+            # Meta proporcional ao dia do ano (quanto deveria ter captado até hoje)
+            dia_do_ano   = datetime.now().timetuple().tm_yday
+            pct_esperado = min(dia_do_ano / 365 * 100, 100)
+            meta_esperada = meta_total * pct_esperado / 100
 
-        with col_dir:
-            st.caption("Evolução mensal")
-            if not df_fin.empty:
-                df_fin_plot = df_fin.copy()
-                df_fin_plot['Mês'] = df_fin_plot['data_doacao'].dt.strftime('%b/%y')
-                dados_mes = df_fin_plot.groupby(
-                    df_fin_plot['data_doacao'].dt.to_period('M')
-                )['valor_estimado'].sum().reset_index()
-                dados_mes.columns = ["Período", "Valor"]
-                dados_mes["Mês"] = dados_mes["Período"].dt.strftime('%b/%y')
-                dados_mes = dados_mes.sort_values("Período")
-                fig_mes = go.Figure()
-                fig_mes.add_trace(go.Scatter(
-                    x=dados_mes["Mês"],
-                    y=dados_mes["Valor"],
-                    mode="lines+markers",
-                    line=dict(color="#378ADD", width=2.5, shape="spline", smoothing=0.8),
-                    marker=dict(color="#378ADD", size=6, line=dict(color="rgba(15,17,22,0.95)", width=2)),
-                    fill="tozeroy",
-                    fillcolor="rgba(55,138,221,0.08)",
-                    hovertemplate="<b>%{x}</b><br>R$ %{y:,.2f}<extra></extra>",
+            cv_gauge, cv_kpis = st.columns([1, 1.4])
+            with cv_gauge:
+                cor_gauge = "#059669" if pct_total >= pct_esperado else "#D97706" if pct_total >= pct_esperado * 0.7 else "#DC2626"
+                fig_gauge = go.Figure(go.Indicator(
+                    mode="gauge+number+delta",
+                    value=pct_total,
+                    delta={"reference": pct_esperado, "valueformat": ".1f",
+                           "suffix": "%", "increasing": {"color": "#059669"}, "decreasing": {"color": "#DC2626"}},
+                    number={"suffix": "%", "valueformat": ".1f", "font": {"size": 36, "color": "#fff"}},
+                    gauge={
+                        "axis": {"range": [0, 100], "ticksuffix": "%", "tickcolor": "#555", "tickfont": {"color": "#888", "size": 11}},
+                        "bar":  {"color": cor_gauge, "thickness": 0.25},
+                        "bgcolor": "rgba(0,0,0,0)",
+                        "borderwidth": 0,
+                        "steps": [
+                            {"range": [0, pct_esperado * 0.7],  "color": "rgba(220,38,38,0.12)"},
+                            {"range": [pct_esperado * 0.7, pct_esperado], "color": "rgba(217,119,6,0.12)"},
+                            {"range": [pct_esperado, 100], "color": "rgba(5,150,105,0.12)"},
+                        ],
+                        "threshold": {"line": {"color": "#94A3B8", "width": 2}, "thickness": 0.8, "value": pct_esperado},
+                    },
+                    title={"text": "Meta 2026", "font": {"size": 13, "color": "#94A3B8"}},
                 ))
-                _ly = _chart_layout(260)
-                _ly["yaxis"]["tickformat"] = "~s"
-                _ly["yaxis"]["tickprefix"] = "R$ "
-                fig_mes.update_layout(**_ly)
-                st.plotly_chart(fig_mes, use_container_width=True, config={"displayModeBar": False})
-            else:
-                st.caption("Sem dados financeiros mensais.")
-
-        df_origem_fin = df_fin[df_fin['origem_captacao'].notna() & (df_fin['origem_captacao'] != 'Selecione...')]
-        if not df_origem_fin.empty:
-            st.caption("Mix por origem")
-            dados_orig = (
-                df_origem_fin.groupby('origem_captacao')['valor_estimado']
-                .sum().sort_values(ascending=True).reset_index()
-            )
-            dados_orig.columns = ["Origem", "Valor"]
-            n2 = len(dados_orig)
-            palette2 = [f"rgba(55,138,221,{0.45 + 0.55*(i/max(n2-1,1)):.2f})" for i in range(n2)]
-            fig_orig = px.bar(
-                dados_orig, x="Valor", y="Origem", orientation='h',
-                color="Origem",
-                color_discrete_sequence=palette2,
-                text=dados_orig["Valor"].apply(lambda v: f"R$ {v:,.0f}".replace(",",".")),
-            )
-            fig_orig.update_traces(
-                marker_line_width=0,
-                textposition="outside",
-                textfont=dict(size=10, color="rgba(255,255,255,0.70)"),
-                hovertemplate="<b>%{y}</b><br>R$ %{x:,.2f}<extra></extra>",
-                cliponaxis=False,
-            )
-            _ly2 = _chart_layout(max(180, n2 * 44), margin=dict(l=0, r=80, t=8, b=0))
-            _ly2["xaxis"]["tickformat"] = ",.0f"
-            _ly2["xaxis"]["tickprefix"] = "R$ "
-            _ly2["showlegend"] = False
-            fig_orig.update_layout(**_ly2)
-            st.plotly_chart(fig_orig, use_container_width=True, config={"displayModeBar": False})
-
-        # Doações estimadas: colapsado, informativo
-        if total_est > 0:
-            with st.expander(f"Doações estimadas (mídia/espécie) — {_fmt(total_est)} declarados — não entram no caixa"):
-                st.caption("Valores declarados pelos parceiros (espaço de mídia, sessões de foto, materiais etc.). Contam para impacto e relacionamento, não para metas financeiras.")
-                dados_est = df_est.groupby('tipo_doacao')['valor_estimado'].sum().sort_values(ascending=False).reset_index()
-                dados_est.columns = ["Tipo", "Valor"]
-                ne = len(dados_est)
-                palette_e = [f"rgba(136,135,128,{0.45 + 0.45*(1-(i/max(ne-1,1))):.2f})" for i in range(ne)]
-                fig_est = px.bar(
-                    dados_est, x="Tipo", y="Valor",
-                    color="Tipo", color_discrete_sequence=palette_e,
-                    text=dados_est["Valor"].apply(lambda v: f"R$ {v:,.0f}".replace(",",".")),
+                fig_gauge.update_layout(
+                    height=240, margin=dict(t=30, b=10, l=20, r=20),
+                    paper_bgcolor="rgba(0,0,0,0)", font_color="#fff",
                 )
-                fig_est.update_traces(
-                    marker_line_width=0,
-                    textposition="outside",
-                    textfont=dict(size=10, color="rgba(255,255,255,0.60)"),
-                    hovertemplate="<b>%{x}</b><br>R$ %{y:,.2f}<extra></extra>",
-                    cliponaxis=False,
-                )
-                _lye = _chart_layout(200)
-                _lye["showlegend"] = False
-                fig_est.update_layout(**_lye)
-                st.plotly_chart(fig_est, use_container_width=True, config={"displayModeBar": False})
+                st.plotly_chart(fig_gauge, use_container_width=True, config={"displayModeBar": False})
+                st.caption(f"Traço cinza = meta proporcional ao dia ({pct_esperado:.0f}%)")
 
-        # ============================================================
-        # BLOCO 2 — PARCEIROS (saúde da base)
-        # ============================================================
-        section("Parceiros")
-
-        if not df_parceiros_pg.empty:
-            s_limpo = df_parceiros_pg['status'].fillna("").str.upper().str.strip()
-            ativos    = int(s_limpo.str.contains("ATIVO",   na=False).sum())
-            prospec   = int(s_limpo.str.contains("PROSPEC", na=False).sum())
-            inativos  = int(s_limpo.str.contains("INATIVO", na=False).sum())
-
-            # Novos parceiros no ano selecionado
-            df_parceiros_pg['data_adesao_dt'] = pd.to_datetime(df_parceiros_pg['data_adesao'], errors='coerce')
-            novos_ano = int((df_parceiros_pg['data_adesao_dt'].dt.year == ano_sel).sum())
-
-            kpi_row([
-                {"label": "Total",        "value": len(df_parceiros_pg)},
-                {"label": "Ativos",       "value": ativos, "accent": True},
-                {"label": "Prospecção",   "value": prospec},
-                {"label": "Inativos",     "value": inativos},
-                {"label": f"Novos em {ano_sel}", "value": novos_ano},
-            ])
-        else:
-            st.caption("Nenhum parceiro cadastrado ainda.")
-
-        # ============================================================
-        # BLOCO 3 — AÇÕES PENDENTES (operação)
-        # ============================================================
-        section("Ações pendentes")
-
-        if not df_acoes_pg.empty:
-            total_acoes   = len(df_acoes_pg)
-            atrasadas_pg  = int((df_acoes_pg['situacao'] == 'ATRASADA').sum())
-            urgentes_pg   = int((df_acoes_pg['situacao'] == 'URGENTE').sum())
-            n_demandas    = int((df_acoes_pg['fonte'] == 'DEMANDA').sum())
-            n_tarefas     = int((df_acoes_pg['fonte'] == 'TAREFA').sum())
-
-            kpi_row([
-                {"label": "Total pendente", "value": total_acoes},
-                {"label": "Atrasadas",      "value": atrasadas_pg, "accent": atrasadas_pg > 0},
-                {"label": "Urgentes",       "value": urgentes_pg},
-                {"label": "Operacional",    "value": n_demandas, "hint": "Demandas internas"},
-                {"label": "Relacionamento", "value": n_tarefas,  "hint": "Tarefas CRM"},
-            ])
-        else:
-            st.caption("Nenhuma ação pendente.")
-
-        # ============================================================
-        # BLOCO 4 — RELACIONAMENTO (saúde da base)
-        # ============================================================
-        section("Saúde do relacionamento")
-
-        if not df_rel_pg.empty:
-            df_rel_pg['Dias_Sem_Contato'] = pd.to_numeric(df_rel_pg['Dias_Sem_Contato'], errors='coerce')
-
-            # Filtra só quem tem histórico
-            df_rel_com = df_rel_pg[df_rel_pg['Status_Relacionamento'] != '⚫ SEM HISTÓRICO'].copy()
-
-            em_dia      = int(df_rel_com['Status_Relacionamento'].str.contains("DIA",    na=False, case=False).sum())
-            atencao     = int(df_rel_com['Status_Relacionamento'].str.contains("ATEN",   na=False, case=False).sum())
-            criticos    = int(df_rel_com['Status_Relacionamento'].str.contains("CRIT",   na=False, case=False).sum())
-            sem_hist    = int((df_rel_pg['Status_Relacionamento'] == '⚫ SEM HISTÓRICO').sum())
-
-            kpi_row([
-                {"label": "Em dia",            "value": em_dia},
-                {"label": "Atenção (+45 dias)","value": atencao,  "accent": atencao > 0},
-                {"label": "Crítico (+90 dias)","value": criticos, "accent": criticos > 0},
-                {"label": "Sem histórico",     "value": sem_hist, "hint": "Nunca registrado"},
-            ])
-
-            # Alertas nominais — mostra quem precisa de ação imediata
-            alertas = df_rel_com[df_rel_com['Status_Relacionamento'].str.contains("CRIT|ATEN", na=False)].copy()
-            alertas = alertas.sort_values('Dias_Sem_Contato', ascending=False)
-
-            if not alertas.empty:
-                st.markdown("<br>", unsafe_allow_html=True)
-                for _, a in alertas.iterrows():
-                    is_crit = "CRIT" in str(a['Status_Relacionamento'])
-                    cor   = "#DC2626" if is_crit else "#D97706"
-                    icone = "🔴" if is_crit else "🟡"
-                    dias  = int(a['Dias_Sem_Contato']) if pd.notna(a['Dias_Sem_Contato']) else "?"
+            with cv_kpis:
+                kpi_row([
+                    {"label": "Meta anual",   "value": _fmt(meta_total)},
+                    {"label": "Captado 2026", "value": _fmt(captado_total), "accent": True},
+                ])
+                kpi_row([
+                    {"label": "Saldo restante", "value": _fmt(saldo)},
+                    {"label": "% da meta",      "value": f"{pct_total:.1f}%"},
+                ])
+                # Mini-barras por fonte (top 5)
+                st.markdown("<div style='margin-top:8px;'>", unsafe_allow_html=True)
+                df_top5 = df_prog_plano.sort_values('meta_2026', ascending=False).head(5)
+                for _, r in df_top5.iterrows():
+                    pf = min(float(r['pct_meta'] or 0), 100)
+                    cor_b = "#059669" if pf >= 80 else "#D97706" if pf >= 40 else "#DC2626"
+                    nome_curto = str(r['nome_fonte'])[:28]
                     st.markdown(
-                        f'<div style="display:flex;align-items:center;gap:10px;padding:6px 10px;'
-                        f'border-left:3px solid {cor};margin-bottom:4px;border-radius:0 6px 6px 0;'
-                        f'background:rgba(255,255,255,0.03);">'
-                        f'{icone} <span style="flex:1;font-size:14px;">{a["Empresa"]}</span>'
-                        f'<span style="font-size:12px;color:#888;">{dias} dias sem contato</span>'
-                        f'</div>',
+                        f"<div style='margin-bottom:6px;'>"
+                        f"<div style='display:flex;justify-content:space-between;font-size:11px;color:#94A3B8;margin-bottom:2px;'>"
+                        f"<span>{nome_curto}</span><span style='color:{cor_b};font-weight:600;'>{pf:.0f}%</span></div>"
+                        f"<div style='height:5px;background:rgba(255,255,255,0.08);border-radius:3px;'>"
+                        f"<div style='width:{pf}%;height:100%;background:{cor_b};border-radius:3px;'></div></div></div>",
                         unsafe_allow_html=True
                     )
-        else:
-            st.caption("Sem dados de relacionamento.")
+                st.markdown("</div>", unsafe_allow_html=True)
 
-        # ============================================================
-        # BLOCO 5 — EVENTOS (almoço do mês)
-        # ============================================================
-        if not df_eventos_pg.empty:
-            section("Eventos do mês")
-            ev = df_eventos_pg.iloc[0]
-            mes_ev        = ev['mes_referencia']
-            confirmados   = int(ev['confirmados'] or 0)
-            total_conv    = int(ev['total'] or 0)
-            pct = int(100 * confirmados / total_conv) if total_conv > 0 else 0
+        # ════════════════════════════════════════════════════════════════════════
+        # BLOCO 1 — EVOLUÇÃO MENSAL (combo: barra captado + linha meta proporcional + linha 2025)
+        # ════════════════════════════════════════════════════════════════════════
+        section("Evolução mensal da captação")
 
+        if not df_fin.empty:
+            # Agrupa por mês
+            df_fin_m   = df_fin.copy()
+            df_fin_m['mes'] = df_fin_m['data_doacao'].dt.to_period('M')
+            cap_mes    = df_fin_m.groupby('mes')['valor_estimado'].sum().reset_index()
+            cap_mes['mes_str'] = cap_mes['mes'].dt.strftime('%b/%y')
+            cap_mes    = cap_mes.sort_values('mes')
+
+            # 2025 no mesmo período
+            df_fin_pa_m = df_fin_pa.copy()
+            df_fin_pa_m['mes'] = df_fin_pa_m['data_doacao'].dt.to_period('M')
+            cap_pa_mes  = df_fin_pa_m.groupby('mes')['valor_estimado'].sum().reset_index()
+
+            # Meta mensal proporcional (meta_total / 12)
+            meta_mensal = (float(df_prog_plano['meta_2026'].sum()) / 12) if (not df_prog_plano.empty and ano_sel == 2026) else None
+
+            fig_evo = go.Figure()
+
+            # Barras — captado 2026
+            fig_evo.add_trace(go.Bar(
+                x=cap_mes['mes_str'], y=cap_mes['valor_estimado'],
+                name=f"Captado {ano_sel}",
+                marker_color="rgba(55,138,221,0.75)",
+                hovertemplate="<b>%{x}</b><br>Captado: R$ %{y:,.2f}<extra></extra>",
+            ))
+
+            # Linha — 2025 comparativo
+            if not cap_pa_mes.empty:
+                cap_pa_mes['mes_str'] = cap_pa_mes['mes'].dt.strftime('%b/%y').str.replace(
+                    str(ano_sel - 1)[-2:], str(ano_sel - 1)[-2:]
+                )
+                # Alinha meses: usa número do mês para mapear no eixo de 2026
+                mapa_mes  = {m: i for i, m in enumerate(cap_mes['mes_str'].tolist())}
+                cap_pa_mes['mes_2026'] = cap_pa_mes['mes'].dt.month.apply(
+                    lambda m: cap_mes[cap_mes['mes'].dt.month == m]['mes_str'].values[0]
+                    if len(cap_mes[cap_mes['mes'].dt.month == m]) > 0 else None
+                )
+                cap_pa_mes = cap_pa_mes.dropna(subset=['mes_2026'])
+                if not cap_pa_mes.empty:
+                    fig_evo.add_trace(go.Scatter(
+                        x=cap_pa_mes['mes_2026'], y=cap_pa_mes['valor_estimado'],
+                        name=f"{ano_sel - 1}",
+                        mode="lines+markers",
+                        line=dict(color="rgba(148,163,184,0.6)", width=1.5, dash="dot"),
+                        marker=dict(size=5, color="rgba(148,163,184,0.6)"),
+                        hovertemplate=f"<b>%{{x}}</b><br>{ano_sel-1}: R$ %{{y:,.2f}}<extra></extra>",
+                    ))
+
+            # Linha — meta mensal proporcional
+            if meta_mensal and ano_sel == 2026:
+                fig_evo.add_trace(go.Scatter(
+                    x=cap_mes['mes_str'],
+                    y=[meta_mensal] * len(cap_mes),
+                    name="Meta/mês",
+                    mode="lines",
+                    line=dict(color="rgba(234,179,8,0.8)", width=1.5, dash="dash"),
+                    hovertemplate="Meta mensal: R$ %{y:,.2f}<extra></extra>",
+                ))
+
+            _ly_evo = _chart_layout(300)
+            _ly_evo["yaxis"]["tickformat"] = "~s"
+            _ly_evo["yaxis"]["tickprefix"] = "R$ "
+            _ly_evo["barmode"] = "group"
+            _ly_evo["legend"] = dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1,
+                                     font=dict(size=11, color="#94A3B8"))
+            fig_evo.update_layout(**_ly_evo)
+            st.plotly_chart(fig_evo, use_container_width=True, config={"displayModeBar": False})
+
+            # KPIs rápidos do ano
+            diff_fin = total_fin - total_fin_pa
             kpi_row([
-                {"label": f"Convidados ({mes_ev})", "value": total_conv},
-                {"label": "Confirmados",             "value": confirmados, "accent": True},
-                {"label": "Taxa de confirmação",     "value": f"{pct}%"},
+                {"label": f"Captado {ano_sel}",        "value": _fmt(total_fin), "accent": True},
+                {"label": f"Captado {ano_sel - 1}",    "value": _fmt(total_fin_pa)},
+                {"label": "Variação ano",               "value": f"{'+' if diff_fin >= 0 else ''}{_fmt(diff_fin)}"},
+                {"label": "Ticket médio",               "value": _fmt(total_fin / len(df_fin)) if len(df_fin) > 0 else "—"},
+            ])
+        else:
+            st.info(f"Sem captação financeira registrada para {ano_sel}.")
+
+        # ════════════════════════════════════════════════════════════════════════
+        # BLOCO 2 — TOP 3 ALERTAS PRIORIZADOS
+        # ════════════════════════════════════════════════════════════════════════
+        section("Ações prioritárias agora")
+
+        _alertas_priorizados = []
+
+        # 1. Follow-ups vencidos
+        try:
+            df_fu_venc = run_query(
+                "SELECT p.nome_instituicao, r.proxima_acao_data, "
+                "(CURRENT_DATE - r.proxima_acao_data::date) AS dias_atraso "
+                "FROM Registro_Relacionamento r JOIN Parceiro p ON r.id_parceiro=p.id_parceiro "
+                "WHERE r.proxima_acao_data IS NOT NULL AND r.proxima_acao_data::date < CURRENT_DATE "
+                "ORDER BY dias_atraso DESC LIMIT 3"
+            )
+            if not df_fu_venc.empty:
+                nomes = ", ".join(df_fu_venc['nome_instituicao'].tolist()[:2])
+                mais  = f" e mais {len(df_fu_venc)-2}" if len(df_fu_venc) > 2 else ""
+                _alertas_priorizados.append({
+                    "prioridade": 1,
+                    "icone": "🔴",
+                    "titulo": f"{len(df_fu_venc)} follow-up(s) vencido(s)",
+                    "contexto": f"{nomes}{mais} estão aguardando contato.",
+                    "acao": "Acesse Relacionamento → Follow-ups para ver a lista completa.",
+                    "tom": "danger",
+                })
+        except Exception:
+            pass
+
+        # 2. Parceiros críticos sem contato há 90+ dias
+        if not df_rel_pg.empty:
+            df_rel_pg['Dias_Sem_Contato'] = pd.to_numeric(df_rel_pg['Dias_Sem_Contato'], errors='coerce')
+            criticos = df_rel_pg[df_rel_pg['Status_Relacionamento'].str.contains("CRIT", na=False)]
+            if not criticos.empty:
+                nomes_c = ", ".join(criticos['Empresa'].tolist()[:2])
+                mais_c  = f" e mais {len(criticos)-2}" if len(criticos) > 2 else ""
+                _alertas_priorizados.append({
+                    "prioridade": 2,
+                    "icone": "🟠",
+                    "titulo": f"{len(criticos)} parceiro(s) sem contato há mais de 90 dias",
+                    "contexto": f"{nomes_c}{mais_c} estão em risco de abandono.",
+                    "acao": "Registre uma interação ou agende uma ligação esta semana.",
+                    "tom": "warning",
+                })
+
+        # 3. Fontes do Plano DI abaixo de 30% da meta
+        if not df_prog_plano.empty and ano_sel == 2026:
+            df_baixo = df_prog_plano[df_prog_plano['pct_meta'].fillna(0) < 30]
+            if not df_baixo.empty:
+                nomes_b = ", ".join(df_baixo['nome_fonte'].tolist()[:2])
+                mais_b  = f" e mais {len(df_baixo)-2}" if len(df_baixo) > 2 else ""
+                _alertas_priorizados.append({
+                    "prioridade": 3,
+                    "icone": "🟡",
+                    "titulo": f"{len(df_baixo)} fonte(s) abaixo de 30% da meta",
+                    "contexto": f"{nomes_b}{mais_b} precisam de atenção imediata.",
+                    "acao": "Acesse Plano DI 2026 para ver o detalhamento por fonte.",
+                    "tom": "warning",
+                })
+
+        # 4. Doações sem tipo definido
+        try:
+            df_sem_tipo = run_query(
+                "SELECT COUNT(*) as n FROM Doacao "
+                "WHERE (tipo_doacao IS NULL OR tipo_doacao='' OR tipo_doacao='Selecione...') "
+                "AND EXTRACT(YEAR FROM data_doacao)=%s", (ano_sel,)
+            )
+            n_sem_tipo = int(df_sem_tipo['n'].iloc[0]) if not df_sem_tipo.empty else 0
+            if n_sem_tipo > 0:
+                _alertas_priorizados.append({
+                    "prioridade": 4,
+                    "icone": "⚪",
+                    "titulo": f"{n_sem_tipo} doação(ões) sem tipo definido",
+                    "contexto": "Registros sem tipo distorcem o cálculo das metas financeiras.",
+                    "acao": "Acesse Entrada de Recursos → Histórico e corrija os registros.",
+                    "tom": "info",
+                })
+        except Exception:
+            pass
+
+        _alertas_priorizados = sorted(_alertas_priorizados, key=lambda x: x['prioridade'])[:3]
+
+        if not _alertas_priorizados:
+            st.markdown(
+                '<div style="padding:14px 18px;background:rgba(5,150,105,0.1);border-left:3px solid #059669;'
+                'border-radius:0 8px 8px 0;font-size:14px;">'
+                '✅ <strong>Nenhuma ação crítica pendente.</strong> Sistema em dia.</div>',
+                unsafe_allow_html=True
+            )
+        else:
+            for al in _alertas_priorizados:
+                action_card(
+                    titulo=f"{al['icone']} {al['titulo']}",
+                    meta_parts=[al['contexto'], f"👉 {al['acao']}"],
+                    tom=al['tom'],
+                )
+
+        # ════════════════════════════════════════════════════════════════════════
+        # BLOCO 3 — PARCEIROS + RELACIONAMENTO (compacto)
+        # ════════════════════════════════════════════════════════════════════════
+        section("Parceiros")
+        if not df_parceiros_pg.empty:
+            s_lp = df_parceiros_pg['status'].fillna("").str.upper()
+            ativos_p   = int(s_lp.str.contains("ATIVO",   na=False).sum())
+            prospec_p  = int(s_lp.str.contains("PROSPEC", na=False).sum())
+            inativos_p = int(s_lp.str.contains("INATIVO", na=False).sum())
+            df_parceiros_pg['_ad'] = pd.to_datetime(df_parceiros_pg['data_adesao'], errors='coerce')
+            novos_p = int((df_parceiros_pg['_ad'].dt.year == ano_sel).sum())
+            kpi_row([
+                {"label": "Total",             "value": len(df_parceiros_pg)},
+                {"label": "Ativos",            "value": ativos_p, "accent": True},
+                {"label": "Prospecção",        "value": prospec_p},
+                {"label": "Inativos",          "value": inativos_p},
+                {"label": f"Novos {ano_sel}",  "value": novos_p},
             ])
 
-        # ============================================================
-        # BLOCO 6 — RANKING (top doadores)
-        # ============================================================
+        # ════════════════════════════════════════════════════════════════════════
+        # BLOCO 4 — MAIORES DOADORES
+        # ════════════════════════════════════════════════════════════════════════
         section("Maiores doadores do ano")
-        query_top = """
-            SELECT p.nome_instituicao AS "Parceiro", SUM(d.valor_estimado) AS "Total", COUNT(*) AS "Repasses"
-            FROM Doacao d
-            JOIN Parceiro p ON d.id_parceiro = p.id_parceiro
-            WHERE TO_CHAR(d.data_doacao, 'YYYY') = %s
-            GROUP BY p.nome_instituicao
-            ORDER BY "Total" DESC
-            LIMIT 5
-        """
-        df_top = run_query(query_top, (str(ano_sel),))
+        df_top = run_query(
+            "SELECT p.nome_instituicao AS \"Parceiro\", SUM(d.valor_estimado) AS \"Total\", COUNT(*) AS \"Repasses\" "
+            "FROM Doacao d JOIN Parceiro p ON d.id_parceiro=p.id_parceiro "
+            "WHERE EXTRACT(YEAR FROM d.data_doacao)=%s AND d.tipo_doacao=ANY(%s) "
+            "GROUP BY p.nome_instituicao ORDER BY \"Total\" DESC LIMIT 5",
+            (ano_sel, _tipos_fin)
+        )
         if not df_top.empty:
             df_top['Total'] = df_top['Total'].apply(_fmt)
-            st.dataframe(
-                df_top,
-                use_container_width=True,
-                hide_index=True,
-                column_config={
-                    "Parceiro": "Parceiro",
-                    "Total":    "Valor total",
-                    "Repasses": st.column_config.NumberColumn("Repasses", format="%d"),
-                }
-            )
+            st.dataframe(df_top, use_container_width=True, hide_index=True,
+                column_config={"Total": "Valor total", "Repasses": st.column_config.NumberColumn("Repasses", format="%d")})
         else:
-            st.caption("Sem doações registradas para este ano.")
+            st.caption("Sem doações financeiras registradas para este ano.")
 
-        # ============================================================
-        # BLOCO 7 — QUALIDADE DOS DADOS
-        # ============================================================
+        # ════════════════════════════════════════════════════════════════════════
+        # BLOCO 5 — QUALIDADE DOS DADOS (compacto)
+        # ════════════════════════════════════════════════════════════════════════
         section("Qualidade dos dados")
+        df_qd_sem_contato   = run_query_slow("SELECT COUNT(*) as n FROM Parceiro p WHERE UPPER(p.status) LIKE '%ATIVO%' AND NOT EXISTS (SELECT 1 FROM Contato_Direto c WHERE c.id_parceiro=p.id_parceiro)")
+        df_qd_sem_interacao = run_query_slow("SELECT COUNT(*) as n FROM Parceiro p WHERE UPPER(p.status) LIKE '%ATIVO%' AND NOT EXISTS (SELECT 1 FROM Registro_Relacionamento r WHERE r.id_parceiro=p.id_parceiro)")
+        df_qd_sem_doacao    = run_query_slow(f"SELECT COUNT(*) as n FROM Parceiro p WHERE UPPER(p.status) LIKE '%ATIVO%' AND NOT EXISTS (SELECT 1 FROM Doacao d WHERE d.id_parceiro=p.id_parceiro AND EXTRACT(YEAR FROM d.data_doacao)={ano_sel})")
+        df_qd_sem_tipo_c    = run_query_slow(f"SELECT COUNT(*) as n FROM Doacao WHERE (tipo_doacao IS NULL OR tipo_doacao='' OR tipo_doacao='Selecione...') AND EXTRACT(YEAR FROM data_doacao)={ano_sel}")
 
-        df_qd_sem_contato = run_query_slow("""
-            SELECT p.nome_instituicao AS "Parceiro"
-            FROM Parceiro p
-            WHERE UPPER(p.status) LIKE '%ATIVO%'
-              AND NOT EXISTS (SELECT 1 FROM Contato_Direto c WHERE c.id_parceiro = p.id_parceiro)
-            ORDER BY p.nome_instituicao
-        """)
+        n_sc = int(df_qd_sem_contato['n'].iloc[0])   if not df_qd_sem_contato.empty   else 0
+        n_si = int(df_qd_sem_interacao['n'].iloc[0]) if not df_qd_sem_interacao.empty else 0
+        n_sd = int(df_qd_sem_doacao['n'].iloc[0])    if not df_qd_sem_doacao.empty    else 0
+        n_st = int(df_qd_sem_tipo_c['n'].iloc[0])    if not df_qd_sem_tipo_c.empty    else 0
 
-        df_qd_sem_doacao = run_query_slow("""
-            SELECT p.nome_instituicao AS "Parceiro"
-            FROM Parceiro p
-            WHERE UPPER(p.status) LIKE '%ATIVO%'
-              AND NOT EXISTS (
-                  SELECT 1 FROM Doacao d
-                  WHERE d.id_parceiro = p.id_parceiro
-                    AND EXTRACT(YEAR FROM d.data_doacao) = 2026
-              )
-            ORDER BY p.nome_instituicao
-        """)
+        pendencias = [n_sc > 0, n_si > 0, n_sd > 0, n_st > 0]
+        n_pend = sum(pendencias)
+        score_q = round((4 - n_pend) / 4 * 100)
+        cor_score = "#059669" if score_q == 100 else "#D97706" if score_q >= 50 else "#DC2626"
 
-        df_qd_sem_interacao = run_query_slow("""
-            SELECT p.nome_instituicao AS "Parceiro"
-            FROM Parceiro p
-            WHERE UPPER(p.status) LIKE '%ATIVO%'
-              AND NOT EXISTS (SELECT 1 FROM Registro_Relacionamento r WHERE r.id_parceiro = p.id_parceiro)
-            ORDER BY p.nome_instituicao
-        """)
-
-        df_qd_sem_tipo = run_query_slow("""
-            SELECT p.nome_instituicao AS "Parceiro",
-                   TO_CHAR(d.data_doacao, 'DD/MM/YYYY') AS "Data",
-                   d.valor_estimado AS "Valor"
-            FROM Doacao d
-            JOIN Parceiro p ON d.id_parceiro = p.id_parceiro
-            WHERE EXTRACT(YEAR FROM d.data_doacao) = 2026
-              AND (d.tipo_doacao IS NULL OR d.tipo_doacao = '' OR d.tipo_doacao = 'Selecione...')
-            ORDER BY d.data_doacao DESC
-        """)
-
-        # ── Cartões de pendência ──────────────────────────────────────────────
-        _checks = [
-            {
-                "icone": "",
-                "titulo": "Doações de 2026 não registradas",
-                "acao": "Vá em Registrar Doação e lance os repasses pendentes.",
-                "impacto": "Alta — afeta diretamente as metas do Plano DI",
-                "cor": "#E31D24",
-                "df": df_qd_sem_doacao,
-                "tipo": "lista",
-            },
-            {
-                "icone": "",
-                "titulo": "Doações sem tipo definido",
-                "acao": "Abra cada doação e defina se é Financeira, Mídia, Projetos etc.",
-                "impacto": "Alta — distorce o cálculo das metas",
-                "cor": "#E31D24",
-                "df": df_qd_sem_tipo,
-                "tipo": "tabela",
-            },
-            {
-                "icone": "",
-                "titulo": "Parceiros sem contato cadastrado",
-                "acao": "Vá em Contatos e cadastre ao menos uma pessoa de referência.",
-                "impacto": "Média — dificulta o follow-up e o relacionamento",
-                "cor": "#D97706",
-                "df": df_qd_sem_contato,
-                "tipo": "lista",
-            },
-            {
-                "icone": "",
-                "titulo": "Parceiros sem nenhuma interação",
-                "acao": "Registre a primeira interação pelo sidebar ou pela aba Relacionamento.",
-                "impacto": "Média — parceiro ativo sem histórico é invisível para o sistema",
-                "cor": "#D97706",
-                "df": df_qd_sem_interacao,
-                "tipo": "lista",
-            },
+        st.markdown(
+            f'<div style="padding:10px 14px;background:rgba(255,255,255,0.03);border-radius:8px;'
+            f'border:1px solid rgba(255,255,255,0.07);margin-bottom:10px;">'
+            f'<div style="display:flex;align-items:center;gap:12px;">'
+            f'<div style="flex:1;height:6px;background:rgba(255,255,255,0.1);border-radius:3px;">'
+            f'<div style="width:{score_q}%;height:100%;background:{cor_score};border-radius:3px;"></div></div>'
+            f'<span style="font-size:15px;font-weight:700;color:{cor_score};">{score_q}%</span>'
+            f'<span style="font-size:12px;color:#666;">completude</span></div></div>',
+            unsafe_allow_html=True
+        )
+        itens_qd = [
+            (n_sd, f"Parceiros ativos sem doação em {ano_sel}"),
+            (n_st, "Doações sem tipo definido"),
+            (n_sc, "Parceiros sem contato cadastrado"),
+            (n_si, "Parceiros sem interação registrada"),
         ]
+        for n_v, label_v in itens_qd:
+            if n_v > 0:
+                st.markdown(
+                    f'<div style="display:flex;justify-content:space-between;padding:5px 10px;'
+                    f'border-left:2px solid #D97706;margin-bottom:4px;border-radius:0 4px 4px 0;'
+                    f'background:rgba(217,119,6,0.06);font-size:13px;">'
+                    f'<span>{label_v}</span><span style="color:#D97706;font-weight:600;">{n_v}</span></div>',
+                    unsafe_allow_html=True
+                )
+        if n_pend == 0:
+            st.markdown('<div style="font-size:13px;color:#059669;">✅ Banco de dados completo.</div>', unsafe_allow_html=True)
 
-        _com_pend = [c for c in _checks if not c["df"].empty]
-        _total_cats = len(_com_pend)
-
-        if _total_cats == 0:
-            st.markdown(
-                '<div style="padding:12px 16px;background:rgba(34,197,94,0.1);'
-                'border-left:3px solid #22C55E;border-radius:0 8px 8px 0;font-size:14px;">'
-                '✅ <strong>Banco de dados completo.</strong> Todos os campos críticos estão preenchidos.</div>',
-                unsafe_allow_html=True
-            )
-        else:
-            # Score de completude
-            _score = round((4 - _total_cats) / 4 * 100)
-            st.markdown(
-                f'<div style="margin-bottom:16px;padding:12px 16px;background:rgba(255,255,255,0.03);'
-                f'border-radius:8px;border:1px solid rgba(255,255,255,0.07);">'
-                f'<div style="font-size:13px;color:#888;margin-bottom:6px;">Completude do banco de dados</div>'
-                f'<div style="display:flex;align-items:center;gap:12px;">'
-                f'<div style="flex:1;height:8px;background:rgba(255,255,255,0.1);border-radius:4px;">'
-                f'<div style="width:{_score}%;height:100%;background:#22C55E;border-radius:4px;"></div></div>'
-                f'<span style="font-size:16px;font-weight:700;color:#fff;">{_score}%</span></div>'
-                f'<div style="font-size:12px;color:#888;margin-top:6px;">'
-                f'{_total_cats} categoria(s) com pendências — priorize as de impacto alto primeiro.</div>'
-                f'</div>',
-                unsafe_allow_html=True
-            )
-
-            for _chk in _com_pend:
-                _n = len(_chk["df"])
-                _label = f"{_chk['titulo']} — {_n} {'registro' if _n == 1 else 'registros'}"
-                with st.expander(_label):
-                    _c1, _c2 = st.columns([1, 1])
-                    with _c1:
-                        st.markdown(f"**O que fazer:** {_chk['acao']}")
-                    with _c2:
-                        st.markdown(
-                            f'<div style="font-size:12px;padding:4px 10px;border-radius:4px;'
-                            f'background:rgba(255,255,255,0.05);color:{_chk["cor"]};">'
-                            f'Impacto: {_chk["impacto"]}</div>',
-                            unsafe_allow_html=True
-                        )
-                    st.divider()
-                    if _chk["tipo"] == "tabela":
-                        st.dataframe(
-                            _chk["df"], hide_index=True, use_container_width=True,
-                            column_config={"Valor": st.column_config.NumberColumn("Valor (R$)", format="%.2f")}
-                        )
-                    else:
-                        # Mostra os primeiros 15, com aviso se houver mais
-                        _lista = _chk["df"]["Parceiro"].tolist()
-                        _cols = st.columns(2)
-                        _metade = (len(_lista[:15]) + 1) // 2
-                        for _i, _nome in enumerate(_lista[:15]):
-                            _cols[_i // _metade].markdown(f"• {_nome}")
-                        if _n > 15:
-                            st.caption(f"… e mais {_n - 15} registros. Exporte a lista completa pelo relatório PDF.")
 
 
 elif menu == "Plano DI 2026":
