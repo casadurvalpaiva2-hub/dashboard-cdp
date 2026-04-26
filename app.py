@@ -44,9 +44,19 @@ def _chart_layout(height=240, margin=None):
         showlegend=False,
     )
 
-_CDP_BAR   = "#9B1C1C"       # vermelho escuro para áreas grandes
-_CDP_LINE  = "#E31D24"       # vermelho CDP para linhas finas
-_CDP_BLUE  = "#1E3A5F"       # azul escuro para doações estimadas
+# ── Paleta de dados — Opção A ───────────────────────────────────────────────
+# Vermelho CDP reservado para marca, alertas críticos e UI (nav, botões).
+# Dados usam a paleta abaixo para criar hierarquia visual clara.
+_CLR_FINANCIAL = "#378ADD"   # azul — captação financeira (principal)
+_CLR_POSITIVE  = "#1D9E75"   # teal — metas atingidas, resultados positivos
+_CLR_WARNING   = "#D97706"   # amber — atenção, pendências, prazos
+_CLR_NEUTRAL   = "#888780"   # cinza — estimados, mídia, dados secundários
+_CLR_PROJECT   = "#378ADD"   # azul (mesmo financeiro) — projetos/plano DI
+
+# Aliases de compatibilidade para os gráficos já criados
+_CDP_BAR   = _CLR_FINANCIAL
+_CDP_LINE  = _CLR_FINANCIAL
+_CDP_BLUE  = _CLR_NEUTRAL
 
 
 def format_br(valor):
@@ -267,11 +277,11 @@ CDP_RED_DARK   = "#B51319"       # vermelho pressed/hover
 CDP_RED_SOFT   = "rgba(227,29,36,0.10)"  # vermelho sutil (fundos)
 
 # Tons funcionais (usados pelos badges de situação / status)
-COLOR_DANGER   = "#DC2626"       # atrasado / erro
-COLOR_WARNING  = "#D97706"       # urgente / alerta
-COLOR_SUCCESS  = "#059669"       # ok / realizado
-COLOR_INFO     = "#0284C7"       # informação / futuro
-COLOR_NEUTRAL  = "#64748B"       # neutro
+COLOR_DANGER   = "#DC2626"       # crítico / erro
+COLOR_WARNING  = "#D97706"       # atenção / amber
+COLOR_SUCCESS  = "#1D9E75"       # positivo / teal
+COLOR_INFO     = "#378ADD"       # dados / azul
+COLOR_NEUTRAL  = "#888780"       # estimado / neutro
 
 CSS_GLOBAL = """
 <style>
@@ -296,9 +306,9 @@ CSS_GLOBAL = """
     /* Cores semânticas */
     --ds-danger:  #DC2626;
     --ds-warning: #D97706;
-    --ds-success: #059669;
-    --ds-info:    #0284C7;
-    --ds-neutral: #64748B;
+    --ds-success: #1D9E75;
+    --ds-info:    #378ADD;
+    --ds-neutral: #888780;
 
     /* Espaçamento e raio */
     --ds-radius-sm: 6px;
@@ -1349,7 +1359,7 @@ if menu == "Painel Geral":
                                   color_discrete_sequence=[_CDP_LINE])
                 fig_mes.update_traces(
                     line=dict(width=2),
-                    fillcolor="rgba(155,28,28,0.15)",
+                    fillcolor="rgba(55,138,221,0.12)",
                 )
                 fig_mes.update_layout(**_chart_layout(240))
                 st.plotly_chart(fig_mes, use_container_width=True, config={"displayModeBar": False})
