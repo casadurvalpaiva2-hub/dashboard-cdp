@@ -464,13 +464,18 @@ section[data-testid="stSidebar"] [data-testid="stButton"] {
     justify-content: center !important;
     box-shadow: 4px 4px 10px rgba(0,0,0,0.2) !important;
 }
-[data-testid="stSidebarCollapsedControl"] svg { display: none !important; }
+/* Esconde o ícone Material Icons (pode ser SVG ou span de texto) */
+[data-testid="stSidebarCollapsedControl"] svg,
+[data-testid="stSidebarCollapsedControl"] span {
+    display: none !important;
+    font-size: 0 !important;
+}
 [data-testid="stSidebarCollapsedControl"]::before {
     content: "☰ MENU" !important;
     color: white !important;
     font-weight: 600 !important;
     font-size: 14px !important;
-    font-family: inherit !important;
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif !important;
     letter-spacing: 0.5px;
 }
 .main .block-container { padding-top: 4rem !important; }
@@ -573,7 +578,7 @@ div[data-testid="stMetricLabel"] p {
     line-height: 1.1;
     color: var(--ds-text);
 }
-.ds-kpi-value.accent { color: var(--cdp-red); }
+.ds-kpi-value.accent { color: var(--ds-info); }
 .ds-kpi-hint {
     font-size: 11px;
     color: var(--ds-text-subtle);
@@ -678,7 +683,7 @@ div[data-testid="stMetricLabel"] p {
 .stat-value {
     font-size: 2rem;
     font-weight: 700;
-    color: var(--cdp-red);
+    color: var(--ds-info);
     margin: 4px 0;
 }
 .task-card {
