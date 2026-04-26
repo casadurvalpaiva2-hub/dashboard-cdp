@@ -1351,7 +1351,7 @@ if menu == "Painel Geral":
 
         # ── ANO DE REFERÊNCIA ─────────────────────────────────────────────────
         anos = sorted(df_doacoes['data_doacao'].dt.year.dropna().unique().astype(int), reverse=True) if not df_doacoes.empty else [datetime.now().year]
-        ano_sel = st.selectbox("Ano de referência", anos, key="pg_ano")
+        ano_sel = int(st.selectbox("Ano de referência", anos, key="pg_ano"))
 
         df_atual   = df_doacoes[df_doacoes['data_doacao'].dt.year == ano_sel]
         df_passado = df_doacoes[df_doacoes['data_doacao'].dt.year == (ano_sel - 1)]
@@ -1583,7 +1583,7 @@ if menu == "Painel Geral":
             df_sem_tipo = run_query(
                 "SELECT COUNT(*) as n FROM Doacao "
                 "WHERE (tipo_doacao IS NULL OR tipo_doacao='' OR tipo_doacao='Selecione...') "
-                "AND EXTRACT(YEAR FROM data_doacao)=%s", (ano_sel,)
+                "AND EXTRACT(YEAR FROM data_doacao)=%s", (int(ano_sel),)
             )
             n_sem_tipo = int(df_sem_tipo['n'].iloc[0]) if not df_sem_tipo.empty else 0
             if n_sem_tipo > 0:
@@ -1641,9 +1641,9 @@ if menu == "Painel Geral":
         df_top = run_query(
             "SELECT p.nome_instituicao AS \"Parceiro\", SUM(d.valor_estimado) AS \"Total\", COUNT(*) AS \"Repasses\" "
             "FROM Doacao d JOIN Parceiro p ON d.id_parceiro=p.id_parceiro "
-            "WHERE EXTRACT(YEAR FROM d.data_doacao)=%s AND d.tipo_doacao=ANY(%s) "
+            "WHERE EXTRACT(YEAR FROM d.data_doacao)=%s AND d.tipo_doacao IN ('Financeira','Projetos') "
             "GROUP BY p.nome_instituicao ORDER BY \"Total\" DESC LIMIT 5",
-            (ano_sel, _tipos_fin)
+            (int(ano_sel),)
         )
         if not df_top.empty:
             df_top['Total'] = df_top['Total'].apply(_fmt)
