@@ -13,7 +13,6 @@ import pandas as pd
 import psycopg2
 from psycopg2 import pool as pg_pool
 import streamlit as st
-from streamlit_option_menu import option_menu
 
 
 # ------------------------------------------------------------
@@ -771,64 +770,87 @@ def _trigger_quick_add(tipo: str):
     st.session_state.current_page = mapa_menu[tipo]
     st.session_state.open_form = tipo
 
+st.sidebar.markdown("""
+<style>
+/* ── Nav customizado ── */
+div[data-testid="stSidebar"] .cdp-nav-btn > div > button {
+    background: transparent !important;
+    border: none !important;
+    border-left: 3px solid transparent !important;
+    border-radius: 0 !important;
+    color: rgba(255,255,255,0.55) !important;
+    font-size: 13.5px !important;
+    font-weight: 400 !important;
+    letter-spacing: 0.1px !important;
+    text-align: left !important;
+    padding: 10px 20px !important;
+    width: 100% !important;
+    transition: all 0.15s ease !important;
+    box-shadow: none !important;
+}
+div[data-testid="stSidebar"] .cdp-nav-btn > div > button:hover {
+    background: rgba(227,29,36,0.07) !important;
+    color: rgba(255,255,255,0.90) !important;
+    border-left-color: rgba(227,29,36,0.35) !important;
+}
+div[data-testid="stSidebar"] .cdp-nav-active > div > button {
+    background: rgba(227,29,36,0.10) !important;
+    border-left: 3px solid #E31D24 !important;
+    color: #E31D24 !important;
+    font-weight: 600 !important;
+}
+div[data-testid="stSidebar"] .cdp-nav-section {
+    font-size: 10px;
+    letter-spacing: 1.8px;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.25);
+    padding: 16px 20px 6px 20px;
+    font-weight: 600;
+}
+div[data-testid="stSidebar"] .cdp-quick-add select,
+div[data-testid="stSidebar"] .cdp-quick-add > div > div {
+    background: rgba(255,255,255,0.05) !important;
+    border: 1px solid rgba(255,255,255,0.10) !important;
+    border-radius: 6px !important;
+    font-size: 13px !important;
+    color: rgba(255,255,255,0.70) !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
 with st.sidebar:
-    _opcoes_add = {
-        "Criar novo...": None,
-        "Parceiro":      "parceiro",
-        "Contato":       "contato",
-        "Doação":        "doacao",
-    }
+    # ── Atalho rápido ──────────────────────────────────────────
+    st.markdown('<div class="cdp-nav-section">Acesso rápido</div>', unsafe_allow_html=True)
+    st.markdown('<div class="cdp-quick-add">', unsafe_allow_html=True)
+    _opcoes_add = {"Criar novo...": None, "Parceiro": "parceiro", "Contato": "contato", "Doação": "doacao"}
     _qa_key = f"sel_quick_add_{st.session_state._qa_nonce}"
-    _escolha = st.selectbox(
-        "Atalho", options=list(_opcoes_add.keys()),
-        index=0, key=_qa_key, label_visibility="collapsed",
-    )
+    _escolha = st.selectbox("Atalho", options=list(_opcoes_add.keys()), index=0, key=_qa_key, label_visibility="collapsed")
+    st.markdown('</div>', unsafe_allow_html=True)
     if _opcoes_add[_escolha] is not None:
         _trigger_quick_add(_opcoes_add[_escolha])
         st.session_state._qa_nonce += 1
 
-    st.markdown("---")
+    # ── Navegação principal ────────────────────────────────────
+    st.markdown('<div class="cdp-nav-section" style="margin-top:8px;">Navegação</div>', unsafe_allow_html=True)
 
-    _idx_atual = _opcoes_menu.index(st.session_state.current_page) if st.session_state.current_page in _opcoes_menu else 0
-    _menu_resultado = option_menu(
-        menu_title=None,
-        options=_opcoes_menu,
-        icons=[
-            "speedometer2",       # Painel Geral
-            "graph-up-arrow",     # Plano DI 2026
-            "buildings",          # Parcerias
-            "person-lines-fill",  # Contatos
-            "calendar3",          # Eventos
-            "check2-all",         # Ações
-            "plus-circle",        # Registrar Doação
-            "diagram-3",          # Relacionamento
-        ],
-        default_index=_idx_atual,
-        key="menu_nav_principal",
-        styles={
-            "container":         {"padding": "4px 0", "background-color": "transparent"},
-            "icon":              {"color": "rgba(255,255,255,0.35)", "font-size": "15px"},
-            "nav-link":          {
-                "font-size": "13px",
-                "font-weight": "500",
-                "text-align": "left",
-                "padding": "9px 16px",
-                "margin": "1px 0",
-                "border-radius": "6px",
-                "color": "rgba(255,255,255,0.65)",
-                "--hover-color": "rgba(227,29,36,0.08)",
-            },
-            "nav-link-selected": {
-                "background-color": "rgba(227,29,36,0.12)",
-                "color": "#E31D24",
-                "font-weight": "600",
-                "border-left": "3px solid #E31D24",
-                "border-radius": "0 6px 6px 0",
-            },
-        }
-    )
-    if _menu_resultado and _menu_resultado != st.session_state.current_page:
-        st.session_state.current_page = _menu_resultado
+    _nav_items = [
+        ("Painel Geral",     "Painel Geral"),
+        ("Plano DI 2026",    "Plano DI 2026"),
+        ("Parcerias",        "Parcerias"),
+        ("Contatos",         "Contatos"),
+        ("Eventos",          "Eventos"),
+        ("Ações",            "Ações"),
+        ("Registrar Doação", "Registrar Doação"),
+        ("Relacionamento",   "Relacionamento"),
+    ]
+    for _label, _page in _nav_items:
+        _is_active = st.session_state.current_page == _page
+        _cls = "cdp-nav-active" if _is_active else "cdp-nav-btn"
+        st.markdown(f'<div class="{_cls}">', unsafe_allow_html=True)
+        if st.button(_label, key=f"nav_{_page}", use_container_width=True):
+            st.session_state.current_page = _page
+            st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
 
 menu = st.session_state.current_page
 
