@@ -3480,158 +3480,363 @@ elif menu == "Contatos":
 
 # --- COLOQUE ISSO NO FINAL DO ARQUIVO ---
 elif menu == "Relacionamento":
-    # datetime, timedelta e pandas já importados no topo
     import plotly.graph_objects as go
 
-    # 1. BUSCA DE DADOS (Blindagem de Nomes e Colunas)
-    df_parceiros = run_query_cached("SELECT id_parceiro, nome_instituicao, UPPER(TRIM(status)) as status_limpo FROM Parceiro")
+    # ── Dados base ──────────────────────────────────────────────────────────
+    df_parceiros = run_query_cached(
+        "SELECT id_parceiro, nome_instituicao, UPPER(TRIM(status)) AS status_limpo, "
+        "data_inicio_parceria FROM Parceiro"
+    )
 
-    # SQL para View — usa os nomes reais das colunas do banco
     df_rel = run_query_cached("SELECT * FROM View_Relacionamento_Critico")
 
-    # Buscar última data de retorno agendada
-    df_retornos = run_query_cached("SELECT id_parceiro, MAX(proxima_acao_data) as data_retorno FROM Registro_Relacionamento GROUP BY id_parceiro")
+    df_interacoes = run_query_cached(
+        "SELECT id_parceiro, data_interacao, tipo_interacao, descricao_do_que_foi_feito, "
+        "proxima_acao_data, proxima_acao_descricao "
+        "FROM Registro_Relacionamento ORDER BY data_interacao DESC"
+    )
 
-    # CSS (.glass-card, .stat-value, .suggestion-box, .date-badge) já está no CSS_GLOBAL
+    df_doacoes_rel = run_query_cached(
+        "SELECT id_parceiro, data_doacao, tipo_doacao, valor_estimado, descricao "
+        "FROM Doacao WHERE tipo_doacao IN ('Financeira','Projetos') ORDER BY data_doacao DESC"
+    )
 
-    page_header("Manutenção de relacionamento", "Régua de contato por parceiro e relatório para diretoria.")
+    page_header("Relacionamento", "CRM de parceiros — saúde, linha do tempo e follow-ups.")
 
-    # KPIs com DS (substitui glass-card antigo)
-    m_p = df_parceiros['status_limpo'].str.contains('PROSPEC',  na=False)
-    m_a = df_parceiros['status_limpo'].str.contains('ATIVO',    na=False)
-    m_i = df_parceiros['status_limpo'].str.contains('INATIVO',  na=False)
+    # ── KPIs topo ────────────────────────────────────────────────────────────
+    m_p = df_parceiros['status_limpo'].str.contains('PROSPEC', na=False)
+    m_a = df_parceiros['status_limpo'].str.contains('ATIVO',   na=False)
+    m_i = df_parceiros['status_limpo'].str.contains('INATIVO', na=False)
+
+    # Follow-ups vencidos (proxima_acao_data < hoje)
+    hoje = datetime.now().date()
+    vencidos = 0
+    if not df_interacoes.empty and 'proxima_acao_data' in df_interacoes.columns:
+        df_int_dt = df_interacoes.dropna(subset=['proxima_acao_data']).copy()
+        df_int_dt['_d'] = pd.to_datetime(df_int_dt['proxima_acao_data'], errors='coerce').dt.date
+        vencidos = int((df_int_dt['_d'] < hoje).sum())
 
     kpi_row([
         {"label": "Prospecção", "value": int(m_p.sum())},
         {"label": "Ativos",     "value": int(m_a.sum()), "accent": True},
         {"label": "Inativos",   "value": int(m_i.sum())},
+        {"label": "Follow-ups vencidos", "value": vencidos, "hint": "proxima_acao_data < hoje"},
     ])
 
-    # 4. Plano de ação — sugestões do mês
-    section("Sugestões do mês")
-    semente = int(datetime.now().strftime('%Y%m'))
-    cs1, cs2 = st.columns(2)
+    # ── Abas ─────────────────────────────────────────────────────────────────
+    tab_vis, tab_timeline, tab_followup, tab_diretoria = st.tabs([
+        "Visão consolidada", "Linha do tempo", "Follow-ups", "Relatório diretoria"
+    ])
 
-    with cs1:
-        st.caption("Foco: conversão")
-        sug_p = df_parceiros[m_p].sample(min(2, len(df_parceiros[m_p])), random_state=semente) if any(m_p) else pd.DataFrame()
-        for _, r in sug_p.iterrows():
-            action_card(
-                titulo=r['nome_instituicao'],
-                meta_parts=["Enviar apresentação atualizada e solicitar agenda de 15 min."],
-                tom="success",
-            )
-        if sug_p.empty:
-            st.caption("Sem parceiros em prospecção.")
+    # ══════════════════════════════════════════════════════════════════════════
+    # ABA 1 — VISÃO CONSOLIDADA COM SCORE
+    # ══════════════════════════════════════════════════════════════════════════
+    with tab_vis:
+        section("Scorecard de parceiros")
 
-    with cs2:
-        st.caption("Foco: reativação")
-        sug_i = df_parceiros[m_i].sample(min(2, len(df_parceiros[m_i])), random_state=semente) if any(m_i) else pd.DataFrame()
-        for _, r in sug_i.iterrows():
-            action_card(
-                titulo=r['nome_instituicao'],
-                meta_parts=["Ligação de cortesia para entender a pausa e oferecer novo benefício."],
-                tom="danger",
-            )
-        if sug_i.empty:
-            st.caption("Sem parceiros inativos.")
-
-    # 5. Diagnóstico — abas
-    tab_saude, tab_hist, tab_diretoria = st.tabs(["Saúde e retornos", "Histórico detalhado", "Relatório para diretoria"])
-
-    with tab_saude:
-        if df_rel.empty:
-            empty_state("📊", "Sem dados de relacionamento", "Cadastre interações em parceiros ativos para popular esta aba.")
+        if df_parceiros.empty:
+            empty_state("🤝", "Sem parceiros", "Cadastre parceiros para ativar o scorecard.")
         else:
-            df_join = df_rel.merge(df_parceiros[['nome_instituicao', 'id_parceiro']], left_on='Empresa', right_on='nome_instituicao', how='left')
-            df_final = df_join.merge(df_retornos, on='id_parceiro', how='left')
+            # ── Calcular score por parceiro ──────────────────────────────────
+            # Score (0-100): frequência (40pts) + valor doado (40pts) + tempo parceria (20pts)
 
-            # Separa parceiros COM e SEM histórico
-            df_com_hist  = df_final[df_final['Status_Relacionamento'] != '⚫ SEM HISTÓRICO'].copy()
-            df_sem_hist  = df_final[df_final['Status_Relacionamento'] == '⚫ SEM HISTÓRICO']
-            qtd_sem_hist = len(df_sem_hist)
+            # Frequência: interações nos últimos 180 dias
+            freq_df = pd.DataFrame()
+            if not df_interacoes.empty:
+                df_int_c = df_interacoes.copy()
+                df_int_c['_data'] = pd.to_datetime(df_int_c['data_interacao'], errors='coerce')
+                corte = pd.Timestamp.now() - pd.Timedelta(days=180)
+                freq_df = (
+                    df_int_c[df_int_c['_data'] >= corte]
+                    .groupby('id_parceiro')
+                    .size()
+                    .reset_index(name='freq_180')
+                )
 
-            # Aviso discreto sobre parceiros sem histórico
-            if qtd_sem_hist > 0:
-                st.info(f"**{qtd_sem_hist} parceiros** ainda não têm nenhum contato registrado no sistema e foram ocultados deste painel.")
+            # Valor total doado (últimos 12 meses)
+            valor_df = pd.DataFrame()
+            if not df_doacoes_rel.empty:
+                df_doa_c = df_doacoes_rel.copy()
+                df_doa_c['_data'] = pd.to_datetime(df_doa_c['data_doacao'], errors='coerce')
+                corte12 = pd.Timestamp.now() - pd.Timedelta(days=365)
+                valor_df = (
+                    df_doa_c[df_doa_c['_data'] >= corte12]
+                    .groupby('id_parceiro')['valor_estimado']
+                    .sum()
+                    .reset_index(name='valor_12m')
+                )
 
-            if df_com_hist.empty:
-                empty_state("📋", "Nenhum contato registrado", "Registre a primeira interação com um parceiro para ativar o painel de saúde.")
+            # Dias de parceria
+            parc_c = df_parceiros.copy()
+            if 'data_inicio_parceria' in parc_c.columns:
+                parc_c['_inicio'] = pd.to_datetime(parc_c['data_inicio_parceria'], errors='coerce')
+                parc_c['dias_parceria'] = (pd.Timestamp.now() - parc_c['_inicio']).dt.days.fillna(0)
             else:
-                cg, ct = st.columns([1, 1.4])
-                with cg:
-                    # Ordem de exibição: Crítico → Atenção → Em dia
-                    ordem_status = {'🔴 CRÍTICO (+3 meses)': 0, '🟡 ATENÇÃO (+45 dias)': 1, '🟢 EM DIA': 2}
-                    df_g = (
-                        df_com_hist.groupby('Status_Relacionamento')
-                        .size().reset_index(name='qtd')
-                        .assign(ordem=lambda d: d['Status_Relacionamento'].map(ordem_status))
-                        .sort_values('ordem')
-                    )
-                    cor_map = {
-                        '🔴 CRÍTICO (+3 meses)': '#DC2626',
-                        '🟡 ATENÇÃO (+45 dias)':  '#D97706',
-                        '🟢 EM DIA':              '#059669',
-                    }
-                    cores = [cor_map.get(s, '#888') for s in df_g['Status_Relacionamento']]
-                    fig = go.Figure(data=[go.Pie(
-                        labels=df_g['Status_Relacionamento'], values=df_g['qtd'], hole=.78,
-                        marker_colors=cores, textinfo='none'
-                    )])
-                    fig.update_layout(
-                        height=260, margin=dict(t=10, b=10, l=0, r=0), showlegend=True,
-                        paper_bgcolor='rgba(0,0,0,0)',
-                        legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5),
-                        annotations=[dict(text='STATUS<br>SAÚDE', x=0.5, y=0.5, font_size=14, showarrow=False)]
-                    )
-                    st.plotly_chart(fig, use_container_width=True)
+                parc_c['dias_parceria'] = 0
 
-                with ct:
-                    st.markdown("**Cronograma de follow-up:**")
-                    # Ordena: críticos primeiro, depois atenção, depois em dia
-                    df_tabela = df_com_hist.copy()
-                    df_tabela['_ordem'] = df_tabela['Status_Relacionamento'].map(ordem_status).fillna(9)
-                    df_tabela = df_tabela.sort_values(['_ordem', 'Dias_Sem_Contato'], ascending=[True, False])
-                    st.dataframe(
-                        df_tabela[['Empresa', 'Dias_Sem_Contato', 'Proxima_Acao_Planejada', 'Status_Relacionamento']],
-                        column_config={
-                            "Empresa": "Parceiro",
-                            "Dias_Sem_Contato": st.column_config.NumberColumn("Dias parado", format="%d d"),
-                            "Proxima_Acao_Planejada": st.column_config.DateColumn("Próxima ação", format="DD/MM/YYYY"),
-                            "Status_Relacionamento": "Saúde"
-                        },
-                        use_container_width=True, hide_index=True, height=280
+            # Merge
+            score_df = parc_c.merge(freq_df, on='id_parceiro', how='left')
+            score_df = score_df.merge(valor_df, on='id_parceiro', how='left')
+            score_df['freq_180']   = score_df['freq_180'].fillna(0)
+            score_df['valor_12m']  = score_df['valor_12m'].fillna(0)
+
+            # Normalização 0-1 → pontos
+            max_freq  = max(score_df['freq_180'].max(), 1)
+            max_valor = max(score_df['valor_12m'].max(), 1)
+            max_dias  = max(score_df['dias_parceria'].max(), 1)
+
+            score_df['pts_freq']  = (score_df['freq_180']    / max_freq)  * 40
+            score_df['pts_valor'] = (score_df['valor_12m']   / max_valor) * 40
+            score_df['pts_tempo'] = (score_df['dias_parceria']/ max_dias)  * 20
+            score_df['score']     = (score_df['pts_freq'] + score_df['pts_valor'] + score_df['pts_tempo']).round(1)
+
+            # Merge com saúde
+            if not df_rel.empty:
+                saude_map = df_rel.set_index('Empresa')[['Status_Relacionamento', 'Dias_Sem_Contato', 'Proxima_Acao_Planejada']].to_dict('index')
+            else:
+                saude_map = {}
+
+            score_df['saude']    = score_df['nome_instituicao'].map(lambda n: saude_map.get(n, {}).get('Status_Relacionamento', '⚫ SEM HISTÓRICO'))
+            score_df['dias_pc']  = score_df['nome_instituicao'].map(lambda n: saude_map.get(n, {}).get('Dias_Sem_Contato', None))
+            score_df['prox_ac']  = score_df['nome_instituicao'].map(lambda n: saude_map.get(n, {}).get('Proxima_Acao_Planejada', None))
+
+            score_df = score_df.sort_values('score', ascending=False)
+
+            # ── Filtros rápidos ──────────────────────────────────────────────
+            cf1, cf2 = st.columns([2, 1])
+            filtro_nome   = cf1.text_input("Buscar parceiro:", placeholder="Digite o nome...", key="sc_busca")
+            filtro_status = cf2.selectbox("Status:", ["Todos", "Prospecção", "Ativo", "Inativo"], key="sc_status")
+
+            df_show = score_df.copy()
+            if filtro_nome:
+                df_show = df_show[df_show['nome_instituicao'].str.contains(filtro_nome, case=False, na=False)]
+            if filtro_status != "Todos":
+                df_show = df_show[df_show['status_limpo'].str.contains(filtro_status.upper(), na=False)]
+
+            # ── Tabela scorecard ─────────────────────────────────────────────
+            st.dataframe(
+                df_show[['nome_instituicao', 'score', 'status_limpo', 'freq_180', 'valor_12m', 'saude', 'dias_pc', 'prox_ac']].rename(columns={
+                    'nome_instituicao': 'Parceiro',
+                    'score':            'Score',
+                    'status_limpo':     'Status',
+                    'freq_180':         'Contatos (180d)',
+                    'valor_12m':        'Doado (12m) R$',
+                    'saude':            'Saúde',
+                    'dias_pc':          'Dias parado',
+                    'prox_ac':          'Próxima ação',
+                }),
+                column_config={
+                    "Score":           st.column_config.ProgressColumn("Score", min_value=0, max_value=100, format="%.1f"),
+                    "Doado (12m) R$":  st.column_config.NumberColumn("Doado (12m)", format="R$ %.2f"),
+                    "Dias parado":     st.column_config.NumberColumn("Dias parado", format="%d d"),
+                    "Próxima ação":    st.column_config.DateColumn("Próxima ação", format="DD/MM/YYYY"),
+                    "Contatos (180d)": st.column_config.NumberColumn("Contatos (180d)", format="%d"),
+                },
+                use_container_width=True, hide_index=True
+            )
+
+            # ── Gráfico top 10 ───────────────────────────────────────────────
+            top10 = df_show.head(10)
+            if not top10.empty:
+                section("Top 10 por score")
+                cores_bar = ['#DC2626' if '🔴' in str(s) else '#D97706' if '🟡' in str(s) else '#059669' if '🟢' in str(s) else '#64748B' for s in top10['saude']]
+                fig_sc = go.Figure(go.Bar(
+                    x=top10['score'], y=top10['nome_instituicao'],
+                    orientation='h', marker_color=cores_bar,
+                    text=top10['score'].apply(lambda v: f"{v:.0f} pts"),
+                    textposition='outside',
+                ))
+                fig_sc.update_layout(
+                    height=360, margin=dict(t=10, b=10, l=0, r=60),
+                    paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+                    xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+                    yaxis=dict(autorange='reversed'),
+                    font=dict(color='#E5E7EB'),
+                )
+                st.plotly_chart(fig_sc, use_container_width=True)
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # ABA 2 — LINHA DO TEMPO POR PARCEIRO
+    # ══════════════════════════════════════════════════════════════════════════
+    with tab_timeline:
+        section("Histórico completo por parceiro")
+
+        p_lista = ["-- selecione --"] + sorted(df_parceiros['nome_instituicao'].dropna().tolist())
+        sel_p = st.selectbox("Parceiro:", p_lista, key="tl_parceiro")
+
+        if sel_p != "-- selecione --":
+            id_p = int(df_parceiros[df_parceiros['nome_instituicao'] == sel_p]['id_parceiro'].values[0])
+
+            # Busca interações
+            hist_int = run_query(
+                "SELECT data_interacao AS data, tipo_interacao AS tipo, "
+                "descricao_do_que_foi_feito AS descricao, "
+                "proxima_acao_data, proxima_acao_descricao "
+                "FROM Registro_Relacionamento WHERE id_parceiro = %s "
+                "ORDER BY data_interacao DESC",
+                (id_p,)
+            )
+
+            # Busca doações
+            hist_doa = run_query(
+                "SELECT data_doacao AS data, tipo_doacao AS tipo, "
+                "descricao AS descricao, valor_estimado "
+                "FROM Doacao WHERE id_parceiro = %s ORDER BY data_doacao DESC",
+                (id_p,)
+            )
+
+            if hist_int.empty and hist_doa.empty:
+                empty_state("📅", "Sem histórico", "Nenhuma interação ou doação registrada para este parceiro.")
+            else:
+                # Unifica eventos
+                eventos = []
+                if not hist_int.empty:
+                    for _, r in hist_int.iterrows():
+                        eventos.append({
+                            'data': pd.to_datetime(r['data'], errors='coerce'),
+                            'tipo_icon': '💬',
+                            'tipo_label': str(r['tipo']) if pd.notna(r['tipo']) else 'Interação',
+                            'descricao': str(r['descricao']) if pd.notna(r['descricao']) else '—',
+                            'extra': (f"⏭ Próxima ação: {r['proxima_acao_descricao']} ({r['proxima_acao_data']})"
+                                      if pd.notna(r.get('proxima_acao_descricao')) else None),
+                            'cor': '#3B82F6',
+                        })
+                if not hist_doa.empty:
+                    for _, r in hist_doa.iterrows():
+                        val = r['valor_estimado'] if pd.notna(r['valor_estimado']) else 0
+                        val_fmt = f"R$ {val:,.2f}".replace(',','X').replace('.',',').replace('X','.')
+                        eventos.append({
+                            'data': pd.to_datetime(r['data'], errors='coerce'),
+                            'tipo_icon': '💰',
+                            'tipo_label': str(r['tipo']) if pd.notna(r['tipo']) else 'Doação',
+                            'descricao': str(r['descricao']) if pd.notna(r['descricao']) else '—',
+                            'extra': f"Valor: {val_fmt}" if val > 0 else None,
+                            'cor': '#059669',
+                        })
+
+                eventos = sorted(eventos, key=lambda e: e['data'] or pd.Timestamp('1900-01-01'), reverse=True)
+
+                # Render timeline
+                for ev in eventos:
+                    data_str = ev['data'].strftime('%d/%m/%Y') if ev['data'] is not pd.NaT and ev['data'] is not None else '—'
+                    cor = ev['cor']
+                    extra_html = f"<div style='margin-top:6px;font-size:0.82rem;color:#94A3B8;'>{ev['extra']}</div>" if ev['extra'] else ""
+                    st.markdown(
+                        f"""<div style='display:flex;gap:12px;margin-bottom:16px;align-items:flex-start;'>
+                          <div style='flex-shrink:0;width:36px;height:36px;border-radius:50%;background:{cor}22;
+                               border:2px solid {cor};display:flex;align-items:center;justify-content:center;font-size:16px;'>
+                            {ev['tipo_icon']}
+                          </div>
+                          <div style='flex:1;background:rgba(255,255,255,0.04);border-radius:8px;
+                               padding:10px 14px;border-left:3px solid {cor};'>
+                            <div style='display:flex;justify-content:space-between;align-items:center;'>
+                              <span style='font-weight:600;font-size:0.9rem;color:#E5E7EB;'>{ev['tipo_label']}</span>
+                              <span style='font-size:0.8rem;color:#94A3B8;background:rgba(255,255,255,0.08);
+                                   padding:2px 8px;border-radius:12px;'>{data_str}</span>
+                            </div>
+                            <div style='margin-top:6px;font-size:0.92rem;color:#CBD5E1;'>{ev['descricao']}</div>
+                            {extra_html}
+                          </div>
+                        </div>""",
+                        unsafe_allow_html=True
                     )
-            
 
-    with tab_hist:
-        p_lista = ["--"] + sorted(df_parceiros['nome_instituicao'].tolist())
-        sel_h = st.selectbox("Selecione o parceiro para histórico:", p_lista)
-        if sel_h != "--":
-            id_p = df_parceiros[df_parceiros['nome_instituicao'] == sel_h]['id_parceiro'].values[0]
-            h = run_query(f"SELECT data_interacao, descricao_do_que_foi_feito FROM Registro_Relacionamento WHERE id_parceiro = {id_p} ORDER BY data_interacao DESC")
-            for _, r in h.iterrows():
-                st.markdown(f"""<div style="margin-bottom:15px; padding:10px; border-bottom:1px solid rgba(255,255,255,0.1)">
-                <span class="date-badge">{r['data_interacao']}</span><br>
-                <p style="margin-top:8px; font-size:0.95rem;">{r['descricao_do_que_foi_feito']}</p></div>""", unsafe_allow_html=True)
+                # KPIs do parceiro
+                st.divider()
+                total_int = len(hist_int)
+                total_doa_val = hist_doa['valor_estimado'].fillna(0).sum() if not hist_doa.empty else 0
+                total_doa_val_fmt = f"R$ {total_doa_val:,.2f}".replace(',','X').replace('.',',').replace('X','.')
+                ultima = eventos[0]['data'].strftime('%d/%m/%Y') if eventos and eventos[0]['data'] is not None else '—'
+                kpi_row([
+                    {"label": "Interações registradas", "value": total_int},
+                    {"label": "Total doado (histórico)", "value": total_doa_val_fmt},
+                    {"label": "Última atividade", "value": ultima},
+                ])
 
-    # ==========================================
-    # ABA 3: RELATÓRIO PARA A DIRETORIA
-    # ==========================================
+    # ══════════════════════════════════════════════════════════════════════════
+    # ABA 3 — FOLLOW-UPS
+    # ══════════════════════════════════════════════════════════════════════════
+    with tab_followup:
+        section("Agenda de follow-ups")
+
+        df_fu = run_query_cached(
+            "SELECT r.proxima_acao_data, r.proxima_acao_descricao, "
+            "p.nome_instituicao, r.id_parceiro, r.data_interacao "
+            "FROM Registro_Relacionamento r "
+            "JOIN Parceiro p ON r.id_parceiro = p.id_parceiro "
+            "WHERE r.proxima_acao_data IS NOT NULL "
+            "ORDER BY r.proxima_acao_data ASC"
+        )
+
+        if df_fu.empty:
+            empty_state("📆", "Nenhum follow-up agendado",
+                        "Ao registrar uma interação, preencha 'Próxima ação' para aparecer aqui.")
+        else:
+            df_fu['_data'] = pd.to_datetime(df_fu['proxima_acao_data'], errors='coerce').dt.date
+            df_fu['_dias'] = (df_fu['_data'] - hoje).apply(lambda d: d.days if d is not pd.NaT else 999)
+
+            # Filtro de período
+            ff1, ff2 = st.columns(2)
+            filtro_periodo = ff1.selectbox(
+                "Período:", ["Todos", "Vencidos", "Esta semana", "Este mês", "Futuros"],
+                key="fu_periodo"
+            )
+            filtro_parc = ff2.text_input("Filtrar por parceiro:", key="fu_parc")
+
+            df_fshow = df_fu.copy()
+            if filtro_periodo == "Vencidos":
+                df_fshow = df_fshow[df_fshow['_dias'] < 0]
+            elif filtro_periodo == "Esta semana":
+                df_fshow = df_fshow[(df_fshow['_dias'] >= 0) & (df_fshow['_dias'] <= 7)]
+            elif filtro_periodo == "Este mês":
+                df_fshow = df_fshow[(df_fshow['_dias'] >= 0) & (df_fshow['_dias'] <= 30)]
+            elif filtro_periodo == "Futuros":
+                df_fshow = df_fshow[df_fshow['_dias'] > 30]
+
+            if filtro_parc:
+                df_fshow = df_fshow[df_fshow['nome_instituicao'].str.contains(filtro_parc, case=False, na=False)]
+
+            if df_fshow.empty:
+                st.info("Nenhum follow-up encontrado para o filtro selecionado.")
+            else:
+                for _, row in df_fshow.iterrows():
+                    dias = int(row['_dias'])
+                    if dias < 0:
+                        tom = "danger"
+                        badge = f"Vencido há {abs(dias)}d"
+                    elif dias == 0:
+                        tom = "warning"
+                        badge = "Hoje"
+                    elif dias <= 7:
+                        tom = "warning"
+                        badge = f"Em {dias}d"
+                    else:
+                        tom = "info"
+                        badge = f"Em {dias}d"
+
+                    acao = str(row['proxima_acao_descricao']) if pd.notna(row.get('proxima_acao_descricao')) else "Ação não especificada"
+                    data_fmt = row['_data'].strftime('%d/%m/%Y') if row['_data'] else '—'
+                    action_card(
+                        titulo=str(row['nome_instituicao']),
+                        meta_parts=[acao, f"Prazo: {data_fmt} ({badge})"],
+                        tom=tom,
+                    )
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # ABA 4 — RELATÓRIO PARA A DIRETORIA
+    # ══════════════════════════════════════════════════════════════════════════
     with tab_diretoria:
         st.markdown("### Extrair atualizações de parcerias")
         st.write("Gerar um resumo estratégico (ações manuais e doações recebidas) para reportar à direção.")
 
-        # Filtro de datas
         c_inicio, c_fim = st.columns(2)
         data_inicio = c_inicio.date_input("Data inicial", datetime.now() - timedelta(days=7), key="dt_ini_rel")
-        data_fim = c_fim.date_input("Data final", datetime.now(), key="dt_fim_rel")
+        data_fim    = c_fim.date_input("Data final",    datetime.now(),                       key="dt_fim_rel")
 
         if st.button("Gerar relatório de atividades", type="primary", use_container_width=True):
             d_ini = data_inicio.strftime('%Y-%m-%d')
             d_fim = data_fim.strftime('%Y-%m-%d')
 
-            # Duas queries separadas para evitar problemas com UNION ALL + psycopg2
             df_rel_int = run_query("""
                 SELECT p.nome_instituicao,
                        r.data_interacao AS data_registro,
@@ -3640,7 +3845,7 @@ elif menu == "Relacionamento":
                        0 AS valor_estimado
                 FROM Registro_Relacionamento r
                 JOIN Parceiro p ON r.id_parceiro = p.id_parceiro
-                WHERE r.data_interacao BETWEEN ? AND ?
+                WHERE r.data_interacao BETWEEN %s AND %s
                   AND r.descricao_do_que_foi_feito NOT LIKE 'Sistema:%%'
             """, (d_ini, d_fim))
 
@@ -3649,69 +3854,60 @@ elif menu == "Relacionamento":
                        d.data_doacao AS data_registro,
                        CONCAT('DOAÇÃO (', d.tipo_doacao, ')') AS tipo,
                        d.descricao AS descricao,
-                       d.valor_estimado
+                       COALESCE(d.valor_estimado, 0) AS valor_estimado
                 FROM Doacao d
                 JOIN Parceiro p ON d.id_parceiro = p.id_parceiro
-                WHERE d.data_doacao BETWEEN ? AND ?
+                WHERE d.data_doacao BETWEEN %s AND %s
             """, (d_ini, d_fim))
 
             df_relatorio = pd.concat([df_rel_int, df_rel_doa], ignore_index=True)
             if not df_relatorio.empty:
                 df_relatorio = df_relatorio.sort_values('data_registro', ascending=False)
 
-            if not df_relatorio.empty:
+            if df_relatorio.empty:
+                st.info("Nenhuma atividade registrada no período selecionado.")
+            else:
                 dt_ini_fmt = data_inicio.strftime('%d/%m/%Y')
                 dt_fim_fmt = data_fim.strftime('%d/%m/%Y')
-                
                 texto_diretoria = f"*RESUMO ESTRATÉGICO DI - {dt_ini_fmt} a {dt_fim_fmt}*\n\n"
-
-                html_relatorio = f"""
-                <div class="glass-card">
-                    <h4 style="color: #00CC96; margin-top: 0; text-align: center;">RESUMO: {dt_ini_fmt} a {dt_fim_fmt}</h4>
-                    <hr style="border-color: rgba(255,255,255,0.05); margin-bottom: 15px;">
-                    <ul style='list-style-type: none; padding-left: 5px;'>
-                """
+                html_relatorio  = (
+                    f'<div class="glass-card"><h4 style="color:#00CC96;margin-top:0;text-align:center;">'
+                    f'RESUMO: {dt_ini_fmt} a {dt_fim_fmt}</h4>'
+                    f'<hr style="border-color:rgba(255,255,255,0.05);margin-bottom:15px;">'
+                    f'<ul style="list-style-type:none;padding-left:5px;">'
+                )
 
                 for _, row in df_relatorio.iterrows():
                     _dr = row['data_registro']
                     data_reg_fmt = (_dr if hasattr(_dr, 'strftime') else datetime.strptime(str(_dr), '%Y-%m-%d')).strftime('%d/%m')
                     nome_parceiro = str(row['nome_instituicao']).upper()
-                    descricao = str(row['descricao']).capitalize() if pd.notna(row['descricao']) and str(row['descricao']).strip() != "" else "Sem observações adicionais."
+                    descricao     = str(row['descricao']).capitalize() if pd.notna(row['descricao']) and str(row['descricao']).strip() else "Sem observações."
                     tipo = row['tipo']
-                    
-                    # Lógica de formatação condicional se for doação (mostra o valor se for maior que 0)
-                    if "DOAÇÃO" in tipo and row['valor_estimado'] > 0:
-                        valor_fmt = f"R$ {row['valor_estimado']:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-                        texto_extra = f" | Valor: {valor_fmt}"
-                        html_extra = f" <span style='color:#00FFC2; font-weight:bold;'>| {valor_fmt}</span>"
+                    val  = float(row['valor_estimado']) if pd.notna(row['valor_estimado']) else 0
+                    if "DOA" in tipo and val > 0:
+                        val_fmt    = f"R$ {val:,.2f}".replace(',','X').replace('.',',').replace('X','.')
+                        texto_extra = f" | Valor: {val_fmt}"
+                        html_extra  = f" <span style='color:#00FFC2;font-weight:bold;'>| {val_fmt}</span>"
                     else:
                         texto_extra = ""
-                        html_extra = ""
+                        html_extra  = ""
 
-                    # Adiciona ao texto do WhatsApp
-                    texto_diretoria += f"🔹 *{nome_parceiro}* ({data_reg_fmt})\n"
-                    texto_diretoria += f"{tipo}{texto_extra}\n"
-                    texto_diretoria += f"Detalhe: {descricao}\n\n"
+                    texto_diretoria += f"🔹 *{nome_parceiro}* ({data_reg_fmt})\n{tipo}{texto_extra}\nDetalhe: {descricao}\n\n"
+                    html_relatorio  += (
+                        f"<li style='margin-bottom:18px;'>"
+                        f"🏢 <b style='font-size:1.05em;'>{nome_parceiro}</b>"
+                        f" <span class='date-badge' style='margin-left:10px;'>{data_reg_fmt}</span><br>"
+                        f"<span style='font-size:0.85em;color:#FFB74D;font-weight:600;margin-left:25px;'>{tipo}{html_extra}</span><br>"
+                        f"<span style='opacity:0.85;font-size:0.95em;margin-left:25px;'>↳ {descricao}</span></li>"
+                    )
 
-                    # Adiciona ao visual HTML
-                    html_relatorio += f"<li style='margin-bottom: 18px;'>"
-                    html_relatorio += f"🏢 <b style='font-size:1.05em;'>{nome_parceiro}</b> <span class='date-badge' style='margin-left: 10px;'>{data_reg_fmt}</span><br>"
-                    html_relatorio += f"<span style='font-size: 0.85em; color: #FFB74D; font-weight: 600; margin-left: 25px; display: inline-block; margin-top: 4px; margin-bottom: 4px;'>{tipo}{html_extra}</span><br>"
-                    html_relatorio += f"<span style='opacity: 0.85; font-size: 0.95em; margin-left: 25px;'>↳ {descricao}</span>"
-                    html_relatorio += f"</li>"
-                
                 html_relatorio += "</ul></div>"
-
-                # Exibe visualmente no Streamlit
                 st.markdown(html_relatorio, unsafe_allow_html=True)
 
-                # Caixa para o usuário copiar o texto
                 with st.expander("Copiar texto para WhatsApp / E-mail"):
                     st.code(texto_diretoria, language="markdown")
 
-                # ── Botão PDF ────────────────────────────────────────────
-                st.markdown("<br>", unsafe_allow_html=True)
-
+                # ── PDF ─────────────────────────────────────────────────────
                 def _gerar_pdf_diretoria(df_rel, d_ini_fmt, d_fim_fmt):
                     from io import BytesIO
                     from reportlab.lib.pagesizes import A4
@@ -3721,43 +3917,22 @@ elif menu == "Relacionamento":
                     from reportlab.platypus import (
                         SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable
                     )
-
                     buf = BytesIO()
-                    doc = SimpleDocTemplate(
-                        buf, pagesize=A4,
-                        leftMargin=2*cm, rightMargin=2*cm,
-                        topMargin=2*cm, bottomMargin=2*cm,
-                    )
-
-                    estilos = getSampleStyleSheet()
-                    cor_principal = colors.HexColor("#C0392B")
-                    cor_cinza     = colors.HexColor("#555555")
-                    cor_fundo     = colors.HexColor("#F7F7F7")
-
-                    st_titulo = ParagraphStyle("titulo", parent=estilos["Title"],
-                        fontSize=20, textColor=cor_principal, spaceAfter=4)
-                    st_subtitulo = ParagraphStyle("sub", parent=estilos["Normal"],
-                        fontSize=11, textColor=cor_cinza, spaceAfter=12)
-                    st_secao = ParagraphStyle("secao", parent=estilos["Heading2"],
-                        fontSize=13, textColor=cor_principal, spaceBefore=14, spaceAfter=6)
-                    st_item = ParagraphStyle("item", parent=estilos["Normal"],
-                        fontSize=10, textColor=colors.HexColor("#222222"), spaceAfter=2, leading=14)
-                    st_detalhe = ParagraphStyle("detalhe", parent=estilos["Normal"],
-                        fontSize=9, textColor=cor_cinza, leftIndent=12, spaceAfter=8, leading=13)
-                    st_rodape = ParagraphStyle("rodape", parent=estilos["Normal"],
-                        fontSize=8, textColor=cor_cinza, alignment=1)
-
+                    doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=2*cm, rightMargin=2*cm, topMargin=2*cm, bottomMargin=2*cm)
+                    estilos        = getSampleStyleSheet()
+                    cor_principal  = colors.HexColor("#C0392B")
+                    cor_cinza      = colors.HexColor("#555555")
+                    cor_fundo      = colors.HexColor("#F7F7F7")
+                    st_titulo      = ParagraphStyle("titulo",    parent=estilos["Title"],   fontSize=20, textColor=cor_principal, spaceAfter=4)
+                    st_subtitulo   = ParagraphStyle("sub",       parent=estilos["Normal"],  fontSize=11, textColor=cor_cinza, spaceAfter=12)
+                    st_secao       = ParagraphStyle("secao",     parent=estilos["Heading2"],fontSize=13, textColor=cor_principal, spaceBefore=14, spaceAfter=6)
+                    st_item        = ParagraphStyle("item",      parent=estilos["Normal"],  fontSize=10, textColor=colors.HexColor("#222222"), spaceAfter=2, leading=14)
+                    st_detalhe     = ParagraphStyle("detalhe",   parent=estilos["Normal"],  fontSize=9,  textColor=cor_cinza, leftIndent=12, spaceAfter=8, leading=13)
                     story = []
-
-                    # Cabeçalho
                     story.append(Paragraph("Casa Durval Paiva", st_titulo))
-                    story.append(Paragraph(
-                        f"Relatório Estratégico de Parcerias — {d_ini_fmt} a {d_fim_fmt}",
-                        st_subtitulo
-                    ))
+                    story.append(Paragraph(f"Relatório Estratégico de Parcerias — {d_ini_fmt} a {d_fim_fmt}", st_subtitulo))
                     story.append(HRFlowable(width="100%", thickness=1.5, color=cor_principal, spaceAfter=10))
 
-                    # KPIs do período
                     doacoes_period = df_rel[df_rel['tipo'].str.contains("DOA", na=False, case=False)]
                     relac_period   = df_rel[df_rel['tipo'] == 'RELACIONAMENTO']
                     total_fin      = doacoes_period['valor_estimado'].sum()
@@ -3765,159 +3940,60 @@ elif menu == "Relacionamento":
 
                     dados_kpi = [
                         ["Parceiros movimentados", "Interações registradas", "Doações no período"],
-                        [str(n_parcerias), str(len(relac_period)), f"R$ {total_fin:,.2f}".replace(",","X").replace(".",",").replace("X",".")]
+                        [str(n_parcerias), str(len(relac_period)), f"R$ {total_fin:,.2f}".replace(',','X').replace('.',',').replace('X','.')]
                     ]
                     t_kpi = Table(dados_kpi, colWidths=[5.5*cm, 5.5*cm, 5.5*cm])
                     t_kpi.setStyle(TableStyle([
-                        ("BACKGROUND", (0,0), (-1,0), cor_fundo),
-                        ("TEXTCOLOR",  (0,0), (-1,0), cor_cinza),
-                        ("FONTSIZE",   (0,0), (-1,0), 9),
-                        ("FONTSIZE",   (0,1), (-1,1), 14),
-                        ("FONTNAME",   (0,1), (-1,1), "Helvetica-Bold"),
-                        ("TEXTCOLOR",  (0,1), (-1,1), cor_principal),
-                        ("ALIGN",      (0,0), (-1,-1), "CENTER"),
-                        ("VALIGN",     (0,0), (-1,-1), "MIDDLE"),
-                        ("ROWBACKGROUNDS", (0,0), (-1,-1), [cor_fundo, colors.white]),
-                        ("BOX",        (0,0), (-1,-1), 0.5, cor_cinza),
-                        ("INNERGRID",  (0,0), (-1,-1), 0.3, colors.HexColor("#DDDDDD")),
-                        ("TOPPADDING", (0,0), (-1,-1), 8),
-                        ("BOTTOMPADDING", (0,0), (-1,-1), 8),
+                        ("BACKGROUND",    (0,0),(-1,0), cor_fundo),
+                        ("TEXTCOLOR",     (0,0),(-1,0), cor_cinza),
+                        ("FONTSIZE",      (0,0),(-1,0), 9),
+                        ("FONTSIZE",      (0,1),(-1,1), 14),
+                        ("FONTNAME",      (0,1),(-1,1), "Helvetica-Bold"),
+                        ("TEXTCOLOR",     (0,1),(-1,1), cor_principal),
+                        ("ALIGN",         (0,0),(-1,-1), "CENTER"),
+                        ("VALIGN",        (0,0),(-1,-1), "MIDDLE"),
+                        ("BOX",           (0,0),(-1,-1), 0.5, cor_cinza),
+                        ("INNERGRID",     (0,0),(-1,-1), 0.3, colors.HexColor("#DDDDDD")),
+                        ("TOPPADDING",    (0,0),(-1,-1), 8),
+                        ("BOTTOMPADDING", (0,0),(-1,-1), 8),
                     ]))
                     story.append(t_kpi)
                     story.append(Spacer(1, 0.4*cm))
 
-                    # Interações
                     if not relac_period.empty:
                         story.append(Paragraph("Interações com parceiros", st_secao))
                         for _, row in relac_period.iterrows():
-                            _dr = row['data_registro']
-                            drf = (_dr if hasattr(_dr,'strftime') else datetime.strptime(str(_dr),'%Y-%m-%d')).strftime('%d/%m/%Y')
-                            story.append(Paragraph(
-                                f"<b>{str(row['nome_instituicao']).upper()}</b> &nbsp;&nbsp; <font color='#888888' size='9'>{drf}</font>",
-                                st_item
-                            ))
+                            _dr  = row['data_registro']
+                            drf  = (_dr if hasattr(_dr,'strftime') else datetime.strptime(str(_dr),'%Y-%m-%d')).strftime('%d/%m/%Y')
                             desc = str(row['descricao']).capitalize() if pd.notna(row['descricao']) else "—"
+                            story.append(Paragraph(f"<b>{str(row['nome_instituicao']).upper()}</b> &nbsp;&nbsp; <font color='#888888' size='9'>{drf}</font>", st_item))
                             story.append(Paragraph(f"↳ {desc}", st_detalhe))
 
-                    # Doações
                     if not doacoes_period.empty:
                         story.append(Paragraph("Doações recebidas no período", st_secao))
-                        dados_doa = [["Parceiro", "Tipo", "Valor"]]
                         for _, row in doacoes_period.iterrows():
-                            _dr = row['data_registro']
-                            drf = (_dr if hasattr(_dr,'strftime') else datetime.strptime(str(_dr),'%Y-%m-%d')).strftime('%d/%m')
-                            val = row['valor_estimado'] or 0
-                            val_fmt = f"R$ {val:,.2f}".replace(",","X").replace(".",",").replace("X",".")
-                            dados_doa.append([
-                                str(row['nome_instituicao']).upper()[:35],
-                                str(row['tipo']).replace("DOAÇÃO (","").replace(")",""),
-                                val_fmt
-                            ])
-                        t_doa = Table(dados_doa, colWidths=[8*cm, 4*cm, 4.5*cm])
-                        t_doa.setStyle(TableStyle([
-                            ("BACKGROUND",    (0,0), (-1,0), cor_principal),
-                            ("TEXTCOLOR",     (0,0), (-1,0), colors.white),
-                            ("FONTNAME",      (0,0), (-1,0), "Helvetica-Bold"),
-                            ("FONTSIZE",      (0,0), (-1,-1), 9),
-                            ("ROWBACKGROUNDS",(0,1), (-1,-1), [colors.white, cor_fundo]),
-                            ("GRID",          (0,0), (-1,-1), 0.3, colors.HexColor("#CCCCCC")),
-                            ("ALIGN",         (2,0), (2,-1), "RIGHT"),
-                            ("TOPPADDING",    (0,0), (-1,-1), 5),
-                            ("BOTTOMPADDING", (0,0), (-1,-1), 5),
-                        ]))
-                        story.append(t_doa)
-
-                    # Rodapé
-                    story.append(Spacer(1, 1*cm))
-                    story.append(HRFlowable(width="100%", thickness=0.5, color=cor_cinza))
-                    story.append(Spacer(1, 0.2*cm))
-                    story.append(Paragraph(
-                        f"Gerado em {datetime.now().strftime('%d/%m/%Y às %H:%M')} · Sistema de Gestão DI — Casa Durval Paiva",
-                        st_rodape
-                    ))
+                            _dr  = row['data_registro']
+                            drf  = (_dr if hasattr(_dr,'strftime') else datetime.strptime(str(_dr),'%Y-%m-%d')).strftime('%d/%m/%Y')
+                            val  = float(row['valor_estimado']) if pd.notna(row['valor_estimado']) else 0
+                            vf   = f"R$ {val:,.2f}".replace(',','X').replace('.',',').replace('X','.') if val > 0 else "—"
+                            desc = str(row['descricao']).capitalize() if pd.notna(row['descricao']) else "—"
+                            story.append(Paragraph(f"<b>{str(row['nome_instituicao']).upper()}</b> &nbsp;&nbsp; <font color='#888888' size='9'>{drf}</font> &nbsp; <b>{vf}</b>", st_item))
+                            story.append(Paragraph(f"↳ {desc}", st_detalhe))
 
                     doc.build(story)
-                    buf.seek(0)
-                    return buf.read()
+                    return buf.getvalue()
 
-                pdf_bytes = _gerar_pdf_diretoria(df_relatorio, dt_ini_fmt, dt_fim_fmt)
-                st.download_button(
-                    label="📄 Baixar relatório em PDF",
-                    data=pdf_bytes,
-                    file_name=f"relatorio_di_{data_inicio.strftime('%Y%m')}.pdf",
-                    mime="application/pdf",
-                    use_container_width=True,
-                )
-
-            else:
-                st.info("Nenhuma ação estratégica manual ou doação foi registrada neste período.")
-
-    # 6. REGISTRO GLASS (Ação + Retorno)
-    st.markdown("<br>", unsafe_allow_html=True)
-    with st.expander("REGISTRAR INTERAÇÃO E AGENDAR RETORNO"):
-        with st.form("form_glass_final", clear_on_submit=True):
-            c1, c2, c3 = st.columns(3)
-            d_acao = c1.date_input("Data do Contato", datetime.now())
-            d_retorno = c2.date_input("Próximo Retorno", datetime.now() + timedelta(days=15))
-            p_sel = c3.selectbox("Parceiro", p_lista)
-            
-            st_novo = st.selectbox("Atualizar Status?", ["Manter atual", "ATIVO", "PROSPECÇÃO", "INATIVO"])
-            relato = st.text_area("Descrição da conversa:")
-            
-            if st.form_submit_button("SALVAR GESTÃO", type="primary"):
-                if p_sel != "--" and relato:
-                    id_p = int(df_parceiros[df_parceiros['nome_instituicao'] == p_sel]['id_parceiro'].values[0])
-                    # Inserção com proxima_acao_data
-                    run_insert("INSERT INTO Registro_Relacionamento (id_parceiro, data_interacao, descricao_do_que_foi_feito, proxima_acao_data) VALUES (?, ?, ?, ?)",
-                              (id_p, d_acao.strftime('%Y-%m-%d'), relato.upper(), d_retorno.strftime('%Y-%m-%d')))
-                    if st_novo != "Manter atual":
-                        run_insert("UPDATE Parceiro SET status = ? WHERE id_parceiro = ?", (st_novo, id_p))
-                    st.toast("Registro salvo!"); st.rerun()
-
-
-
-# ============================================================
-#  SIDEBAR — FERRAMENTAS FIXAS (sempre visíveis, independente do menu)
-# ============================================================
-st.sidebar.markdown("---")
-st.sidebar.subheader("Extrair dados")
-
-# Backup completo — Excel com uma aba por tabela principal
-@st.cache_data(ttl=300, show_spinner=False)
-def _gerar_backup_completo():
-    """Exporta todas as tabelas principais em um único arquivo Excel (.xlsx).
-    Fallback para ZIP de CSVs se openpyxl/xlsxwriter não estiverem disponíveis."""
-    tabelas = {
-        "Parceiros":        "SELECT * FROM Parceiro",
-        "Contatos":         "SELECT * FROM Contato_Direto",
-        "Doações":          "SELECT * FROM Doacao",
-        "Relacionamentos":  "SELECT * FROM Registro_Relacionamento",
-        "Demandas":         "SELECT * FROM Demandas_Estrategicas",
-        "Tarefas":          "SELECT * FROM Tarefas_Pendentes",
-        "Captacao_DI":      "SELECT * FROM Registro_Captacao_DI",
-    }
-    dfs = {nome: run_query(sql) for nome, sql in tabelas.items()}
-
-    for engine in ("openpyxl", "xlsxwriter"):
-        try:
-            output = BytesIO()
-            with pd.ExcelWriter(output, engine=engine) as writer:
-                for nome, df in dfs.items():
-                    df.to_excel(writer, index=False, sheet_name=nome[:31])
-            return (
-                output.getvalue(),
-                "xlsx",
-                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            )
-        except Exception:
-            continue
-
-    import zipfile
-    output = BytesIO()
-    with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as zf:
-        for nome, df in dfs.items():
-            zf.writestr(f"{nome}.csv", df.to_csv(index=False))
-    return output.getvalue(), "zip", "application/zip"
+                try:
+                    pdf_bytes = _gerar_pdf_diretoria(df_relatorio, dt_ini_fmt, dt_fim_fmt)
+                    st.download_button(
+                        "Baixar PDF para diretoria",
+                        data=pdf_bytes,
+                        file_name=f"RelatorioParcerias_{data_inicio.strftime('%Y%m%d')}_{data_fim.strftime('%Y%m%d')}.pdf",
+                        mime="application/pdf",
+                        use_container_width=True,
+                    )
+                except Exception as e:
+                    st.warning(f"PDF não gerado: {e}")
 
 _backup = _gerar_backup_completo()
 if _backup:
