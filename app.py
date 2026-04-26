@@ -1312,6 +1312,99 @@ if menu == "PAINEL GERAL":
         else:
             st.caption("Sem doações registradas para este ano.")
 
+        # ============================================================
+        # BLOCO 7 — QUALIDADE DOS DADOS
+        # ============================================================
+        section("🔍 Qualidade dos dados")
+
+        df_qd_sem_contato = run_query("""
+            SELECT p.nome_instituicao AS "Parceiro"
+            FROM Parceiro p
+            WHERE UPPER(p.status) LIKE '%ATIVO%'
+              AND NOT EXISTS (SELECT 1 FROM Contato c WHERE c.id_parceiro = p.id_parceiro)
+            ORDER BY p.nome_instituicao
+        """)
+
+        df_qd_sem_doacao = run_query("""
+            SELECT p.nome_instituicao AS "Parceiro"
+            FROM Parceiro p
+            WHERE UPPER(p.status) LIKE '%ATIVO%'
+              AND NOT EXISTS (
+                  SELECT 1 FROM Doacao d
+                  WHERE d.id_parceiro = p.id_parceiro
+                    AND EXTRACT(YEAR FROM d.data_doacao) = 2026
+              )
+            ORDER BY p.nome_instituicao
+        """)
+
+        df_qd_sem_interacao = run_query("""
+            SELECT p.nome_instituicao AS "Parceiro"
+            FROM Parceiro p
+            WHERE UPPER(p.status) LIKE '%ATIVO%'
+              AND NOT EXISTS (SELECT 1 FROM Registro_Relacionamento r WHERE r.id_parceiro = p.id_parceiro)
+            ORDER BY p.nome_instituicao
+        """)
+
+        df_qd_sem_tipo = run_query("""
+            SELECT p.nome_instituicao AS "Parceiro",
+                   TO_CHAR(d.data_doacao, 'DD/MM/YYYY') AS "Data",
+                   d.valor_estimado AS "Valor"
+            FROM Doacao d
+            JOIN Parceiro p ON d.id_parceiro = p.id_parceiro
+            WHERE EXTRACT(YEAR FROM d.data_doacao) = 2026
+              AND (d.tipo_doacao IS NULL OR d.tipo_doacao = '' OR d.tipo_doacao = 'Selecione...')
+            ORDER BY d.data_doacao DESC
+        """)
+
+        _total_pend = (
+            len(df_qd_sem_contato) + len(df_qd_sem_doacao) +
+            len(df_qd_sem_interacao) + len(df_qd_sem_tipo)
+        )
+
+        if _total_pend == 0:
+            st.markdown(
+                '<div style="padding:10px 14px;background:rgba(34,197,94,0.1);'
+                'border-left:3px solid #22C55E;border-radius:0 8px 8px 0;font-size:14px;">'
+                '✅ Todos os dados estão completos e consistentes.</div>',
+                unsafe_allow_html=True
+            )
+        else:
+            st.markdown(
+                f'<div style="padding:10px 14px;background:rgba(234,179,8,0.1);'
+                f'border-left:3px solid #EAB308;border-radius:0 8px 8px 0;'
+                f'font-size:14px;margin-bottom:12px;">'
+                f'⚠️ <strong>{_total_pend} pendência(s)</strong> de dados identificadas '
+                f'— expanda para ver o detalhe e corrigir.</div>',
+                unsafe_allow_html=True
+            )
+            _cq1, _cq2 = st.columns(2)
+            with _cq1:
+                if not df_qd_sem_contato.empty:
+                    with st.expander(f"👤 Sem contato cadastrado ({len(df_qd_sem_contato)})"):
+                        st.caption("Parceiros ativos que ainda não têm nenhuma pessoa de contato vinculada.")
+                        for _, _r in df_qd_sem_contato.iterrows():
+                            st.markdown(f"• {_r['Parceiro']}")
+                if not df_qd_sem_interacao.empty:
+                    with st.expander(f"💬 Sem interação registrada ({len(df_qd_sem_interacao)})"):
+                        st.caption("Parceiros ativos sem nenhum registro de relacionamento no histórico.")
+                        for _, _r in df_qd_sem_interacao.iterrows():
+                            st.markdown(f"• {_r['Parceiro']}")
+            with _cq2:
+                if not df_qd_sem_doacao.empty:
+                    with st.expander(f"💰 Sem doação registrada em 2026 ({len(df_qd_sem_doacao)})"):
+                        st.caption("Parceiros ativos que não têm nenhuma doação lançada no ano — verifique se há repasses pendentes de registro.")
+                        for _, _r in df_qd_sem_doacao.iterrows():
+                            st.markdown(f"• {_r['Parceiro']}")
+                if not df_qd_sem_tipo.empty:
+                    with st.expander(f"🏷️ Doações sem tipo definido ({len(df_qd_sem_tipo)})"):
+                        st.caption("Doações de 2026 sem tipo (Financeira, Mídia, etc.) — afetam as metas do Plano DI.")
+                        st.dataframe(
+                            df_qd_sem_tipo, hide_index=True, use_container_width=True,
+                            column_config={
+                                "Valor": st.column_config.NumberColumn("Valor (R$)", format="%.2f")
+                            }
+                        )
+
 
 elif menu == "PLANO DI 2026":
     page_header("Plano de Ação DI 2026", "Metas × Realizado por fonte de captação — monitoramento financeiro.")
