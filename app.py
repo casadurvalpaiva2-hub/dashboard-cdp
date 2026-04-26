@@ -280,17 +280,94 @@ CSS_GLOBAL = """
     --ds-gap-lg: 20px;
 }
 
-/* Tema escuro — respeita a preferência do Streamlit/sistema */
-@media (prefers-color-scheme: dark) {
-    :root {
-        --ds-bg-surface:   rgba(255, 255, 255, 0.04);
-        --ds-bg-elevated:  rgba(255, 255, 255, 0.07);
-        --ds-border:       rgba(255, 255, 255, 0.12);
-        --ds-border-soft:  rgba(255, 255, 255, 0.06);
-        --ds-text-muted:   rgba(255, 255, 255, 0.70);
-        --ds-text-subtle:  rgba(255, 255, 255, 0.45);
-    }
+/* Tema escuro — forçado para manter identidade com a tela de login */
+:root {
+    --ds-bg-surface:   rgba(255, 255, 255, 0.04);
+    --ds-bg-elevated:  rgba(255, 255, 255, 0.07);
+    --ds-border:       rgba(255, 255, 255, 0.10);
+    --ds-border-soft:  rgba(255, 255, 255, 0.05);
+    --ds-text-muted:   rgba(255, 255, 255, 0.65);
+    --ds-text-subtle:  rgba(255, 255, 255, 0.40);
 }
+
+/* ============================================================
+   IDENTIDADE VISUAL — fundo escuro CDP (espelha o login)
+   ============================================================ */
+
+/* Fundo principal — gradiente escuro idêntico ao login */
+[data-testid="stAppViewContainer"] {
+    background: linear-gradient(135deg, #0f0f0f 0%, #1a0a0a 50%, #0f0f0f 100%) !important;
+    background-attachment: fixed !important;
+}
+
+/* Header transparente */
+[data-testid="stHeader"] {
+    background: transparent !important;
+    border-bottom: 1px solid rgba(255,255,255,0.05) !important;
+}
+
+/* Sidebar — superfície escura com borda sutil */
+[data-testid="stSidebar"] {
+    background: rgba(10, 5, 5, 0.85) !important;
+    border-right: 1px solid rgba(255,255,255,0.06) !important;
+    backdrop-filter: blur(12px);
+}
+[data-testid="stSidebar"] > div:first-child {
+    background: transparent !important;
+}
+
+/* Linha vermelha no topo da sidebar */
+[data-testid="stSidebar"]::before {
+    content: "";
+    display: block;
+    height: 3px;
+    background: linear-gradient(90deg, #E31D24, transparent);
+    position: absolute;
+    top: 0; left: 0; right: 0;
+}
+
+/* Área de conteúdo principal */
+[data-testid="stMain"] {
+    background: transparent !important;
+}
+
+/* Toolbar e decorações do Streamlit */
+[data-testid="stToolbar"],
+[data-testid="stDecoration"] {
+    display: none !important;
+}
+
+/* Dataframes e tabelas — fundo escuro consistente */
+[data-testid="stDataFrame"] > div,
+.stDataFrame {
+    background: rgba(255,255,255,0.03) !important;
+    border-radius: 8px !important;
+    border: 1px solid rgba(255,255,255,0.06) !important;
+}
+
+/* Expanders — visual coeso */
+[data-testid="stExpander"] {
+    background: rgba(255,255,255,0.03) !important;
+    border: 1px solid rgba(255,255,255,0.07) !important;
+    border-radius: 8px !important;
+}
+
+/* Inputs e selects dentro do app */
+[data-testid="stTextInput"] input,
+[data-testid="stSelectbox"] select,
+div[data-baseweb="select"] {
+    background: rgba(255,255,255,0.05) !important;
+    border-color: rgba(255,255,255,0.10) !important;
+}
+
+/* Scrollbar discreta */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+    background: rgba(227,29,36,0.3);
+    border-radius: 2px;
+}
+::-webkit-scrollbar-thumb:hover { background: rgba(227,29,36,0.6); }
 
 /* ============================================================
    SIDEBAR — botão MENU (mantém identidade CDP vermelho)
