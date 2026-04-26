@@ -933,7 +933,7 @@ if "open_form" not in st.session_state:
 if "_qa_nonce" not in st.session_state:
     st.session_state._qa_nonce = 0
 
-_opcoes_menu = ["Painel Geral", "Plano DI 2026", "Parcerias", "Contatos", "Eventos", "Ações", "Entrada de Recursos", "Relacionamento", "IA Estratégica"]
+_opcoes_menu = ["Painel Geral", "Plano DI 2026", "Parcerias", "Contatos", "Eventos", "Ações", "Entrada de Recursos", "Relacionamento"]
 
 def _trigger_quick_add(tipo: str):
     """Navega para a página certa e sinaliza abertura de formulário."""
@@ -963,7 +963,7 @@ with st.sidebar:
     unsafe_allow_html=True)
 
     _opcoes_nav = ["Painel Geral", "Plano DI 2026", "Parcerias", "Contatos",
-                   "Eventos", "Ações", "Entrada de Recursos", "Relacionamento", "IA Estratégica"]
+                   "Eventos", "Ações", "Entrada de Recursos", "Relacionamento"]
     _nav_items = [(p, p) for p in _opcoes_nav]
 
     _nav_idx = _opcoes_nav.index(st.session_state.current_page) \
@@ -3994,187 +3994,6 @@ elif menu == "Relacionamento":
                     )
                 except Exception as e:
                     st.warning(f"PDF não gerado: {e}")
-
-
-elif menu == "IA Estratégica":
-    import requests as _requests
-
-    page_header("IA Estratégica", "Converse com Claude usando os dados reais da CDP.")
-
-    # ── API Key ───────────────────────────────────────────────────────────────
-    if "ia_api_key" not in st.session_state:
-        st.session_state.ia_api_key = ""
-
-    if not st.session_state.ia_api_key:
-        with st.container():
-            st.markdown("#### 🔑 Configure sua API Key da Anthropic para começar")
-            c1, c2 = st.columns([4, 1])
-            _k = c1.text_input("API Key:", type="password", placeholder="sk-ant-...", label_visibility="collapsed", key="ia_key_inline")
-            if c2.button("Salvar", key="ia_save_inline", use_container_width=True):
-                st.session_state.ia_api_key = _k.strip()
-                st.rerun()
-        st.stop()
-
-    _api_key = st.session_state.ia_api_key
-
-    # Botão discreto para trocar chave
-    if st.button("🔑 Trocar API Key", key="ia_trocar"):
-        st.session_state.ia_api_key = ""
-        st.rerun()
-
-    # ── Helper HTTP ───────────────────────────────────────────────────────────
-    def _claude(system_prompt, messages, model="claude-haiku-4-5-20251001", max_tokens=1500):
-        resp = _requests.post(
-            "https://api.anthropic.com/v1/messages",
-            headers={
-                "x-api-key": _api_key,
-                "anthropic-version": "2023-06-01",
-                "content-type": "application/json",
-            },
-            json={"model": model, "max_tokens": max_tokens, "system": system_prompt, "messages": messages},
-            timeout=60,
-        )
-        if resp.status_code != 200:
-            raise RuntimeError(f"API erro {resp.status_code}: {resp.text[:400]}")
-        return resp.json()["content"][0]["text"]
-
-    # ── Contexto do banco ─────────────────────────────────────────────────────
-    @st.cache_data(ttl=300, show_spinner=False)
-    def _build_context():
-        linhas = [
-            "# CONTEXTO OPERACIONAL — CASA DURVAL PAIVA",
-            f"Data atual: {datetime.now().strftime('%d/%m/%Y')}",
-            "Organização: Casa Durval Paiva (ONG de saúde infantil, Natal-RN)",
-            "Setor: Gerência de Desenvolvimento Institucional (DI)\n",
-        ]
-        try:
-            df_p = run_query("SELECT status, COUNT(*) as n FROM Parceiro GROUP BY status")
-            linhas.append("## PARCEIROS")
-            for _, r in df_p.iterrows():
-                linhas.append(f"- {r['status']}: {int(r['n'])}")
-        except Exception:
-            pass
-        try:
-            df_plan = run_query("SELECT nome_fonte, meta_2026, captado_2026 FROM View_Progresso_PlanoAnual")
-            total_meta = df_plan['meta_2026'].sum()
-            total_real = df_plan['captado_2026'].sum()
-            pct = (total_real / total_meta * 100) if total_meta > 0 else 0
-            linhas.append(f"\n## PLANO DI 2026")
-            linhas.append(f"- Meta total: R$ {total_meta:,.2f} | Captado: R$ {total_real:,.2f} ({pct:.1f}%)")
-            for _, r in df_plan.iterrows():
-                pf = (r['captado_2026'] / r['meta_2026'] * 100) if r['meta_2026'] > 0 else 0
-                linhas.append(f"  - {r['nome_fonte']}: R$ {r['captado_2026']:,.2f} / R$ {r['meta_2026']:,.2f} ({pf:.0f}%)")
-        except Exception:
-            pass
-        try:
-            df_crit = run_query(
-                "SELECT nome_instituicao, (CURRENT_DATE - MAX(r.data_interacao)::date) AS dias "
-                "FROM Parceiro p LEFT JOIN Registro_Relacionamento r ON p.id_parceiro=r.id_parceiro "
-                "WHERE p.status='Ativo' GROUP BY p.nome_instituicao "
-                "HAVING (CURRENT_DATE - MAX(r.data_interacao)::date) > 60 OR MAX(r.data_interacao) IS NULL "
-                "ORDER BY dias DESC NULLS FIRST LIMIT 10"
-            )
-            if not df_crit.empty:
-                linhas.append(f"\n## PARCEIROS ATIVOS SEM CONTATO RECENTE")
-                for _, r in df_crit.iterrows():
-                    dias = int(r['dias']) if r['dias'] is not None else 999
-                    linhas.append(f"- {r['nome_instituicao']}: {dias} dias sem contato")
-        except Exception:
-            pass
-        try:
-            df_cap = run_query(
-                "SELECT mes_referencia, SUM(valor_realizado) as total "
-                "FROM Registro_Captacao_DI GROUP BY mes_referencia ORDER BY mes_referencia DESC LIMIT 6"
-            )
-            if not df_cap.empty:
-                linhas.append(f"\n## CAPTAÇÃO RECENTE")
-                for _, r in df_cap.iterrows():
-                    linhas.append(f"- {r['mes_referencia']}: R$ {float(r['total']):,.2f}")
-        except Exception:
-            pass
-        return "\n".join(linhas)
-
-    _SYSTEM = (
-        "Você é um assistente estratégico especializado em gestão de organizações do terceiro setor, "
-        "com foco em desenvolvimento institucional e captação de recursos.\n\n"
-        "Você tem acesso aos dados operacionais reais da Casa Durval Paiva (abaixo). "
-        "Use esses dados para respostas concretas e baseadas em números reais.\n"
-        "- Seja direto, estratégico e prático\n"
-        "- Cite parceiros, valores e prazos quando sugerir ações\n"
-        "- Responda sempre em português brasileiro\n"
-        "- Para relatórios formais use linguagem institucional\n\n"
-        "{ctx}"
-    )
-
-    # ── Atalhos de relatório ──────────────────────────────────────────────────
-    section("Gerar relatório automaticamente")
-    _atalhos = {
-        "📊 Captação vs Meta":    "Gere um relatório formal de captação de recursos para a diretoria. Inclua situação atual vs meta 2026, destaques, pontos de atenção e recomendações. Tom institucional.",
-        "🤝 Status de Parcerias": "Gere um relatório sobre o status do relacionamento com parceiros. Inclua panorama geral, parceiros críticos, ações recomendadas. Tom estratégico.",
-        "⚠️ Análise de Riscos":   "Analise os riscos do Plano DI 2026. Identifique fontes abaixo da meta e proponha plano de contingência com ações concretas.",
-        "🎯 Pitch para Financiadores": "Redija uma narrativa de impacto institucional para apresentar a potenciais financiadores. Tom inspirador e persuasivo.",
-    }
-    cols_at = st.columns(4)
-    for i, (label, prompt_rel) in enumerate(_atalhos.items()):
-        if cols_at[i].button(label, key=f"at_{i}", use_container_width=True):
-            if "ia_messages" not in st.session_state:
-                st.session_state.ia_messages = []
-            st.session_state.ia_messages.append({"role": "user", "content": prompt_rel})
-            st.rerun()
-
-    st.divider()
-
-    # ── Chat ──────────────────────────────────────────────────────────────────
-    if "ia_messages" not in st.session_state:
-        st.session_state.ia_messages = []
-
-    # Sugestões iniciais
-    if not st.session_state.ia_messages:
-        st.markdown("**Perguntas para começar:**")
-        sugestoes = [
-            "Qual é a situação atual da captação em relação às metas de 2026?",
-            "Quais parceiros ativos estão em risco de abandono e o que fazer?",
-            "Como devemos priorizar os esforços de captação no próximo mês?",
-            "Redija um e-mail de reativação para um parceiro inativo há 6 meses.",
-        ]
-        cs = st.columns(2)
-        for i, s in enumerate(sugestoes):
-            if cs[i % 2].button(s, key=f"sug_{i}", use_container_width=True):
-                st.session_state.ia_messages.append({"role": "user", "content": s})
-                st.rerun()
-        st.markdown("")
-
-    # Histórico
-    for msg in st.session_state.ia_messages:
-        with st.chat_message(msg["role"], avatar="🤝" if msg["role"] == "user" else "🤖"):
-            st.markdown(msg["content"])
-
-    # Input
-    if prompt := st.chat_input("Pergunte sobre a CDP, metas, parceiros, estratégia..."):
-        st.session_state.ia_messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user", avatar="🤝"):
-            st.markdown(prompt)
-        with st.chat_message("assistant", avatar="🤖"):
-            with st.spinner("Analisando..."):
-                try:
-                    _ctx  = _build_context()
-                    _sys  = _SYSTEM.format(ctx=_ctx)
-                    _model = "claude-sonnet-4-6" if len(st.session_state.ia_messages) == 1 and any(k in prompt.lower() for k in ["relatório","relatorio","gere","redija","analise"]) else "claude-haiku-4-5-20251001"
-                    _resp = _claude(_sys, [{"role": m["role"], "content": m["content"]} for m in st.session_state.ia_messages], model=_model)
-                    st.markdown(_resp)
-                    st.session_state.ia_messages.append({"role": "assistant", "content": _resp})
-                    # Botão de download se for relatório longo
-                    if len(_resp) > 800:
-                        st.download_button("Baixar (.txt)", data=_resp,
-                            file_name=f"relatorio_{datetime.now().strftime('%Y%m%d_%H%M')}.txt",
-                            mime="text/plain", key=f"dl_{len(st.session_state.ia_messages)}")
-                except Exception as e:
-                    st.error(f"Erro: {e}")
-
-    if st.session_state.ia_messages:
-        if st.button("🗑 Limpar conversa", key="ia_clear"):
-            st.session_state.ia_messages = []
-            st.rerun()
 
 
 
