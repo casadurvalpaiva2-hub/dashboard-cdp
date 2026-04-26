@@ -3999,31 +3999,30 @@ elif menu == "Relacionamento":
 elif menu == "IA Estratégica":
     import requests as _requests
 
-    page_header("IA Estratégica", "Chat com Claude usando os dados reais da CDP como contexto.")
+    page_header("IA Estratégica", "Converse com Claude usando os dados reais da CDP.")
 
-    # ── Configuração da API Key ───────────────────────────────────────────────
+    # ── API Key ───────────────────────────────────────────────────────────────
     if "ia_api_key" not in st.session_state:
         st.session_state.ia_api_key = ""
 
-    with st.expander("🔑 Configurar API Key (Anthropic)", expanded=not bool(st.session_state.ia_api_key)):
-        _key_input = st.text_input(
-            "Cole sua API Key da Anthropic:",
-            type="password",
-            value=st.session_state.ia_api_key,
-            placeholder="sk-ant-...",
-            key="ia_key_field",
-        )
-        if st.button("Salvar chave", key="ia_save_key"):
-            st.session_state.ia_api_key = _key_input.strip()
-            st.success("Chave salva para esta sessão.")
-            st.rerun()
-
-    _api_key = st.session_state.ia_api_key
-    if not _api_key:
-        st.info("Configure sua API Key da Anthropic acima para ativar a IA.", icon="🔑")
+    if not st.session_state.ia_api_key:
+        with st.container():
+            st.markdown("#### 🔑 Configure sua API Key da Anthropic para começar")
+            c1, c2 = st.columns([4, 1])
+            _k = c1.text_input("API Key:", type="password", placeholder="sk-ant-...", label_visibility="collapsed", key="ia_key_inline")
+            if c2.button("Salvar", key="ia_save_inline", use_container_width=True):
+                st.session_state.ia_api_key = _k.strip()
+                st.rerun()
         st.stop()
 
-    # ── Helper: chamar Claude via HTTP ────────────────────────────────────────
+    _api_key = st.session_state.ia_api_key
+
+    # Botão discreto para trocar chave
+    if st.button("🔑 Trocar API Key", key="ia_trocar"):
+        st.session_state.ia_api_key = ""
+        st.rerun()
+
+    # ── Helper HTTP ───────────────────────────────────────────────────────────
     def _claude(system_prompt, messages, model="claude-haiku-4-5-20251001", max_tokens=1500):
         resp = _requests.post(
             "https://api.anthropic.com/v1/messages",
@@ -4032,26 +4031,22 @@ elif menu == "IA Estratégica":
                 "anthropic-version": "2023-06-01",
                 "content-type": "application/json",
             },
-            json={
-                "model": model,
-                "max_tokens": max_tokens,
-                "system": system_prompt,
-                "messages": messages,
-            },
+            json={"model": model, "max_tokens": max_tokens, "system": system_prompt, "messages": messages},
             timeout=60,
         )
         if resp.status_code != 200:
-            raise RuntimeError(f"API erro {resp.status_code}: {resp.text[:300]}")
+            raise RuntimeError(f"API erro {resp.status_code}: {resp.text[:400]}")
         return resp.json()["content"][0]["text"]
 
-    # ── Builder de contexto com dados reais ──────────────────────────────────
+    # ── Contexto do banco ─────────────────────────────────────────────────────
     @st.cache_data(ttl=300, show_spinner=False)
     def _build_context():
-        linhas = ["# CONTEXTO OPERACIONAL — CASA DURVAL PAIVA"]
-        linhas.append(f"Data atual: {datetime.now().strftime('%d/%m/%Y')}")
-        linhas.append("Organização: Casa Durval Paiva (ONG de saúde infantil, Natal-RN)")
-        linhas.append("Setor: Gerência de Desenvolvimento Institucional (DI)\n")
-
+        linhas = [
+            "# CONTEXTO OPERACIONAL — CASA DURVAL PAIVA",
+            f"Data atual: {datetime.now().strftime('%d/%m/%Y')}",
+            "Organização: Casa Durval Paiva (ONG de saúde infantil, Natal-RN)",
+            "Setor: Gerência de Desenvolvimento Institucional (DI)\n",
+        ]
         try:
             df_p = run_query("SELECT status, COUNT(*) as n FROM Parceiro GROUP BY status")
             linhas.append("## PARCEIROS")
@@ -4059,20 +4054,18 @@ elif menu == "IA Estratégica":
                 linhas.append(f"- {r['status']}: {int(r['n'])}")
         except Exception:
             pass
-
         try:
-            df_plan = run_query("SELECT nome_fonte, meta_2026, COALESCE(realizado,0) as realizado FROM View_Progresso_PlanoAnual")
+            df_plan = run_query("SELECT nome_fonte, meta_2026, captado_2026 FROM View_Progresso_PlanoAnual")
             total_meta = df_plan['meta_2026'].sum()
-            total_real = df_plan['realizado'].sum()
+            total_real = df_plan['captado_2026'].sum()
             pct = (total_real / total_meta * 100) if total_meta > 0 else 0
             linhas.append(f"\n## PLANO DI 2026")
-            linhas.append(f"- Meta total: R$ {total_meta:,.2f} | Realizado: R$ {total_real:,.2f} ({pct:.1f}%)")
+            linhas.append(f"- Meta total: R$ {total_meta:,.2f} | Captado: R$ {total_real:,.2f} ({pct:.1f}%)")
             for _, r in df_plan.iterrows():
-                pct_f = (r['realizado'] / r['meta_2026'] * 100) if r['meta_2026'] > 0 else 0
-                linhas.append(f"  - {r['nome_fonte']}: R$ {r['realizado']:,.2f} / R$ {r['meta_2026']:,.2f} ({pct_f:.0f}%)")
+                pf = (r['captado_2026'] / r['meta_2026'] * 100) if r['meta_2026'] > 0 else 0
+                linhas.append(f"  - {r['nome_fonte']}: R$ {r['captado_2026']:,.2f} / R$ {r['meta_2026']:,.2f} ({pf:.0f}%)")
         except Exception:
             pass
-
         try:
             df_crit = run_query(
                 "SELECT nome_instituicao, (CURRENT_DATE - MAX(r.data_interacao)::date) AS dias "
@@ -4088,156 +4081,100 @@ elif menu == "IA Estratégica":
                     linhas.append(f"- {r['nome_instituicao']}: {dias} dias sem contato")
         except Exception:
             pass
-
         try:
             df_cap = run_query(
                 "SELECT mes_referencia, SUM(valor_realizado) as total "
                 "FROM Registro_Captacao_DI GROUP BY mes_referencia ORDER BY mes_referencia DESC LIMIT 6"
             )
             if not df_cap.empty:
-                linhas.append(f"\n## CAPTAÇÃO RECENTE (últimos meses)")
+                linhas.append(f"\n## CAPTAÇÃO RECENTE")
                 for _, r in df_cap.iterrows():
                     linhas.append(f"- {r['mes_referencia']}: R$ {float(r['total']):,.2f}")
         except Exception:
             pass
-
         return "\n".join(linhas)
 
-    _SYSTEM_PROMPT = """Você é um assistente estratégico especializado em gestão de organizações do terceiro setor, com foco em desenvolvimento institucional e captação de recursos.
+    _SYSTEM = (
+        "Você é um assistente estratégico especializado em gestão de organizações do terceiro setor, "
+        "com foco em desenvolvimento institucional e captação de recursos.\n\n"
+        "Você tem acesso aos dados operacionais reais da Casa Durval Paiva (abaixo). "
+        "Use esses dados para respostas concretas e baseadas em números reais.\n"
+        "- Seja direto, estratégico e prático\n"
+        "- Cite parceiros, valores e prazos quando sugerir ações\n"
+        "- Responda sempre em português brasileiro\n"
+        "- Para relatórios formais use linguagem institucional\n\n"
+        "{ctx}"
+    )
 
-Você tem acesso aos dados operacionais reais da Casa Durval Paiva (fornecidos abaixo). Use esses dados para dar respostas concretas, baseadas em números reais.
-
-Regras:
-- Seja direto, estratégico e prático
-- Use os dados reais fornecidos sempre que relevante
-- Quando sugerir ações, seja específico (cite parceiros, valores, prazos)
-- Responda em português brasileiro
-- Para relatórios formais, use linguagem institucional e estruturada
-
-{contexto}"""
-
-    # ── Abas ─────────────────────────────────────────────────────────────────
-    tab_chat, tab_relatorio = st.tabs(["💬 Chat estratégico", "📄 Redator de relatórios"])
-
-    # ══════════════════════════════════════════════════════════════════════════
-    # ABA 1 — CHAT
-    # ══════════════════════════════════════════════════════════════════════════
-    with tab_chat:
-        if "ia_messages" not in st.session_state:
-            st.session_state.ia_messages = []
-
-        if not st.session_state.ia_messages:
-            section("Perguntas sugeridas")
-            sugestoes = [
-                "Qual é a situação atual da captação em relação às metas de 2026?",
-                "Quais parceiros ativos estão em risco de abandono e o que fazer?",
-                "Como devemos priorizar os esforços de captação no próximo mês?",
-                "Redija um e-mail de reativação para um parceiro inativo há 6 meses.",
-                "Analise os pontos críticos do nosso plano de desenvolvimento institucional.",
-            ]
-            cols = st.columns(2)
-            for i, sug in enumerate(sugestoes):
-                if cols[i % 2].button(sug, key=f"sug_{i}", use_container_width=True):
-                    st.session_state.ia_messages.append({"role": "user", "content": sug})
-                    st.rerun()
-
-        for msg in st.session_state.ia_messages:
-            with st.chat_message(msg["role"], avatar="🤝" if msg["role"] == "user" else "🤖"):
-                st.markdown(msg["content"])
-
-        if prompt := st.chat_input("Pergunte algo sobre a CDP, metas, parceiros..."):
-            st.session_state.ia_messages.append({"role": "user", "content": prompt})
-            with st.chat_message("user", avatar="🤝"):
-                st.markdown(prompt)
-
-            with st.chat_message("assistant", avatar="🤖"):
-                with st.spinner("Analisando dados e gerando resposta..."):
-                    try:
-                        _ctx = _build_context()
-                        _sys = _SYSTEM_PROMPT.format(contexto=_ctx)
-                        _resp = _claude(
-                            system_prompt=_sys,
-                            messages=[{"role": m["role"], "content": m["content"]}
-                                      for m in st.session_state.ia_messages],
-                            model="claude-haiku-4-5-20251001",
-                            max_tokens=1500,
-                        )
-                        st.markdown(_resp)
-                        st.session_state.ia_messages.append({"role": "assistant", "content": _resp})
-                    except Exception as e:
-                        st.error(f"Erro na API: {e}")
-
-        if st.session_state.ia_messages:
-            if st.button("🗑 Limpar conversa", key="ia_clear"):
+    # ── Atalhos de relatório ──────────────────────────────────────────────────
+    section("Gerar relatório automaticamente")
+    _atalhos = {
+        "📊 Captação vs Meta":    "Gere um relatório formal de captação de recursos para a diretoria. Inclua situação atual vs meta 2026, destaques, pontos de atenção e recomendações. Tom institucional.",
+        "🤝 Status de Parcerias": "Gere um relatório sobre o status do relacionamento com parceiros. Inclua panorama geral, parceiros críticos, ações recomendadas. Tom estratégico.",
+        "⚠️ Análise de Riscos":   "Analise os riscos do Plano DI 2026. Identifique fontes abaixo da meta e proponha plano de contingência com ações concretas.",
+        "🎯 Pitch para Financiadores": "Redija uma narrativa de impacto institucional para apresentar a potenciais financiadores. Tom inspirador e persuasivo.",
+    }
+    cols_at = st.columns(4)
+    for i, (label, prompt_rel) in enumerate(_atalhos.items()):
+        if cols_at[i].button(label, key=f"at_{i}", use_container_width=True):
+            if "ia_messages" not in st.session_state:
                 st.session_state.ia_messages = []
+            st.session_state.ia_messages.append({"role": "user", "content": prompt_rel})
+            st.rerun()
+
+    st.divider()
+
+    # ── Chat ──────────────────────────────────────────────────────────────────
+    if "ia_messages" not in st.session_state:
+        st.session_state.ia_messages = []
+
+    # Sugestões iniciais
+    if not st.session_state.ia_messages:
+        st.markdown("**Perguntas para começar:**")
+        sugestoes = [
+            "Qual é a situação atual da captação em relação às metas de 2026?",
+            "Quais parceiros ativos estão em risco de abandono e o que fazer?",
+            "Como devemos priorizar os esforços de captação no próximo mês?",
+            "Redija um e-mail de reativação para um parceiro inativo há 6 meses.",
+        ]
+        cs = st.columns(2)
+        for i, s in enumerate(sugestoes):
+            if cs[i % 2].button(s, key=f"sug_{i}", use_container_width=True):
+                st.session_state.ia_messages.append({"role": "user", "content": s})
                 st.rerun()
+        st.markdown("")
 
-    # ══════════════════════════════════════════════════════════════════════════
-    # ABA 2 — REDATOR DE RELATÓRIOS
-    # ══════════════════════════════════════════════════════════════════════════
-    with tab_relatorio:
-        section("Gerar relatório com IA")
+    # Histórico
+    for msg in st.session_state.ia_messages:
+        with st.chat_message(msg["role"], avatar="🤝" if msg["role"] == "user" else "🤖"):
+            st.markdown(msg["content"])
 
-        _tipos_rel = {
-            "Relatório de captação mensal (diretoria)": (
-                "Gere um relatório formal de captação de recursos para a diretoria da Casa Durval Paiva. "
-                "Use os dados do Plano DI 2026 e das captações recentes. Inclua: situação atual vs meta, "
-                "destaques positivos, pontos de atenção e recomendações. Tom: institucional e objetivo."
-            ),
-            "Relatório de relacionamento com parceiros": (
-                "Gere um relatório sobre o status do relacionamento com parceiros institucionais. "
-                "Use os dados de parceiros ativos, inativos e em prospecção, e os alertas de contato. "
-                "Inclua: panorama geral, parceiros críticos, ações recomendadas e próximos passos."
-            ),
-            "Análise de riscos do Plano DI 2026": (
-                "Analise os riscos do Plano de Desenvolvimento Institucional 2026 com base nos dados de progresso. "
-                "Identifique fontes abaixo da meta, parceiros críticos e ameaças à execução. "
-                "Proponha plano de contingência com ações concretas."
-            ),
-            "Narrativa de impacto para financiadores": (
-                "Redija uma narrativa de impacto institucional para apresentar a potenciais financiadores. "
-                "Destaque a missão da Casa Durval Paiva, os resultados de captação, "
-                "a rede de parceiros e o potencial de crescimento. Tom: inspirador e persuasivo."
-            ),
-        }
-
-        _tipo_sel = st.selectbox("Tipo de relatório:", list(_tipos_rel.keys()), key="rel_tipo")
-        _obs_extra = st.text_area(
-            "Instruções adicionais (opcional):",
-            placeholder="Ex: enfatize o Bazar CDP, inclua comparativo com 2025, escreva para o conselho fiscal...",
-            key="rel_obs", height=80,
-        )
-
-        if st.button("Gerar relatório com IA", type="primary", use_container_width=True, key="rel_gerar"):
-            with st.spinner("Redigindo relatório com claude-sonnet..."):
+    # Input
+    if prompt := st.chat_input("Pergunte sobre a CDP, metas, parceiros, estratégia..."):
+        st.session_state.ia_messages.append({"role": "user", "content": prompt})
+        with st.chat_message("user", avatar="🤝"):
+            st.markdown(prompt)
+        with st.chat_message("assistant", avatar="🤖"):
+            with st.spinner("Analisando..."):
                 try:
-                    _ctx = _build_context()
-                    _sys = _SYSTEM_PROMPT.format(contexto=_ctx)
-                    _prompt_rel = _tipos_rel[_tipo_sel]
-                    if _obs_extra.strip():
-                        _prompt_rel += f"\n\nInstruções adicionais: {_obs_extra.strip()}"
-                    _rel_texto = _claude(
-                        system_prompt=_sys,
-                        messages=[{"role": "user", "content": _prompt_rel}],
-                        model="claude-sonnet-4-6",
-                        max_tokens=2500,
-                    )
-                    st.session_state["ia_ultimo_relatorio"] = _rel_texto
+                    _ctx  = _build_context()
+                    _sys  = _SYSTEM.format(ctx=_ctx)
+                    _model = "claude-sonnet-4-6" if len(st.session_state.ia_messages) == 1 and any(k in prompt.lower() for k in ["relatório","relatorio","gere","redija","analise"]) else "claude-haiku-4-5-20251001"
+                    _resp = _claude(_sys, [{"role": m["role"], "content": m["content"]} for m in st.session_state.ia_messages], model=_model)
+                    st.markdown(_resp)
+                    st.session_state.ia_messages.append({"role": "assistant", "content": _resp})
+                    # Botão de download se for relatório longo
+                    if len(_resp) > 800:
+                        st.download_button("Baixar (.txt)", data=_resp,
+                            file_name=f"relatorio_{datetime.now().strftime('%Y%m%d_%H%M')}.txt",
+                            mime="text/plain", key=f"dl_{len(st.session_state.ia_messages)}")
                 except Exception as e:
-                    st.error(f"Erro na API: {e}")
+                    st.error(f"Erro: {e}")
 
-        if "ia_ultimo_relatorio" in st.session_state:
-            st.divider()
-            st.markdown(st.session_state["ia_ultimo_relatorio"])
-            st.divider()
-            st.download_button(
-                "Baixar relatório (.txt)",
-                data=st.session_state["ia_ultimo_relatorio"],
-                file_name=f"relatorio_ia_{datetime.now().strftime('%Y%m%d_%H%M')}.txt",
-                mime="text/plain",
-                use_container_width=True,
-                key="ia_rel_download",
-            )
+    if st.session_state.ia_messages:
+        if st.button("🗑 Limpar conversa", key="ia_clear"):
+            st.session_state.ia_messages = []
+            st.rerun()
 
 
 
