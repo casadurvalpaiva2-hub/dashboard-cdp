@@ -1,4 +1,4 @@
-# ===========================================================
+# ============================================================
 #  SISTEMA INTERNO DI CDP
 #  Versão refatorada — dívida técnica limpa
 #  (login unificado, CSS centralizado, imports consolidados)
@@ -1303,6 +1303,7 @@ def setup_schema():
                             WHEN 'Projetos'         THEN 'PROJETOS'
                             WHEN 'Bazar do Caquito' THEN 'BAZAR_CDP'
                             WHEN 'Campanha Troco'   THEN 'TROCO'
+                            WHEN 'Outros'           THEN 'OUTROS'
                             ELSE NULL
                         END
                     WHERE d.tipo_doacao IN ('Financeira', 'Projetos')
@@ -2939,6 +2940,7 @@ elif menu == "Entrada de Recursos":
                 "Parceria institucional (repasse de empresa)":            "parceria",
                 "Projeto / Emenda parlamentar":                           "projeto",
                 "Outros":                                                 "outros",
+                "Estimada / Midiatica (calhau, espaco de midia, materiais)": "estimada",
             }
 
             categoria = st.selectbox(
@@ -2986,6 +2988,45 @@ elif menu == "Entrada de Recursos":
                                  obs_ev.upper() if obs_ev else None, resp_ev),
                             )
                             st.success(f"✅ {fonte_ev} — {format_br(valor_ev)} registrado para {mes_lancto}.")
+                            st.rerun()
+
+            elif tipo_cat == "estimada":
+                # → Doacao com tipo nao-financeiro (nao conta nas metas do Plano DI)
+                st.info(
+                    "Valores declarados pelos parceiros — espaco de midia, materiais, alimentos etc. "
+                    "Sao registrados para controle de impacto e relacionamento, mas **nao entram no caixa** "
+                    "e **nao contam para as metas financeiras** do Plano DI.",
+                    icon="i",
+                )
+                _tipos_estimado = ["Midiatica", "Vestuario", "Alimentos", "Servicos", "Outros (estimado)"]
+                with st.form("form_entrada_estimada", clear_on_submit=True):
+                    opcoes_pe = ["Selecione o parceiro..."] + df_p["nome_instituicao"].tolist()
+                    se1, se2  = st.columns(2)
+                    nome_est  = se1.selectbox("Parceiro / Fonte *", opcoes_pe)
+                    tipo_est  = se2.selectbox("Tipo de doacao estimada", _tipos_estimado)
+                    valor_est = se1.number_input("Valor estimado declarado (R$) *",
+                                                 min_value=0.0, step=100.0, format="%.2f")
+                    data_est  = se2.date_input("Data", datetime.now())
+                    desc_est  = st.text_area("Descricao do que foi doado",
+                                             placeholder="ex: 4 inserções de 30s no Jornal do Meio-Dia, val. est. R$ 8.000")
+                    if st.form_submit_button("Registrar estimada", type="primary", use_container_width=True):
+                        if nome_est == "Selecione o parceiro...":
+                            st.warning("Selecione o parceiro.")
+                        elif valor_est <= 0:
+                            st.warning("Informe o valor estimado declarado pelo parceiro.")
+                        else:
+                            id_pe = int(df_p[df_p["nome_instituicao"] == nome_est]["id_parceiro"].values[0])
+                            run_insert(
+                                """INSERT INTO Doacao (
+                                    id_parceiro, valor_estimado, tipo_doacao,
+                                    data_doacao, descricao, nome_projeto, origem_captacao
+                                ) VALUES (?,?,?,?,?,?,?)""",
+                                (id_pe, valor_est, tipo_est,
+                                 data_est.strftime("%Y-%m-%d"),
+                                 desc_est.upper() if desc_est else "",
+                                 "GERAL", "Estimada"),
+                            )
+                            st.success(f"Registrado: {nome_est} — {format_br(valor_est)} ({tipo_est}). Nao conta para metas financeiras.")
                             st.rerun()
 
             else:
