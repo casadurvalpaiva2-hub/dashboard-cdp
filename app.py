@@ -3592,7 +3592,7 @@ elif menu == "Relacionamento":
 
             # Merge com saúde
             if not df_rel.empty:
-                saude_map = df_rel.set_index('Empresa')[['Status_Relacionamento', 'Dias_Sem_Contato', 'Proxima_Acao_Planejada']].to_dict('index')
+                saude_map = df_rel.drop_duplicates(subset='Empresa', keep='first').set_index('Empresa')[['Status_Relacionamento', 'Dias_Sem_Contato', 'Proxima_Acao_Planejada']].to_dict('index')
             else:
                 saude_map = {}
 
