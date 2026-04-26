@@ -709,7 +709,6 @@ with st.sidebar:
     if _opcoes_add[_escolha] is not None:
         _trigger_quick_add(_opcoes_add[_escolha])
         st.session_state._qa_nonce += 1
-        st.rerun()
 
     st.markdown("---")
 
@@ -720,7 +719,7 @@ with st.sidebar:
         icons=["bar-chart-fill", "building", "person-lines-fill", "calendar-event", "check2-square", "cash-coin", "heart-fill"],
         menu_icon="cast",
         default_index=_idx_atual,
-        key=f"menu_nav_{_idx_atual}",
+        key="menu_nav_principal",
         styles={
             "container":         {"padding": "5!important", "background-color": "transparent"},
             "icon":              {"color": "#E31D24", "font-size": "18px"},
@@ -728,9 +727,8 @@ with st.sidebar:
             "nav-link-selected": {"background-color": "#E31D24", "color": "white"},
         }
     )
-    if _menu_resultado != st.session_state.current_page:
+    if _menu_resultado and _menu_resultado != st.session_state.current_page:
         st.session_state.current_page = _menu_resultado
-        st.rerun()
 
 menu = st.session_state.current_page
 
