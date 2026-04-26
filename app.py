@@ -17,9 +17,9 @@ from psycopg2 import pool as pg_pool
 import streamlit as st
 
 
-# -----------------------------------------------------------
+# ------------------------------------------------------------
 #  HELPERS GLOBAIS
-# -----------------------------------------------------------
+# ------------------------------------------------------------
 def _chart_layout(height=240, margin=None):
     """Layout padrão para gráficos Plotly — tema escuro integrado ao app."""
     return dict(
@@ -2962,6 +2962,12 @@ elif menu == "Registrar Doação":
         # ABA 1 — REGISTRAR NOVA DOAÇÃO
         # ════════════════════════════════════════════════════════
         with tab_novo:
+            st.info(
+                "**Use este formulário para repasses de parceiros identificados** — "
+                "transferências de empresas, projetos, emendas parlamentares e doações online de pessoas físicas.  \n"
+                "Para eventos e campanhas (Bazar, Troco, Nota Potiguar), registre em **Plano DI 2026 → Lançar Realizado Mensal**.",
+                icon="ℹ️",
+            )
             section("Nova entrada de recurso")
             with st.form("nova_doacao", clear_on_submit=True):
                 col_a, col_b = st.columns(2)
@@ -2978,10 +2984,17 @@ elif menu == "Registrar Doação":
                         "Financeira", "Projetos", "Vestuário", "Alimentos", "Serviços", "Midiática",
                     ])
                     origens_plano = [
-                        "Selecione...", "Bazar do Caquito", "Campanha Troco", "Parcerias",
-                        "Nota Potiguar", "Doações Online", "Projetos", "Troco",
+                        "Selecione...",
+                        "Parcerias",        # repasse de parceiro PJ identificado
+                        "Projetos",         # emenda parlamentar, projeto aprovado
+                        "Doações Online",   # doação PF via plataforma digital
+                        "Outros",
                     ]
-                    origem_sel = st.selectbox("Origem da captação (estratégia)", origens_plano)
+                    origem_sel = st.selectbox(
+                        "Origem da captação (estratégia)",
+                        origens_plano,
+                        help="Bazar, Troco e Nota Potiguar são registrados no Plano DI 2026 → Lançar Realizado Mensal.",
+                    )
 
                 desc = st.text_area("Observações", placeholder="Contexto, forma de pagamento, referências…")
 
