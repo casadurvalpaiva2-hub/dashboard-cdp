@@ -286,6 +286,13 @@ COLOR_NEUTRAL  = "#888780"       # estimado / neutro
 CSS_GLOBAL = """
 <style>
 /* ============================================================
+   TIPOGRAFIA — Helvetica Neue como fonte principal
+   ============================================================ */
+html, body, [class*="css"], * {
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif !important;
+}
+
+/* ============================================================
    TOKENS — variáveis adaptativas ao tema (claro/escuro)
    ============================================================ */
 :root {
