@@ -37,8 +37,8 @@ def _chart_layout(height=240, margin=None):
             zeroline=False, tickfont=dict(size=10),
         ),
         hoverlabel=dict(
-            bgcolor="rgba(20,5,5,0.95)",
-            bordercolor="rgba(227,29,36,0.4)",
+            bgcolor="rgba(15,17,22,0.97)",
+            bordercolor="rgba(255,255,255,0.15)",
             font=dict(color="white", size=12),
         ),
         showlegend=False,
@@ -334,10 +334,9 @@ CSS_GLOBAL = """
    IDENTIDADE VISUAL — fundo escuro CDP (espelha o login)
    ============================================================ */
 
-/* Fundo principal — gradiente escuro idêntico ao login */
+/* Fundo principal — cinza carvão neutro, sem tint vermelho */
 [data-testid="stAppViewContainer"] {
-    background: linear-gradient(135deg, #0f0f0f 0%, #1a0a0a 50%, #0f0f0f 100%) !important;
-    background-attachment: fixed !important;
+    background: #111318 !important;
 }
 
 /* Header transparente */
@@ -348,7 +347,7 @@ CSS_GLOBAL = """
 
 /* Sidebar — superfície escura com borda sutil */
 [data-testid="stSidebar"] {
-    background: rgba(10, 5, 5, 0.85) !important;
+    background: rgba(15, 17, 22, 0.92) !important;
     border-right: 1px solid rgba(255,255,255,0.06) !important;
     backdrop-filter: blur(12px);
 }
@@ -356,12 +355,12 @@ CSS_GLOBAL = """
     background: transparent !important;
 }
 
-/* Linha vermelha no topo da sidebar */
+/* Linha sutil no topo da sidebar */
 [data-testid="stSidebar"]::before {
     content: "";
     display: block;
-    height: 3px;
-    background: linear-gradient(90deg, #E31D24, transparent);
+    height: 2px;
+    background: linear-gradient(90deg, rgba(55,138,221,0.6), transparent);
     position: absolute;
     top: 0; left: 0; right: 0;
 }
@@ -425,9 +424,9 @@ section[data-testid="stSidebar"] [data-testid^="stBaseButton"] {
     transition: all 0.15s !important;
 }
 section[data-testid="stSidebar"] [data-testid^="stBaseButton"]:hover {
-    background: rgba(227,29,36,0.07) !important;
-    color: rgba(255,255,255,0.90) !important;
-    border-left-color: rgba(227,29,36,0.3) !important;
+    background: rgba(255,255,255,0.06) !important;
+    color: rgba(255,255,255,0.95) !important;
+    border-left-color: rgba(255,255,255,0.20) !important;
 }
 /* Remove gap entre itens de nav */
 section[data-testid="stSidebar"] [data-testid="stButton"] {
@@ -439,10 +438,10 @@ section[data-testid="stSidebar"] [data-testid="stButton"] {
 ::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
-    background: rgba(227,29,36,0.3);
+    background: rgba(255,255,255,0.15);
     border-radius: 2px;
 }
-::-webkit-scrollbar-thumb:hover { background: rgba(227,29,36,0.6); }
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.30); }
 
 /* ============================================================
    SIDEBAR — botão MENU (mantém identidade CDP vermelho)
@@ -906,9 +905,9 @@ with st.sidebar:
                     'transition:all 0.15s',
                 ].join('!important;') + '!important';
                 if (txt === '{_active_page}') {{
-                    btn.style.setProperty('background','rgba(227,29,36,0.10)','important');
-                    btn.style.setProperty('border-left','3px solid #E31D24','important');
-                    btn.style.setProperty('color','#E31D24','important');
+                    btn.style.setProperty('background','rgba(55,138,221,0.12)','important');
+                    btn.style.setProperty('border-left','3px solid #378ADD','important');
+                    btn.style.setProperty('color','rgba(255,255,255,0.95)','important');
                     btn.style.setProperty('font-weight','600','important');
                 }}
             }});
