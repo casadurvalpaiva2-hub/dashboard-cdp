@@ -933,14 +933,14 @@ if "open_form" not in st.session_state:
 if "_qa_nonce" not in st.session_state:
     st.session_state._qa_nonce = 0
 
-_opcoes_menu = ["Painel Geral", "Plano DI 2026", "Parcerias", "Contatos", "Eventos", "Ações", "Registrar Doação", "Relacionamento"]
+_opcoes_menu = ["Painel Geral", "Plano DI 2026", "Parcerias", "Contatos", "Eventos", "Ações", "Entrada de Recursos", "Relacionamento"]
 
 def _trigger_quick_add(tipo: str):
     """Navega para a página certa e sinaliza abertura de formulário."""
     mapa_menu = {
         "parceiro": "Parcerias",
         "contato":  "Contatos",
-        "doacao":   "Registrar Doação",
+        "doacao":   "Entrada de Recursos",
     }
     st.session_state.current_page = mapa_menu[tipo]
     st.session_state.open_form = tipo
@@ -963,7 +963,7 @@ with st.sidebar:
     unsafe_allow_html=True)
 
     _opcoes_nav = ["Painel Geral", "Plano DI 2026", "Parcerias", "Contatos",
-                   "Eventos", "Ações", "Registrar Doação", "Relacionamento"]
+                   "Eventos", "Ações", "Entrada de Recursos", "Relacionamento"]
     _nav_items = [(p, p) for p in _opcoes_nav]
 
     _nav_idx = _opcoes_nav.index(st.session_state.current_page) \
@@ -1896,50 +1896,11 @@ elif menu == "Plano DI 2026":
     else:
         st.info("Nenhuma fonte de captação cadastrada. Execute o setup do banco para popular Meta_Fonte_2026.")
 
-    # ── Formulário de lançamento mensal ─────────────────────────────────────
-    section("Lançar realizado mensal")
-
-    df_fontes = run_query("SELECT id_fonte, nome_fonte, codigo_fonte FROM Meta_Fonte_2026 WHERE ativa=1 ORDER BY nome_fonte")
-
-    if df_fontes.empty:
-        st.warning("Nenhuma fonte ativa cadastrada.")
-    else:
-        with st.form("form_captacao_mensal", clear_on_submit=True):
-            col_a, col_b = st.columns(2)
-            with col_a:
-                # Gera lista de meses 2026
-                meses_2026 = [f"2026-{str(m).zfill(2)}" for m in range(1, 13)]
-                mes_lancto = col_a.selectbox("Mês de referência *", meses_2026,
-                    index=min(datetime.now().month - 1, 11))
-                fonte_nome = col_a.selectbox("Fonte de captação *",
-                    df_fontes['nome_fonte'].tolist())
-            with col_b:
-                valor_lancto = col_b.number_input(
-                    "Valor realizado (R$) — somente financeiro *",
-                    min_value=0.0, step=100.0, format="%.2f",
-                    help="Informe apenas o valor que efetivamente entrou na conta. Doações midiáticas/estimadas NÃO entram aqui."
-                )
-                resp_lancto = col_b.text_input("Registrado por", value=st.session_state.user_data["nome"])
-
-            obs_lancto = st.text_area("Observação", placeholder="ex: Bazar CDP realizado em 15/04, 3 dias de evento.")
-
-            submitted_lancto = st.form_submit_button("Registrar realizado", type="primary", use_container_width=True)
-            if submitted_lancto:
-                if valor_lancto <= 0:
-                    st.warning("Informe um valor maior que zero.")
-                else:
-                    id_fonte_sel = df_fontes[df_fontes['nome_fonte'] == fonte_nome]['id_fonte'].values[0]
-                    run_exec(
-                        """INSERT INTO Registro_Captacao_DI
-                           (id_fonte, mes_referencia, valor_realizado, observacao, registrado_por)
-                           VALUES (?, ?, ?, ?, ?)""",
-                        (int(id_fonte_sel), mes_lancto, valor_lancto,
-                         obs_lancto.upper() if obs_lancto else None, resp_lancto)
-                    )
-                    st.success(f"✅ {fonte_nome} — {format_br(valor_lancto)} registrado para {mes_lancto}.")
-                    st.rerun()
-
     # ── Histórico de lançamentos ─────────────────────────────────────────────
+    st.info(
+        "Para registrar novos valores realizados, acesse **Entrada de Recursos** no menu lateral.",
+        icon="💡",
+    )
     if not df_hist.empty:
         section("Histórico de lançamentos")
 
@@ -2933,8 +2894,8 @@ elif menu == "Parcerias":
                 st.error(f"Erro ao ler o arquivo: {e}")
 
 # --- 3. REGISTRAR DOAÇÃO ---
-elif menu == "Registrar Doação":
-    page_header("Entrada de recursos", "Registro de doações recebidas, histórico editável e alertas de recorrência.")
+elif menu == "Entrada de Recursos":
+    page_header("Entrada de recursos", "Ponto único para registrar qualquer captação financeira.")
 
     df_p = _parceiros_lista()
 
@@ -2962,60 +2923,113 @@ elif menu == "Registrar Doação":
         # ABA 1 — REGISTRAR NOVA DOAÇÃO
         # ════════════════════════════════════════════════════════
         with tab_novo:
-            st.info(
-                "**Use este formulário para repasses de parceiros identificados** — "
-                "transferências de empresas, projetos, emendas parlamentares e doações online de pessoas físicas.  \n"
-                "Para eventos e campanhas (Bazar, Troco, Nota Potiguar), registre em **Plano DI 2026 → Lançar Realizado Mensal**.",
-                icon="ℹ️",
-            )
             section("Nova entrada de recurso")
-            with st.form("nova_doacao", clear_on_submit=True):
-                col_a, col_b = st.columns(2)
 
-                with col_a:
-                    opcoes_p = ["Selecione o parceiro..."] + df_p['nome_instituicao'].tolist()
-                    nome_sel = st.selectbox("Parceiro / Fonte *", opcoes_p)
-                    valor    = st.number_input("Valor do repasse (R$) *", min_value=0.0, step=100.0, format="%.2f")
-                    data     = st.date_input("Data do recebimento", datetime.now())
+            # ── Passo 1: escolha da categoria ──────────────────
+            _FONTES_EVENTO = {
+                "Bazar CDP":              "BAZAR_CDP",
+                "Bazar RFB (Mercadorias)":"BAZAR_RFB",
+                "Bazar RFB (Brinquedos)":"BAZAR_RFB_BRINQUEDOS",
+                "Campanha Troco":         "TROCO",
+                "Nota Potiguar":          "NOTA_POTIGUAR",
+            }
+            _CATEGORIAS = {
+                "Evento / Campanha (Bazar, Troco, Nota Potiguar)": "evento",
+                "Parceria institucional (repasse de empresa)":      "parceria",
+                "Projeto / Emenda parlamentar":                     "projeto",
+                "Doação online (pessoa física)":                    "online",
+                "Outros":                                           "outros",
+            }
 
-                with col_b:
-                    projeto = st.text_input("Projeto / Emenda / Finalidade", placeholder="ex: Projeto Vida")
-                    tipo    = st.selectbox("Tipo de recurso", [
-                        "Financeira", "Projetos", "Vestuário", "Alimentos", "Serviços", "Midiática",
-                    ])
-                    origens_plano = [
-                        "Selecione...",
-                        "Parcerias",        # repasse de parceiro PJ identificado
-                        "Projetos",         # emenda parlamentar, projeto aprovado
-                        "Doações Online",   # doação PF via plataforma digital
-                        "Outros",
-                    ]
-                    origem_sel = st.selectbox(
-                        "Origem da captação (estratégia)",
-                        origens_plano,
-                        help="Bazar, Troco e Nota Potiguar são registrados no Plano DI 2026 → Lançar Realizado Mensal.",
-                    )
+            categoria = st.selectbox(
+                "Qual é a natureza desta entrada? *",
+                list(_CATEGORIAS.keys()),
+                help="Isso determina quais campos aparecem e em qual tabela o valor é salvo.",
+            )
+            tipo_cat = _CATEGORIAS[categoria]
 
-                desc = st.text_area("Observações", placeholder="Contexto, forma de pagamento, referências…")
+            st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
 
-                if st.form_submit_button("Confirmar doação", type="primary", use_container_width=True):
-                    if nome_sel == "Selecione o parceiro...":
-                        st.warning("Selecione o parceiro.")
-                    elif valor <= 0:
-                        st.warning("Informe um valor maior que zero.")
-                    else:
-                        projeto_final = projeto.upper() if projeto else "GERAL"
-                        id_p = df_p[df_p['nome_instituicao'] == nome_sel]['id_parceiro'].values[0]
-                        run_insert(
-                            """INSERT INTO Doacao (
-                                id_parceiro, valor_estimado, tipo_doacao,
-                                data_doacao, descricao, nome_projeto, origem_captacao
-                            ) VALUES (?,?,?,?,?,?,?)""",
-                            (int(id_p), valor, tipo, data.strftime('%Y-%m-%d'),
-                             desc.upper() if desc else "", projeto_final, origem_sel),
-                        )
-                        st.success(f"✅ Doação de **{nome_sel}** ({format_br(valor)}) registrada com sucesso!")
-                        st.rerun()
+            # ── Passo 2: formulário adaptativo ─────────────────
+            if tipo_cat == "evento":
+                # → Registro_Captacao_DI (sem parceiro, com mês de referência)
+                df_fontes_ev = run_query(
+                    "SELECT id_fonte, nome_fonte FROM Meta_Fonte_2026 "
+                    "WHERE codigo_fonte = ANY(%s) AND ativa=1 ORDER BY nome_fonte",
+                    (list(_FONTES_EVENTO.values()),),
+                )
+                with st.form("form_entrada_evento", clear_on_submit=True):
+                    ea, eb = st.columns(2)
+                    meses_2026  = [f"2026-{str(m).zfill(2)}" for m in range(1, 13)]
+                    mes_lancto  = ea.selectbox("Mês de referência *", meses_2026,
+                                               index=min(datetime.now().month - 1, 11))
+                    fonte_ev    = eb.selectbox("Evento / Campanha *",
+                                               df_fontes_ev['nome_fonte'].tolist() if not df_fontes_ev.empty
+                                               else list(_FONTES_EVENTO.keys()))
+                    valor_ev    = ea.number_input("Valor realizado (R$) *", min_value=0.0,
+                                                  step=100.0, format="%.2f")
+                    resp_ev     = eb.text_input("Registrado por",
+                                               value=st.session_state.user_data["nome"])
+                    obs_ev      = st.text_area("Observação",
+                                              placeholder="ex: Bazar CDP realizado em 15/04, 3 dias de evento.")
+
+                    if st.form_submit_button("Registrar entrada", type="primary", use_container_width=True):
+                        if valor_ev <= 0:
+                            st.warning("Informe um valor maior que zero.")
+                        else:
+                            _id_fonte = int(df_fontes_ev[df_fontes_ev['nome_fonte'] == fonte_ev]['id_fonte'].values[0])
+                            run_exec(
+                                """INSERT INTO Registro_Captacao_DI
+                                   (id_fonte, mes_referencia, valor_realizado, observacao, registrado_por)
+                                   VALUES (%s, %s, %s, %s, %s)""",
+                                (_id_fonte, mes_lancto, valor_ev,
+                                 obs_ev.upper() if obs_ev else None, resp_ev),
+                            )
+                            st.success(f"✅ {fonte_ev} — {format_br(valor_ev)} registrado para {mes_lancto}.")
+                            st.rerun()
+
+            else:
+                # → Doacao (com parceiro identificado)
+                _tipo_map = {
+                    "parceria": ("Financeira",  "Parcerias"),
+                    "projeto":  ("Projetos",    "Projetos"),
+                    "online":   ("Financeira",  "Doações Online"),
+                    "outros":   ("Financeira",  "Outros"),
+                }
+                tipo_doa, origem_doa = _tipo_map[tipo_cat]
+
+                with st.form("form_entrada_parceiro", clear_on_submit=True):
+                    opcoes_p2   = ["Selecione o parceiro..."] + df_p['nome_instituicao'].tolist()
+                    pa, pb      = st.columns(2)
+                    nome_sel    = pa.selectbox("Parceiro / Fonte *", opcoes_p2)
+                    valor_doa   = pb.number_input("Valor (R$) *", min_value=0.0,
+                                                  step=100.0, format="%.2f")
+                    data_doa    = pa.date_input("Data do recebimento", datetime.now())
+                    projeto_doa = pb.text_input("Projeto / Emenda / Finalidade",
+                                               placeholder="ex: Projeto Vida")
+                    desc_doa    = st.text_area("Observações",
+                                              placeholder="Contexto, forma de pagamento, referências…")
+
+                    if st.form_submit_button("Registrar entrada", type="primary", use_container_width=True):
+                        if nome_sel == "Selecione o parceiro...":
+                            st.warning("Selecione o parceiro.")
+                        elif valor_doa <= 0:
+                            st.warning("Informe um valor maior que zero.")
+                        else:
+                            id_p = int(df_p[df_p['nome_instituicao'] == nome_sel]['id_parceiro'].values[0])
+                            run_insert(
+                                """INSERT INTO Doacao (
+                                    id_parceiro, valor_estimado, tipo_doacao,
+                                    data_doacao, descricao, nome_projeto, origem_captacao
+                                ) VALUES (?,?,?,?,?,?,?)""",
+                                (id_p, valor_doa, tipo_doa,
+                                 data_doa.strftime('%Y-%m-%d'),
+                                 desc_doa.upper() if desc_doa else "",
+                                 projeto_doa.upper() if projeto_doa else "GERAL",
+                                 origem_doa),
+                            )
+                            st.success(f"✅ {nome_sel} — {format_br(valor_doa)} registrado com sucesso!")
+                            st.rerun()
 
         # ════════════════════════════════════════════════════════
         # ABA 2 — HISTÓRICO COM BUSCA E EDIÇÃO
@@ -3853,40 +3867,26 @@ def _gerar_backup_completo():
                 output.getvalue(),
                 "xlsx",
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                f"backup_cdp_{datetime.now().strftime('%Y%m%d')}.xlsx",
             )
-        except (ImportError, ModuleNotFoundError, ValueError):
+        except Exception:
             continue
 
-    # Fallback: ZIP com um CSV por tabela
     import zipfile
-    zip_buffer = BytesIO()
-    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+    output = BytesIO()
+    with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as zf:
         for nome, df in dfs.items():
-            zf.writestr(f"{nome}.csv", df.to_csv(index=False, encoding="utf-8-sig"))
-    return (
-        zip_buffer.getvalue(),
-        "zip",
-        "application/zip",
-        f"backup_cdp_{datetime.now().strftime('%Y%m%d')}.zip",
-    )
+            zf.writestr(f"{nome}.csv", df.to_csv(index=False))
+    return output.getvalue(), "zip", "application/zip"
 
-if st.sidebar.button("⬇️ Preparar backup completo", use_container_width=True):
-    st.session_state["_bk_pronto"] = _gerar_backup_completo()
 
-if "_bk_pronto" in st.session_state:
-    _bk_data, _bk_ext, _bk_mime, _bk_nome = st.session_state["_bk_pronto"]
+_backup = _gerar_backup_completo()
+if _backup:
+    _b_data, _b_ext, _b_mime = _backup
     st.sidebar.download_button(
-        label=f"📥 Baixar ({_bk_ext.upper()})",
-        data=_bk_data,
-        file_name=_bk_nome,
-        mime=_bk_mime,
+        "Backup completo",
+        data=_b_data,
+        file_name=f"CDP_backup_{__import__('datetime').datetime.now().strftime('%Y%m%d_%H%M')}.{_b_ext}",
+        mime=_b_mime,
         use_container_width=True,
+        key="sidebar_backup_dl",
     )
-
-st.sidebar.markdown("---")
-
-# 3. Sair
-if st.sidebar.button("Sair", use_container_width=True):
-    st.session_state.clear()
-    st.rerun()
