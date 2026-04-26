@@ -988,44 +988,112 @@ with st.sidebar:
     st.markdown(f"""
     <script>
     (function() {{
-        const PAGES   = {_nav_labels_js};
-        const ACTIVE  = {repr(_active_page)};
-        const NAV_ID  = 'cdp-nav-root';
+        const PAGES  = {_nav_labels_js};
+        const ACTIVE = {repr(_active_page)};
+        const NAV_ID = 'cdp-nav-root';
+
+        /* Tenta o documento atual e o pai (compatível com Streamlit Cloud) */
+        function getDoc() {{
+            try {{ return window.parent.document; }} catch(e) {{ return document; }}
+        }}
+
+        function hide(el) {{
+            el.style.setProperty('display',   'none',    'important');
+            el.style.setProperty('height',    '0',       'important');
+            el.style.setProperty('overflow',  'hidden',  'important');
+            el.style.setProperty('margin',    '0',       'important');
+            el.style.setProperty('padding',   '0',       'important');
+            el.style.setProperty('position',  'absolute','important');
+            el.style.setProperty('visibility','hidden',  'important');
+        }}
 
         function buildNav() {{
-            const doc     = window.parent.document;
+            const doc     = getDoc();
             const sidebar = doc.querySelector('[data-testid="stSidebar"]');
             if (!sidebar) return;
 
-            /* Encontra todos os botões nativos de nav */
-            const allBtns = Array.from(sidebar.querySelectorAll('[data-testid^="stBaseButton"]'));
-            const navBtns = allBtns.filter(b => PAGES.includes(b.innerText.trim()));
+            /* Botões nativos — qualquer variante do data-testid */
+            const allBtns = Array.from(
+                sidebar.querySelectorAll(
+                    '[data-testid^="stBaseButton"], [data-testid*="BaseButton"], button[kind]'
+                )
+            );
+
+            /* Filtra só os que têm o texto exato de uma página de nav */
+            const navBtns = allBtns.filter(b => {{
+                const t = b.innerText.trim();
+                return PAGES.some(p => t === p || t.endsWith(p));
+            }});
             if (navBtns.length === 0) return;
 
-            /* Remove nav anterior se já existir (re-render) */
+            /* Remove nav anterior */
             const old = doc.getElementById(NAV_ID);
             if (old) old.remove();
 
-            /* Oculta os botões nativos */
+            /* Oculta wrappers nativos com setProperty (funciona contra !important) */
             navBtns.forEach(b => {{
-                const wrapper = b.closest('[data-testid="stButton"]') || b.parentElement;
-                wrapper.style.cssText = 'display:none!important;position:absolute!important;visibility:hidden!important;pointer-events:none!important;width:0!important;height:0!important;overflow:hidden!important';
+                hide(b);
+                const w = b.closest('[data-testid="stButton"]') || b.closest('[data-testid="stButtonGroup"]') || b.parentElement;
+                if (w) hide(w);
             }});
 
-            /* Cria o nav visual */
-            const nav = doc.createElement('div');
+            /* ── Monta nav visual ── */
+            const nav = doc.createElement('nav');
             nav.id = NAV_ID;
-            nav.className = 'cdp-nav';
+
+            /* Estilos inline do container (não dependem de CSS externo) */
+            Object.assign(nav.style, {{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '1px',
+                padding: '4px 12px 12px',
+                margin: '0',
+            }});
 
             PAGES.forEach(label => {{
-                const origBtn = navBtns.find(b => b.innerText.trim() === label);
+                const origBtn = navBtns.find(b => {{
+                    const t = b.innerText.trim();
+                    return t === label || t.endsWith(label);
+                }});
                 if (!origBtn) return;
 
-                const item = doc.createElement('div');
-                item.className = 'cdp-nav-item' + (label === ACTIVE ? ' active' : '');
+                const isActive = label === ACTIVE;
 
-                const dot  = doc.createElement('span');
-                dot.className = 'cdp-nav-dot';
+                const item = doc.createElement('div');
+                /* Tudo via inline style — imune a override do Streamlit */
+                Object.assign(item.style, {{
+                    display:        'flex',
+                    alignItems:     'center',
+                    gap:            '10px',
+                    padding:        '8px 14px',
+                    borderRadius:   '8px',
+                    borderLeft:     isActive ? '3px solid #378ADD' : '3px solid transparent',
+                    background:     isActive ? 'rgba(55,138,221,0.13)' : 'transparent',
+                    color:          isActive ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.48)',
+                    fontSize:       '13.5px',
+                    fontWeight:     isActive ? '600' : '400',
+                    fontFamily:     "'Inter', -apple-system, sans-serif",
+                    letterSpacing:  '0.1px',
+                    cursor:         'pointer',
+                    userSelect:     'none',
+                    transition:     'background 0.12s, color 0.12s, border-color 0.12s',
+                    overflow:       'hidden',
+                    whiteSpace:     'nowrap',
+                    textOverflow:   'ellipsis',
+                    lineHeight:     '1',
+                }});
+
+                /* Ponto indicador */
+                const dot = doc.createElement('span');
+                Object.assign(dot.style, {{
+                    width:        '5px',
+                    height:       '5px',
+                    borderRadius: '50%',
+                    background:   isActive ? '#378ADD' : 'currentColor',
+                    opacity:      isActive ? '1' : '0.35',
+                    flexShrink:   '0',
+                    transition:   'opacity 0.12s, background 0.12s',
+                }});
 
                 const text = doc.createElement('span');
                 text.textContent = label;
@@ -1033,28 +1101,45 @@ with st.sidebar:
                 item.appendChild(dot);
                 item.appendChild(text);
 
-                item.addEventListener('click', () => {{
-                    /* Clica no botão nativo do Streamlit */
-                    origBtn.click();
+                /* Hover */
+                item.addEventListener('mouseenter', () => {{
+                    if (!isActive) {{
+                        item.style.background  = 'rgba(255,255,255,0.06)';
+                        item.style.color       = 'rgba(255,255,255,0.80)';
+                        item.style.borderLeft  = '3px solid rgba(255,255,255,0.12)';
+                        dot.style.opacity      = '0.6';
+                    }}
                 }});
+                item.addEventListener('mouseleave', () => {{
+                    if (!isActive) {{
+                        item.style.background  = 'transparent';
+                        item.style.color       = 'rgba(255,255,255,0.48)';
+                        item.style.borderLeft  = '3px solid transparent';
+                        dot.style.opacity      = '0.35';
+                    }}
+                }});
+                item.addEventListener('click', () => origBtn.click());
 
                 nav.appendChild(item);
             }});
 
-            /* Insere o nav logo antes do primeiro botão oculto */
-            const firstWrapper = navBtns[0].closest('[data-testid="stButton"]') || navBtns[0].parentElement;
+            /* Insere antes do primeiro wrapper de botão oculto */
+            const firstWrapper = (
+                navBtns[0].closest('[data-testid="stButton"]') ||
+                navBtns[0].closest('[data-testid="stButtonGroup"]') ||
+                navBtns[0].parentElement
+            );
             firstWrapper.parentElement.insertBefore(nav, firstWrapper);
         }}
 
         buildNav();
-        setTimeout(buildNav, 300);
-        setTimeout(buildNav, 800);
+        setTimeout(buildNav, 250);
+        setTimeout(buildNav, 700);
 
-        /* Observer para re-renderizações do Streamlit */
         const obs = new MutationObserver(() => {{
-            if (!window.parent.document.getElementById(NAV_ID)) buildNav();
+            if (!getDoc().getElementById(NAV_ID)) buildNav();
         }});
-        obs.observe(window.parent.document.body, {{childList: true, subtree: true}});
+        obs.observe(getDoc().body, {{ childList: true, subtree: true }});
     }})();
     </script>
     """, unsafe_allow_html=True)
