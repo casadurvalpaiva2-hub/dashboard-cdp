@@ -457,70 +457,61 @@ div[data-baseweb="select"] {
 }
 
 /* ============================================================
-   SIDEBAR — botões nativos ocultos (nav visual injetado via JS)
+   SIDEBAR — navegação via st.radio (CSS puro, sem JS)
    ============================================================ */
-/* Esconde os botões nativos que servem apenas como triggers */
-.cdp-nav-hidden {
+
+/* Container do radio group */
+section[data-testid="stSidebar"] [data-testid="stRadio"] {
+    width: 100% !important;
+    padding: 0 !important;
+}
+section[data-testid="stSidebar"] [data-testid="stRadio"] > div,
+section[data-testid="stSidebar"] [data-testid="stRadio"] > div > div {
+    gap: 1px !important;
+    width: 100% !important;
+}
+
+/* Cada opção de nav */
+section[data-testid="stSidebar"] [data-testid="stRadio"] label {
+    display: flex !important;
+    align-items: center !important;
+    width: 100% !important;
+    min-height: 0 !important;
+    padding: 8px 14px 8px 16px !important;
+    margin: 0 !important;
+    border-radius: 8px !important;
+    border-left: 3px solid transparent !important;
+    cursor: pointer !important;
+    color: rgba(255,255,255,0.48) !important;
+    font-size: 13.5px !important;
+    font-weight: 400 !important;
+    letter-spacing: 0.1px !important;
+    line-height: 1.2 !important;
+    transition: background 0.12s, color 0.12s, border-color 0.12s !important;
+    background: transparent !important;
+    box-sizing: border-box !important;
+}
+section[data-testid="stSidebar"] [data-testid="stRadio"] label:hover {
+    background: rgba(255,255,255,0.06) !important;
+    color: rgba(255,255,255,0.82) !important;
+    border-left-color: rgba(255,255,255,0.14) !important;
+}
+
+/* Item selecionado — :has() suportado em Chrome 105+, Safari 15.4+, Firefox 121+ */
+section[data-testid="stSidebar"] [data-testid="stRadio"] label:has(input:checked) {
+    background: rgba(55,138,221,0.13) !important;
+    border-left-color: #378ADD !important;
+    color: rgba(255,255,255,0.95) !important;
+    font-weight: 600 !important;
+}
+
+/* Esconde os controles nativos do radio (círculo + tick) */
+section[data-testid="stSidebar"] [data-testid="stRadio"] input[type="radio"] {
     display: none !important;
-    position: absolute !important;
-    visibility: hidden !important;
-    pointer-events: none !important;
-    width: 0 !important;
-    height: 0 !important;
-    overflow: hidden !important;
 }
-/* Nav visual injetado */
-.cdp-nav {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    padding: 0 10px;
-    margin-top: 4px;
-}
-.cdp-nav-item {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 8px 12px;
-    border-radius: 8px;
-    border-left: 3px solid transparent;
-    cursor: pointer;
-    transition: background 0.12s, color 0.12s, border-color 0.12s;
-    font-size: 13.5px;
-    font-weight: 400;
-    color: rgba(255,255,255,0.50);
-    letter-spacing: 0.1px;
-    user-select: none;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-.cdp-nav-item:hover {
-    background: rgba(255,255,255,0.06);
-    color: rgba(255,255,255,0.85);
-    border-left-color: rgba(255,255,255,0.15);
-}
-.cdp-nav-item.active {
-    background: rgba(55,138,221,0.13);
-    border-left-color: #378ADD;
-    color: rgba(255,255,255,0.95);
-    font-weight: 600;
-}
-.cdp-nav-dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: currentColor;
-    opacity: 0.4;
-    flex-shrink: 0;
-    transition: opacity 0.12s;
-}
-.cdp-nav-item.active .cdp-nav-dot {
-    opacity: 1;
-    background: #378ADD;
-}
-.cdp-nav-item:hover .cdp-nav-dot {
-    opacity: 0.7;
+section[data-testid="stSidebar"] [data-testid="stRadio"] [data-baseweb="radio"],
+section[data-testid="stSidebar"] [data-testid="stRadio"] label > div:first-child {
+    display: none !important;
 }
 
 /* Scrollbar discreta */
@@ -960,189 +951,27 @@ with st.sidebar:
         _trigger_quick_add(_opcoes_add[_escolha])
         st.session_state._qa_nonce += 1
 
-    # ── Navegação principal ────────────────────────────────────
+    # ── Navegação principal — st.radio estilizado via CSS ──────
     st.markdown("""<p style="font-size:10px;letter-spacing:1.8px;text-transform:uppercase;
-    color:rgba(255,255,255,0.25);font-weight:600;margin:20px 0 4px 4px;">Navegação</p>""",
+    color:rgba(255,255,255,0.25);font-weight:600;margin:20px 0 2px 4px;">Navegação</p>""",
     unsafe_allow_html=True)
 
-    _nav_items = [
-        ("Painel Geral",     "Painel Geral"),
-        ("Plano DI 2026",    "Plano DI 2026"),
-        ("Parcerias",        "Parcerias"),
-        ("Contatos",         "Contatos"),
-        ("Eventos",          "Eventos"),
-        ("Ações",            "Ações"),
-        ("Registrar Doação", "Registrar Doação"),
-        ("Relacionamento",   "Relacionamento"),
-    ]
+    _opcoes_nav = ["Painel Geral", "Plano DI 2026", "Parcerias", "Contatos",
+                   "Eventos", "Ações", "Registrar Doação", "Relacionamento"]
+    _nav_items = [(p, p) for p in _opcoes_nav]  # mantém compatibilidade
 
-    for _label, _page in _nav_items:
-        if st.button(_label, key=f"nav_{_page}", use_container_width=True):
-            st.session_state.current_page = _page
-            st.rerun()
+    _nav_idx = _opcoes_nav.index(st.session_state.current_page) if st.session_state.current_page in _opcoes_nav else 0
+    _nav_choice = st.radio(
+        "nav",
+        options=_opcoes_nav,
+        index=_nav_idx,
+        label_visibility="collapsed",
+        key="sidebar_nav_radio",
+    )
+    if _nav_choice != st.session_state.current_page:
+        st.session_state.current_page = _nav_choice
 
-    # JS — substitui botões nativos por nav visual elegante
-    _active_page = st.session_state.current_page
-    _nav_labels = [label for label, _ in _nav_items]
-    _nav_labels_js = str(_nav_labels).replace("'", '"')
-    st.markdown(f"""
-    <script>
-    (function() {{
-        const PAGES  = {_nav_labels_js};
-        const ACTIVE = {repr(_active_page)};
-        const NAV_ID = 'cdp-nav-root';
-
-        /* Tenta o documento atual e o pai (compatível com Streamlit Cloud) */
-        function getDoc() {{
-            try {{ return window.parent.document; }} catch(e) {{ return document; }}
-        }}
-
-        function hide(el) {{
-            el.style.setProperty('display',   'none',    'important');
-            el.style.setProperty('height',    '0',       'important');
-            el.style.setProperty('overflow',  'hidden',  'important');
-            el.style.setProperty('margin',    '0',       'important');
-            el.style.setProperty('padding',   '0',       'important');
-            el.style.setProperty('position',  'absolute','important');
-            el.style.setProperty('visibility','hidden',  'important');
-        }}
-
-        function buildNav() {{
-            const doc     = getDoc();
-            const sidebar = doc.querySelector('[data-testid="stSidebar"]');
-            if (!sidebar) return;
-
-            /* Botões nativos — qualquer variante do data-testid */
-            const allBtns = Array.from(
-                sidebar.querySelectorAll(
-                    '[data-testid^="stBaseButton"], [data-testid*="BaseButton"], button[kind]'
-                )
-            );
-
-            /* Filtra só os que têm o texto exato de uma página de nav */
-            const navBtns = allBtns.filter(b => {{
-                const t = b.innerText.trim();
-                return PAGES.some(p => t === p || t.endsWith(p));
-            }});
-            if (navBtns.length === 0) return;
-
-            /* Remove nav anterior */
-            const old = doc.getElementById(NAV_ID);
-            if (old) old.remove();
-
-            /* Oculta wrappers nativos com setProperty (funciona contra !important) */
-            navBtns.forEach(b => {{
-                hide(b);
-                const w = b.closest('[data-testid="stButton"]') || b.closest('[data-testid="stButtonGroup"]') || b.parentElement;
-                if (w) hide(w);
-            }});
-
-            /* ── Monta nav visual ── */
-            const nav = doc.createElement('nav');
-            nav.id = NAV_ID;
-
-            /* Estilos inline do container (não dependem de CSS externo) */
-            Object.assign(nav.style, {{
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '1px',
-                padding: '4px 12px 12px',
-                margin: '0',
-            }});
-
-            PAGES.forEach(label => {{
-                const origBtn = navBtns.find(b => {{
-                    const t = b.innerText.trim();
-                    return t === label || t.endsWith(label);
-                }});
-                if (!origBtn) return;
-
-                const isActive = label === ACTIVE;
-
-                const item = doc.createElement('div');
-                /* Tudo via inline style — imune a override do Streamlit */
-                Object.assign(item.style, {{
-                    display:        'flex',
-                    alignItems:     'center',
-                    gap:            '10px',
-                    padding:        '8px 14px',
-                    borderRadius:   '8px',
-                    borderLeft:     isActive ? '3px solid #378ADD' : '3px solid transparent',
-                    background:     isActive ? 'rgba(55,138,221,0.13)' : 'transparent',
-                    color:          isActive ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.48)',
-                    fontSize:       '13.5px',
-                    fontWeight:     isActive ? '600' : '400',
-                    fontFamily:     "'Inter', -apple-system, sans-serif",
-                    letterSpacing:  '0.1px',
-                    cursor:         'pointer',
-                    userSelect:     'none',
-                    transition:     'background 0.12s, color 0.12s, border-color 0.12s',
-                    overflow:       'hidden',
-                    whiteSpace:     'nowrap',
-                    textOverflow:   'ellipsis',
-                    lineHeight:     '1',
-                }});
-
-                /* Ponto indicador */
-                const dot = doc.createElement('span');
-                Object.assign(dot.style, {{
-                    width:        '5px',
-                    height:       '5px',
-                    borderRadius: '50%',
-                    background:   isActive ? '#378ADD' : 'currentColor',
-                    opacity:      isActive ? '1' : '0.35',
-                    flexShrink:   '0',
-                    transition:   'opacity 0.12s, background 0.12s',
-                }});
-
-                const text = doc.createElement('span');
-                text.textContent = label;
-
-                item.appendChild(dot);
-                item.appendChild(text);
-
-                /* Hover */
-                item.addEventListener('mouseenter', () => {{
-                    if (!isActive) {{
-                        item.style.background  = 'rgba(255,255,255,0.06)';
-                        item.style.color       = 'rgba(255,255,255,0.80)';
-                        item.style.borderLeft  = '3px solid rgba(255,255,255,0.12)';
-                        dot.style.opacity      = '0.6';
-                    }}
-                }});
-                item.addEventListener('mouseleave', () => {{
-                    if (!isActive) {{
-                        item.style.background  = 'transparent';
-                        item.style.color       = 'rgba(255,255,255,0.48)';
-                        item.style.borderLeft  = '3px solid transparent';
-                        dot.style.opacity      = '0.35';
-                    }}
-                }});
-                item.addEventListener('click', () => origBtn.click());
-
-                nav.appendChild(item);
-            }});
-
-            /* Insere antes do primeiro wrapper de botão oculto */
-            const firstWrapper = (
-                navBtns[0].closest('[data-testid="stButton"]') ||
-                navBtns[0].closest('[data-testid="stButtonGroup"]') ||
-                navBtns[0].parentElement
-            );
-            firstWrapper.parentElement.insertBefore(nav, firstWrapper);
-        }}
-
-        buildNav();
-        setTimeout(buildNav, 250);
-        setTimeout(buildNav, 700);
-
-        const obs = new MutationObserver(() => {{
-            if (!getDoc().getElementById(NAV_ID)) buildNav();
-        }});
-        obs.observe(getDoc().body, {{ childList: true, subtree: true }});
-    }})();
-    </script>
-    """, unsafe_allow_html=True)
+    _active_page = st.session_state.current_page  # alias usado em outras partes
 
 menu = st.session_state.current_page
 
