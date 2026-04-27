@@ -922,8 +922,8 @@ if "open_form" not in st.session_state:
 if "_qa_nonce" not in st.session_state:
     st.session_state._qa_nonce = 0
 
-_menus_gerencia = ["Painel Geral", "Plano DI 2026", "Parcerias", "Contatos", "Eventos", "Ações", "Entrada de Recursos", "Relacionamento"]
-_menus_operacional = ["Painel Geral", "Plano DI 2026", "Parcerias", "Contatos", "Eventos", "Ações", "Entrada de Recursos", "Relacionamento"]
+_menus_gerencia = ["Painel Geral", "Calendário", "Plano DI 2026", "Parcerias", "Contatos", "Eventos", "Ações", "Entrada de Recursos", "Relacionamento"]
+_menus_operacional = ["Painel Geral", "Calendário", "Plano DI 2026", "Parcerias", "Contatos", "Eventos", "Ações", "Entrada de Recursos", "Relacionamento"]
 _opcoes_menu = _menus_gerencia if _is_gerente() else _menus_operacional
 
 def _trigger_quick_add(tipo: str):
@@ -953,7 +953,7 @@ with st.sidebar:
     color:rgba(255,255,255,0.25);font-weight:600;margin:20px 0 2px 4px;">Navegação</p>""",
     unsafe_allow_html=True)
 
-    _opcoes_nav = ["Painel Geral", "Plano DI 2026", "Parcerias", "Contatos",
+    _opcoes_nav = ["Painel Geral", "Calendário", "Plano DI 2026", "Parcerias", "Contatos",
                    "Eventos", "Ações", "Entrada de Recursos", "Relacionamento"]
     _nav_items = [(p, p) for p in _opcoes_nav]
 
@@ -1690,6 +1690,262 @@ if menu == "Painel Geral":
         if n_pend == 0:
             st.markdown('<div style="font-size:13px;color:#059669;">✅ Banco de dados completo.</div>', unsafe_allow_html=True)
 
+
+
+elif menu == "Calendário":
+    from streamlit_calendar import calendar as st_calendar
+
+    page_header("Calendário DI", "Prazos, follow-ups e eventos num só lugar.")
+
+    # ── Busca dados das três fontes ──────────────────────────────────────────
+    df_acoes_cal = run_query("""
+        SELECT tarefa, data_prevista, status, responsavel
+        FROM Demandas_Estrategicas
+        WHERE data_prevista IS NOT NULL
+          AND status NOT IN ('REALIZADO')
+    """)
+
+    df_followup_cal = run_query("""
+        SELECT rr.proxima_acao_data, p.nome_instituicao,
+               rr.descricao_do_que_foi_feito
+        FROM Registro_Relacionamento rr
+        JOIN Parceiro p ON rr.id_parceiro = p.id_parceiro
+        WHERE rr.proxima_acao_data IS NOT NULL
+          AND rr.proxima_acao_data >= CURRENT_DATE - INTERVAL '30 days'
+    """)
+
+    df_almoco_cal = run_query("""
+        SELECT DISTINCT mes_referencia
+        FROM Convidados_Almoco
+        ORDER BY mes_referencia
+    """)
+
+    # ── Monta lista de eventos FullCalendar ──────────────────────────────────
+    eventos_cal = []
+
+    # 🔴 / 🟡 Ações com prazo
+    for _, row in df_acoes_cal.iterrows():
+        try:
+            dt = str(row["data_prevista"])[:10]
+            from datetime import date
+            vencido = dt < date.today().isoformat()
+            cor = "#DC2626" if vencido else "#D97706"
+            titulo = str(row["tarefa"] or "Tarefa")[:45]
+            resp = f" ({row['responsavel']})" if row.get("responsavel") else ""
+            eventos_cal.append({
+                "title": f"📋 {titulo}{resp}",
+                "start": dt,
+                "color": cor,
+                "textColor": "#fff",
+                "extendedProps": {"tipo": "ação", "status": row.get("status","")},
+            })
+        except Exception:
+            pass
+
+    # 🔵 Follow-ups de relacionamento
+    for _, row in df_followup_cal.iterrows():
+        try:
+            dt = str(row["proxima_acao_data"])[:10]
+            empresa = str(row.get("nome_instituicao","Parceiro"))[:30]
+            eventos_cal.append({
+                "title": f"🤝 {empresa}",
+                "start": dt,
+                "color": "#378ADD",
+                "textColor": "#fff",
+                "extendedProps": {"tipo": "follow-up"},
+            })
+        except Exception:
+            pass
+
+    # 🟢 Almoço CDP (primeiro sábado do mês — marcado como dia inteiro)
+    for _, row in df_almoco_cal.iterrows():
+        try:
+            from datetime import date, timedelta
+            mes_ano = row["mes_referencia"]          # "04/2026"
+            mm, yy = mes_ano.split("/")
+            primeiro = date(int(yy), int(mm), 1)
+            # primeiro sábado
+            delta = (5 - primeiro.weekday()) % 7
+            sabado = primeiro + timedelta(days=delta)
+            eventos_cal.append({
+                "title": "🍽️ Almoço CDP",
+                "start": sabado.isoformat(),
+                "color": "#1D9E75",
+                "textColor": "#fff",
+                "allDay": True,
+                "extendedProps": {"tipo": "evento"},
+            })
+        except Exception:
+            pass
+
+    # ── Legenda compacta ─────────────────────────────────────────────────────
+    col_leg = st.columns(4)
+    legendas = [
+        ("#DC2626", "Ação vencida"),
+        ("#D97706", "Ação pendente"),
+        ("#378ADD", "Follow-up"),
+        ("#1D9E75", "Almoço CDP"),
+    ]
+    for col, (cor, txt) in zip(col_leg, legendas):
+        col.markdown(
+            f'<div style="display:flex;align-items:center;gap:6px;font-size:12px;">'
+            f'<div style="width:12px;height:12px;border-radius:3px;background:{cor};flex-shrink:0;"></div>'
+            f'<span style="color:#94A3B8;">{txt}</span></div>',
+            unsafe_allow_html=True,
+        )
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # ── Filtros rápidos ──────────────────────────────────────────────────────
+    col_f1, col_f2 = st.columns([3, 1])
+    with col_f2:
+        tipos_sel = st.multiselect(
+            "Filtrar por tipo",
+            ["ação", "follow-up", "evento"],
+            default=["ação", "follow-up", "evento"],
+            label_visibility="collapsed",
+        )
+
+    # ── Eventos institucionais fixos 2026 (Calendário Temático CDP) ──────────
+    # Cores conforme legenda oficial:
+    # #E91E8C = AÇÕES  |  #2196F3 = INSTITUCIONAL  |  #4CAF50 = CAPTAÇÃO
+    # #FF9800 = CAMPANHA DIAGNÓSTICO PRECOCE        |  #DC2626 = PROJETOS ATIVOS
+    _EVENTOS_CDP_2026 = [
+        # ── JANEIRO ──
+        {"title":"📋 Campanha: Sinais da Leucemia","start":"2026-01-01","end":"2026-01-31","color":"#E91E8C","textColor":"#fff","display":"background"},
+        {"title":"🏥 Dia do Hemofílico","start":"2026-01-04","color":"#2196F3","textColor":"#fff"},
+        {"title":"🤝 Almoço dos Parceiros","start":"2026-01-28","color":"#4CAF50","textColor":"#fff"},
+        {"title":"📦 Dia do Desapego","start":"2026-01-30","color":"#E91E8C","textColor":"#fff"},
+        # ── FEVEREIRO ──
+        {"title":"📋 Campanha: Tumor SNC","start":"2026-02-01","end":"2026-02-28","color":"#E91E8C","textColor":"#fff","display":"background"},
+        {"title":"🏥 Dia Mundial Combate ao Câncer","start":"2026-02-04","color":"#2196F3","textColor":"#fff"},
+        {"title":"🎉 CarnaCACC","start":"2026-02-11","color":"#E91E8C","textColor":"#fff"},
+        {"title":"🏥 Dia Int. Câncer Infantil","start":"2026-02-15","color":"#2196F3","textColor":"#fff"},
+        {"title":"🤝 Almoço dos Parceiros","start":"2026-02-25","color":"#4CAF50","textColor":"#fff"},
+        {"title":"📦 Dia do Desapego","start":"2026-02-27","color":"#E91E8C","textColor":"#fff"},
+        # ── MARÇO ──
+        {"title":"📋 Campanha: Osteossarcoma","start":"2026-03-01","end":"2026-03-31","color":"#E91E8C","textColor":"#fff","display":"background"},
+        {"title":"🏥 Dia Internacional da Mulher","start":"2026-03-08","color":"#2196F3","textColor":"#fff"},
+        {"title":"🏥 Dia Síndrome de Down","start":"2026-03-21","color":"#2196F3","textColor":"#fff"},
+        {"title":"🤝 Almoço dos Parceiros","start":"2026-03-25","color":"#4CAF50","textColor":"#fff"},
+        {"title":"📦 Dia do Desapego","start":"2026-03-31","color":"#E91E8C","textColor":"#fff"},
+        {"title":"💰 Campanha IRPF - PF","start":"2026-03-01","end":"2026-05-31","color":"#4CAF50","textColor":"#fff","display":"background"},
+        # ── ABRIL ──
+        {"title":"📋 Campanha: Linfoma","start":"2026-04-01","end":"2026-04-30","color":"#E91E8C","textColor":"#fff","display":"background"},
+        {"title":"🐣 Páscoa CDP","start":"2026-04-01","color":"#E91E8C","textColor":"#fff"},
+        {"title":"🏥 Dia Mundial Conscientização Autismo","start":"2026-04-02","color":"#2196F3","textColor":"#fff"},
+        {"title":"📰 Dia do Jornalista","start":"2026-04-07","color":"#2196F3","textColor":"#fff"},
+        {"title":"🏥 Dia Mundial Luta Contra o Câncer","start":"2026-04-08","color":"#2196F3","textColor":"#fff"},
+        {"title":"🏥 Dia da Hemofilia","start":"2026-04-17","color":"#2196F3","textColor":"#fff"},
+        {"title":"🤝 Almoço dos Parceiros","start":"2026-04-29","color":"#4CAF50","textColor":"#fff"},
+        {"title":"📦 Dia do Desapego","start":"2026-04-30","color":"#E91E8C","textColor":"#fff"},
+        # ── MAIO ──
+        {"title":"📋 Campanha: Neuroblastoma","start":"2026-05-01","end":"2026-05-31","color":"#E91E8C","textColor":"#fff","display":"background"},
+        {"title":"💐 Dia das Mães CDP","start":"2026-05-06","color":"#E91E8C","textColor":"#fff"},
+        {"title":"💐 Dia das Mães","start":"2026-05-12","color":"#2196F3","textColor":"#fff"},
+        {"title":"🤝 Almoço dos Parceiros","start":"2026-05-27","color":"#4CAF50","textColor":"#fff"},
+        {"title":"📦 Dia do Desapego","start":"2026-05-29","color":"#E91E8C","textColor":"#fff"},
+        # ── JUNHO ──
+        {"title":"📋 Campanha: Câncer de Tecidos Moles","start":"2026-06-01","end":"2026-06-30","color":"#E91E8C","textColor":"#fff","display":"background"},
+        {"title":"🎪 São João CDP","start":"2026-06-17","color":"#E91E8C","textColor":"#fff"},
+        {"title":"🏥 Dia Conscientização Doença Falciforme","start":"2026-06-19","color":"#2196F3","textColor":"#fff"},
+        {"title":"🤝 Almoço dos Parceiros","start":"2026-06-24","color":"#4CAF50","textColor":"#fff"},
+        {"title":"📦 Dia do Desapego","start":"2026-06-30","color":"#E91E8C","textColor":"#fff"},
+        {"title":"🍔 Multirão McDia Feliz","start":"2026-06-01","color":"#4CAF50","textColor":"#fff"},
+        # ── JULHO ──
+        {"title":"📋 Campanha: Retinoblastoma","start":"2026-07-01","end":"2026-07-31","color":"#E91E8C","textColor":"#fff","display":"background"},
+        {"title":"🎂 Aniversário CDP 31 anos","start":"2026-07-11","color":"#E91E8C","textColor":"#fff"},
+        {"title":"🤝 Almoço dos Parceiros","start":"2026-07-29","color":"#4CAF50","textColor":"#fff"},
+        {"title":"📦 Dia do Desapego","start":"2026-07-31","color":"#E91E8C","textColor":"#fff"},
+        {"title":"🍔 Multirão McDia Feliz","start":"2026-07-31","color":"#4CAF50","textColor":"#fff"},
+        # ── AGOSTO ──
+        {"title":"📋 Campanha: Tumor de Wilms","start":"2026-08-01","end":"2026-08-31","color":"#E91E8C","textColor":"#fff","display":"background"},
+        {"title":"👨 Dia dos Pais CDP","start":"2026-08-05","color":"#E91E8C","textColor":"#fff"},
+        {"title":"🤝 Almoço dos Parceiros","start":"2026-08-26","color":"#4CAF50","textColor":"#fff"},
+        {"title":"📦 Dia do Desapego","start":"2026-08-31","color":"#E91E8C","textColor":"#fff"},
+        {"title":"🍔 McDia Feliz","start":"2026-08-21","color":"#4CAF50","textColor":"#fff"},
+        # ── SETEMBRO ──
+        {"title":"🎗️ Campanha Setembro Dourado","start":"2026-09-01","end":"2026-09-30","color":"#FF9800","textColor":"#fff","display":"background"},
+        {"title":"🏥 Dia Mundial Conscientização Linfomas","start":"2026-09-15","color":"#FF9800","textColor":"#fff"},
+        {"title":"🏥 Dia Diagnóstico Precoce Retinoblastoma","start":"2026-09-18","color":"#FF9800","textColor":"#fff"},
+        {"title":"🏥 Dia Mundial Doador Medula Óssea","start":"2026-09-19","color":"#2196F3","textColor":"#fff"},
+        {"title":"🤝 Almoço dos Parceiros","start":"2026-09-30","color":"#4CAF50","textColor":"#fff"},
+        {"title":"📦 Dia do Desapego","start":"2026-09-30","color":"#E91E8C","textColor":"#fff"},
+        {"title":"🎄 Campanha de Natal - Central de Doações","start":"2026-09-01","end":"2026-12-31","color":"#4CAF50","textColor":"#fff","display":"background"},
+        # ── OUTUBRO ──
+        {"title":"📋 Campanha: Leucemia","start":"2026-10-01","end":"2026-10-31","color":"#E91E8C","textColor":"#fff","display":"background"},
+        {"title":"👶 Semana da Criança CDP","start":"2026-10-06","end":"2026-10-09","color":"#E91E8C","textColor":"#fff"},
+        {"title":"💰 Campanha IRPF - PJ","start":"2026-10-01","end":"2026-11-30","color":"#4CAF50","textColor":"#fff","display":"background"},
+        {"title":"🤝 Almoço dos Parceiros","start":"2026-10-28","color":"#4CAF50","textColor":"#fff"},
+        {"title":"📦 Dia do Desapego","start":"2026-10-30","color":"#E91E8C","textColor":"#fff"},
+        # ── NOVEMBRO ──
+        {"title":"🏥 Feira Empreendedor e Bazar Natalino","start":"2026-11-17","color":"#4CAF50","textColor":"#fff"},
+        {"title":"🏥 Dia Nacional Combate Câncer Inf.","start":"2026-11-23","color":"#2196F3","textColor":"#fff"},
+        {"title":"🤝 Almoço dos Parceiros","start":"2026-11-25","color":"#4CAF50","textColor":"#fff"},
+        {"title":"🏥 Dia Nacional Combate ao Câncer","start":"2026-11-27","color":"#2196F3","textColor":"#fff"},
+        {"title":"📦 Dia do Desapego","start":"2026-11-30","color":"#E91E8C","textColor":"#fff"},
+        # ── DEZEMBRO ──
+        {"title":"📋 Campanha: Tumor SNC","start":"2026-12-01","end":"2026-12-31","color":"#E91E8C","textColor":"#fff","display":"background"},
+        {"title":"💝 Dia de Doar","start":"2026-12-02","color":"#4CAF50","textColor":"#fff"},
+        {"title":"🎄 Natal CDP","start":"2026-12-09","color":"#E91E8C","textColor":"#fff"},
+        {"title":"🎉 Confraternização Colaboradores","start":"2026-12-12","color":"#2196F3","textColor":"#fff"},
+        {"title":"📦 Dia do Desapego","start":"2026-12-31","color":"#E91E8C","textColor":"#fff"},
+    ]
+    eventos_filtrados = [
+        e for e in eventos_cal + _EVENTOS_CDP_2026
+        if e.get("extendedProps", {}).get("tipo", "evento") in tipos_sel
+        or "extendedProps" not in e  # eventos fixos passam sempre
+    ]
+
+
+    # ── Renderiza calendário ─────────────────────────────────────────────────
+    cal_opts = {
+        "initialView": "dayGridMonth",
+        "locale": "pt-br",
+        "height": 650,
+        "headerToolbar": {
+            "left":   "today prev,next",
+            "center": "title",
+            "right":  "dayGridMonth,listMonth",
+        },
+        "buttonText": {
+            "today":     "Hoje",
+            "month":     "Mês",
+            "list":      "Lista",
+        },
+        "editable":   False,
+        "selectable": True,
+        "dayMaxEvents": 3,
+        "eventTimeFormat": {"hour": "numeric", "minute": "2-digit", "meridiem": False},
+    }
+
+    custom_css = """
+        .fc-toolbar-title { font-size: 1rem !important; font-weight: 700; }
+        .fc-daygrid-event { border-radius: 4px !important; font-size: 11px !important; }
+        .fc-list-event-title { font-size: 13px !important; }
+        .fc th { font-size: 11px !important; letter-spacing: 0.5px; }
+    """
+
+    resultado = st_calendar(
+        events=eventos_filtrados,
+        options=cal_opts,
+        custom_css=custom_css,
+        key="calendario_di",
+    )
+
+    # ── Detalhe ao clicar num evento ─────────────────────────────────────────
+    if resultado and resultado.get("eventClick"):
+        ev = resultado["eventClick"].get("event", {})
+        titulo_ev = ev.get("title", "")
+        start_ev  = ev.get("start", "")
+        props     = ev.get("extendedProps", {})
+        tipo_ev   = props.get("tipo", "")
+
+        with st.expander(f"📌 {titulo_ev}", expanded=True):
+            st.markdown(f"**Data:** {start_ev[:10] if start_ev else '—'}")
+            st.markdown(f"**Tipo:** {tipo_ev.capitalize()}")
+            if props.get("status"):
+                st.markdown(f"**Status:** {props['status']}")
 
 
 elif menu == "Plano DI 2026":
