@@ -2777,14 +2777,14 @@ elif menu == "Almoço CDP":
                 _elems = []
                 _elems.append(_RLSpacer(1, 0.15*_rl_cm))
                 _elems.append(_RLPar("Lista de Confirmados", _st_titulo))
-                _elems.append(_RLPar(f"Almoco CDP &nbsp;&mdash;&nbsp; {mes_r}", _st_evento))
+                _elems.append(_RLPar(f"Almoço CDP &nbsp;&mdash;&nbsp; {mes_r}", _st_evento))
                 _elems.append(_RLSpacer(1, 0.35*_rl_cm))
                 _elems.append(_RLHR(width="100%", thickness=0.8,
                                     color=_GRAY_LINE, spaceAfter=6))
 
                 # ── Tabela ────────────────────────────────────────────────
                 _cw = [_CW * 0.37, _CW * 0.31, _CW * 0.32]
-                _data = [["Nome", "Cargo / Funcao", "Empresa"]]
+                _data = [["NOME", "CARGO / FUNÇÃO", "EMPRESA"]]
 
                 for _, _row in df_c.sort_values("nome").iterrows():
                     _nome = str(_row.get("nome", "")).upper()
