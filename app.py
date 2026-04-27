@@ -1693,8 +1693,6 @@ if menu == "Painel Geral":
 
 
 elif menu == "Calendário":
-    from streamlit_calendar import calendar as st_calendar
-
     page_header("Calendário DI", "Prazos, follow-ups e eventos num só lugar.")
 
     # ── Busca dados das três fontes ──────────────────────────────────────────
@@ -1898,54 +1896,165 @@ elif menu == "Calendário":
     ]
 
 
-    # ── Renderiza calendário ─────────────────────────────────────────────────
-    cal_opts = {
-        "initialView": "dayGridMonth",
-        "locale": "pt-br",
-        "height": 650,
-        "headerToolbar": {
-            "left":   "today prev,next",
-            "center": "title",
-            "right":  "dayGridMonth,listMonth",
-        },
-        "buttonText": {
-            "today":     "Hoje",
-            "month":     "Mês",
-            "list":      "Lista",
-        },
-        "editable":   False,
-        "selectable": True,
-        "dayMaxEvents": 3,
-        "eventTimeFormat": {"hour": "numeric", "minute": "2-digit", "meridiem": False},
-    }
+    # ── Renderiza calendário em grade mensal ─────────────────────────────────
+    import calendar as _cal_mod
+    _cal_mod.setfirstweekday(0)  # segunda-feira primeiro
 
-    custom_css = """
-        .fc-toolbar-title { font-size: 1rem !important; font-weight: 700; }
-        .fc-daygrid-event { border-radius: 4px !important; font-size: 11px !important; }
-        .fc-list-event-title { font-size: 13px !important; }
-        .fc th { font-size: 11px !important; letter-spacing: 0.5px; }
-    """
+    # Navegação de mês
+    _hoje = datetime.today()
+    if "cal_ano" not in st.session_state:
+        st.session_state.cal_ano = _hoje.year
+    if "cal_mes" not in st.session_state:
+        st.session_state.cal_mes = _hoje.month
 
-    resultado = st_calendar(
-        events=eventos_filtrados,
-        options=cal_opts,
-        custom_css=custom_css,
-        key="calendario_di",
+    _nav1, _nav2, _nav3, _nav4 = st.columns([1,1,4,1])
+    with _nav1:
+        if st.button("◀", key="cal_prev"):
+            if st.session_state.cal_mes == 1:
+                st.session_state.cal_mes = 12; st.session_state.cal_ano -= 1
+            else:
+                st.session_state.cal_mes -= 1
+    with _nav2:
+        if st.button("▶", key="cal_next"):
+            if st.session_state.cal_mes == 12:
+                st.session_state.cal_mes = 1; st.session_state.cal_ano += 1
+            else:
+                st.session_state.cal_mes += 1
+    with _nav3:
+        _MESES_PT = ["","Janeiro","Fevereiro","Março","Abril","Maio","Junho",
+                     "Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"]
+        st.markdown(
+            f'<h3 style="margin:0;padding:4px 0;">{_MESES_PT[st.session_state.cal_mes]} {st.session_state.cal_ano}</h3>',
+            unsafe_allow_html=True
+        )
+    with _nav4:
+        if st.button("Hoje", key="cal_hoje"):
+            st.session_state.cal_ano = _hoje.year; st.session_state.cal_mes = _hoje.month
+
+    _ano_v, _mes_v = st.session_state.cal_ano, st.session_state.cal_mes
+
+    # Indexa eventos filtrados por data (só os com "start" de dia único / primeiro dia)
+    from collections import defaultdict
+    _evs_por_dia = defaultdict(list)
+    for _ev in eventos_filtrados:
+        _start = _ev.get("start","")[:10]
+        if not _start: continue
+        try:
+            from datetime import date as _date
+            _d = _date.fromisoformat(_start)
+            if _d.year == _ano_v and _d.month == _mes_v:
+                if not _ev.get("display") == "background":
+                    _evs_por_dia[_d.day].append(_ev)
+        except Exception:
+            pass
+
+    # Eventos de fundo (campanhas mensais) para o mês
+    _bg_evs = []
+    for _ev in eventos_filtrados:
+        if _ev.get("display") == "background":
+            _s = _ev.get("start","")[:10]
+            _e = _ev.get("end","")[:10] if _ev.get("end") else _s
+            try:
+                from datetime import date as _date
+                _ds = _date.fromisoformat(_s)
+                _de = _date.fromisoformat(_e)
+                _ref = _date(_ano_v, _mes_v, 1)
+                import calendar as _cm2
+                _last = _date(_ano_v, _mes_v, _cm2.monthrange(_ano_v, _mes_v)[1])
+                if _ds <= _last and _de >= _ref:
+                    _bg_evs.append(_ev)
+            except Exception:
+                pass
+
+    # Grade do calendário
+    _DIAS_SEMANA = ["Seg","Ter","Qua","Qui","Sex","Sáb","Dom"]
+    _cols_header = st.columns(7)
+    for _i, _dn in enumerate(_DIAS_SEMANA):
+        _cols_header[_i].markdown(
+            f'<div style="text-align:center;font-size:11px;font-weight:700;'
+            f'letter-spacing:1px;color:rgba(255,255,255,0.4);padding:4px 0;">{_dn}</div>',
+            unsafe_allow_html=True
+        )
+
+    _semanas = _cal_mod.monthcalendar(_ano_v, _mes_v)
+    for _semana in _semanas:
+        _cols_dias = st.columns(7)
+        for _col_i, _dia in enumerate(_semana):
+            with _cols_dias[_col_i]:
+                if _dia == 0:
+                    st.markdown('<div style="min-height:80px;"></div>', unsafe_allow_html=True)
+                    continue
+                _eh_hoje = (_dia == _hoje.day and _mes_v == _hoje.month and _ano_v == _hoje.year)
+                _num_style = (
+                    'background:#E31D24;color:#fff;border-radius:50%;'
+                    'width:22px;height:22px;display:inline-flex;align-items:center;'
+                    'justify-content:center;font-weight:700;font-size:12px;'
+                ) if _eh_hoje else (
+                    'color:rgba(255,255,255,0.7);font-size:12px;font-weight:600;'
+                )
+                _evs_dia = _evs_por_dia.get(_dia, [])
+                _evs_html = ""
+                for _e in _evs_dia[:3]:
+                    _cor = _e.get("color","#888")
+                    _tit = _e.get("title","")
+                    _tit_short = _tit[:22] + "…" if len(_tit) > 22 else _tit
+                    _evs_html += (
+                        f'<div style="background:{_cor};color:#fff;border-radius:3px;'
+                        f'font-size:9px;padding:1px 4px;margin-top:2px;'
+                        f'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" '
+                        f'title="{_tit}">{_tit_short}</div>'
+                    )
+                if len(_evs_dia) > 3:
+                    _evs_html += f'<div style="font-size:9px;color:rgba(255,255,255,0.4);margin-top:1px;">+{len(_evs_dia)-3} mais</div>'
+                st.markdown(
+                    f'<div style="border:1px solid rgba(255,255,255,0.07);border-radius:6px;'
+                    f'padding:4px 5px;min-height:80px;background:rgba(255,255,255,0.02);">'
+                    f'<div style="{_num_style}">{_dia}</div>'
+                    f'{_evs_html}</div>',
+                    unsafe_allow_html=True
+                )
+
+    # Campanhas do mês (fundo)
+    if _bg_evs:
+        st.markdown("---")
+        st.markdown('<p style="font-size:10px;letter-spacing:1.5px;color:rgba(255,255,255,0.3);font-weight:600;">CAMPANHAS DO MÊS</p>', unsafe_allow_html=True)
+        for _ev in _bg_evs:
+            _cor = _ev.get("color","#888")
+            _tit = _ev.get("title","")
+            st.markdown(
+                f'<div style="display:inline-flex;align-items:center;gap:6px;'
+                f'background:{_cor}22;border:1px solid {_cor}55;border-radius:6px;'
+                f'padding:4px 10px;margin:2px 4px 2px 0;font-size:12px;">'
+                f'<div style="width:8px;height:8px;border-radius:50%;background:{_cor};"></div>'
+                f'{_tit}</div>',
+                unsafe_allow_html=True
+            )
+
+    # Lista de eventos do mês
+    st.markdown("---")
+    st.markdown('<p style="font-size:10px;letter-spacing:1.5px;color:rgba(255,255,255,0.3);font-weight:600;">TODOS OS EVENTOS DO MÊS</p>', unsafe_allow_html=True)
+    _todos_mes = sorted(
+        [(_date.fromisoformat(e["start"][:10]), e) for e in eventos_filtrados
+         if not e.get("display") == "background"
+         and len(e.get("start","")) >= 10
+         and _date.fromisoformat(e["start"][:10]).year == _ano_v
+         and _date.fromisoformat(e["start"][:10]).month == _mes_v],
+        key=lambda x: x[0]
     )
-
-    # ── Detalhe ao clicar num evento ─────────────────────────────────────────
-    if resultado and resultado.get("eventClick"):
-        ev = resultado["eventClick"].get("event", {})
-        titulo_ev = ev.get("title", "")
-        start_ev  = ev.get("start", "")
-        props     = ev.get("extendedProps", {})
-        tipo_ev   = props.get("tipo", "")
-
-        with st.expander(f"📌 {titulo_ev}", expanded=True):
-            st.markdown(f"**Data:** {start_ev[:10] if start_ev else '—'}")
-            st.markdown(f"**Tipo:** {tipo_ev.capitalize()}")
-            if props.get("status"):
-                st.markdown(f"**Status:** {props['status']}")
+    if _todos_mes:
+        for _dt, _ev in _todos_mes:
+            _cor = _ev.get("color","#888")
+            st.markdown(
+                f'<div style="display:flex;align-items:center;gap:10px;'
+                f'padding:5px 0;border-bottom:1px solid rgba(255,255,255,0.05);">'
+                f'<div style="min-width:32px;font-size:11px;font-weight:700;color:{_cor};">{_dt.day:02d}</div>'
+                f'<div style="width:6px;height:6px;border-radius:50%;background:{_cor};flex-shrink:0;"></div>'
+                f'<div style="font-size:12px;color:rgba(255,255,255,0.8);">{_ev.get("title","")}</div>'
+                f'</div>',
+                unsafe_allow_html=True
+            )
+    else:
+        st.markdown('<p style="color:rgba(255,255,255,0.3);font-size:12px;">Nenhum evento pontual este mês.</p>', unsafe_allow_html=True)
 
 
 elif menu == "Plano DI 2026":
