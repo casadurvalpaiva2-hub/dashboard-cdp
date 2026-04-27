@@ -1695,6 +1695,59 @@ if menu == "Painel Geral":
 elif menu == "Calendário":
     page_header("Calendário DI", "Prazos, follow-ups e eventos num só lugar.")
 
+    # ── Garante tabela de eventos personalizados e carrega dados ────────────
+    run_exec("""
+        CREATE TABLE IF NOT EXISTS Eventos_Calendario (
+            id          SERIAL PRIMARY KEY,
+            titulo      TEXT NOT NULL,
+            data_inicio DATE NOT NULL,
+            data_fim    DATE,
+            cor         TEXT DEFAULT '#8B5CF6',
+            criado_por  TEXT,
+            criado_em   TIMESTAMPTZ DEFAULT NOW()
+        )
+    """)
+
+    # Botão para abrir formulário de novo evento
+    _col_btn_ev, _col_sp = st.columns([2, 6])
+    with _col_btn_ev:
+        if st.button("＋ Adicionar evento", key="btn_add_evento", use_container_width=True, type="primary"):
+            st.session_state["_cal_add_open"] = not st.session_state.get("_cal_add_open", False)
+
+    if st.session_state.get("_cal_add_open", False):
+        with st.form("form_novo_evento_cal", clear_on_submit=True):
+            _ev_c1, _ev_c2 = st.columns(2)
+            _ev_titulo   = _ev_c1.text_input("Título do evento *")
+            _ev_cor_sel  = _ev_c2.selectbox("Cor", [
+                ("🟣 Roxo",    "#8B5CF6"),
+                ("🔵 Azul",    "#378ADD"),
+                ("🟢 Verde",   "#1D9E75"),
+                ("🟡 Amarelo", "#D97706"),
+                ("🔴 Vermelho","#DC2626"),
+                ("🩷 Rosa",    "#E91E8C"),
+            ], format_func=lambda x: x[0])
+            _ev_data_ini = _ev_c1.date_input("Data início *")
+            _ev_data_fim = _ev_c2.date_input("Data fim (opcional)", value=None)
+            _ev_submit   = st.form_submit_button("Salvar evento", use_container_width=True, type="primary")
+            if _ev_submit:
+                if not _ev_titulo:
+                    st.error("Informe o título do evento.")
+                else:
+                    _cor_hex = _ev_cor_sel[1]
+                    _nome_user = (st.session_state.user_data or {}).get("nome","")
+                    run_exec(
+                        """INSERT INTO Eventos_Calendario (titulo, data_inicio, data_fim, cor, criado_por)
+                           VALUES (%s, %s, %s, %s, %s)""",
+                        (_ev_titulo, _ev_data_ini,
+                         _ev_data_fim if _ev_data_fim else None,
+                         _cor_hex, _nome_user)
+                    )
+                    st.success("✅ Evento adicionado!")
+                    st.session_state["_cal_add_open"] = False
+                    st.rerun()
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
     # ── Busca dados das três fontes ──────────────────────────────────────────
     df_acoes_cal = run_query("""
         SELECT tarefa, data_prevista, status, responsavel
@@ -1718,8 +1771,29 @@ elif menu == "Calendário":
         ORDER BY mes_referencia
     """)
 
-    # ── Monta lista de eventos FullCalendar ──────────────────────────────────
+    # ── Carrega eventos personalizados do banco ──────────────────────────────
+    df_eventos_db = run_query("SELECT titulo, data_inicio, data_fim, cor FROM Eventos_Calendario ORDER BY data_inicio")
+
+    # ── Monta lista de eventos ──────────────────────────────────────────────
     eventos_cal = []
+
+    # 🟣 Eventos personalizados (adicionados pelos usuários)
+    for _, row in df_eventos_db.iterrows():
+        try:
+            dt_s = str(row["data_inicio"])[:10]
+            dt_e = str(row["data_fim"])[:10] if row.get("data_fim") and str(row["data_fim"]) != "None" else None
+            ev = {
+                "title": str(row["titulo"]),
+                "start": dt_s,
+                "color": str(row.get("cor","#8B5CF6")),
+                "textColor": "#fff",
+                "extendedProps": {"tipo": "evento"},
+            }
+            if dt_e and dt_e != dt_s:
+                ev["end"] = dt_e
+            eventos_cal.append(ev)
+        except Exception:
+            pass
 
     # 🔴 / 🟡 Ações com prazo
     for _, row in df_acoes_cal.iterrows():
@@ -1907,28 +1981,35 @@ elif menu == "Calendário":
     if "cal_mes" not in st.session_state:
         st.session_state.cal_mes = _hoje.month
 
-    _nav1, _nav2, _nav3, _nav4 = st.columns([1,1,4,1])
-    with _nav1:
-        if st.button("◀", key="cal_prev"):
-            if st.session_state.cal_mes == 1:
-                st.session_state.cal_mes = 12; st.session_state.cal_ano -= 1
-            else:
-                st.session_state.cal_mes -= 1
-    with _nav2:
-        if st.button("▶", key="cal_next"):
-            if st.session_state.cal_mes == 12:
-                st.session_state.cal_mes = 1; st.session_state.cal_ano += 1
-            else:
-                st.session_state.cal_mes += 1
-    with _nav3:
-        _MESES_PT = ["","Janeiro","Fevereiro","Março","Abril","Maio","Junho",
-                     "Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"]
-        st.markdown(
-            f'<h3 style="margin:0;padding:4px 0;">{_MESES_PT[st.session_state.cal_mes]} {st.session_state.cal_ano}</h3>',
-            unsafe_allow_html=True
-        )
-    with _nav4:
-        if st.button("Hoje", key="cal_hoje"):
+    _MESES_PT = ["","Janeiro","Fevereiro","Março","Abril","Maio","Junho",
+                 "Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"]
+
+    # ── Barra de navegação centrada ───────────────────────────────────────────
+    _nav_col_l, _nav_col_c, _nav_col_r = st.columns([1, 3, 1])
+    with _nav_col_c:
+        _nc1, _nc2, _nc3, _nc4, _nc5 = st.columns([1, 1, 4, 1, 1])
+        with _nc1:
+            if st.button("◀", key="cal_prev", use_container_width=True):
+                if st.session_state.cal_mes == 1:
+                    st.session_state.cal_mes = 12; st.session_state.cal_ano -= 1
+                else:
+                    st.session_state.cal_mes -= 1
+        with _nc3:
+            st.markdown(
+                f'<div style="text-align:center;font-size:20px;font-weight:800;'
+                f'letter-spacing:-0.5px;padding:4px 0;">' +
+                f'{_MESES_PT[st.session_state.cal_mes]} {st.session_state.cal_ano}</div>',
+                unsafe_allow_html=True
+            )
+        with _nc5:
+            if st.button("▶", key="cal_next", use_container_width=True):
+                if st.session_state.cal_mes == 12:
+                    st.session_state.cal_mes = 1; st.session_state.cal_ano += 1
+                else:
+                    st.session_state.cal_mes += 1
+    with _nav_col_r:
+        st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
+        if st.button("Hoje", key="cal_hoje", use_container_width=True):
             st.session_state.cal_ano = _hoje.year; st.session_state.cal_mes = _hoje.month
 
     _ano_v, _mes_v = st.session_state.cal_ano, st.session_state.cal_mes
