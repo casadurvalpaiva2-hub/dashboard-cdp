@@ -1054,6 +1054,12 @@ def run_exec(query, params=()):
                     "(SELECT id FROM Logs ORDER BY id DESC LIMIT 1000)"
                 )
         conn.commit()
+        # Invalida caches de leitura para refletir alterações imediatamente
+        try:
+            run_query_cached.clear()
+            run_query_slow.clear()
+        except Exception:
+            pass
     except Exception as e:
         conn.rollback()
         st.error(f"Erro ao salvar: {e}")
@@ -1517,7 +1523,7 @@ if menu == "Painel Geral":
 
         # 1. Follow-ups vencidos
         try:
-            df_fu_venc = run_query(
+            df_fu_venc = run_query_cached(
                 "SELECT p.nome_instituicao, r.proxima_acao_data, "
                 "(CURRENT_DATE - r.proxima_acao_data::date) AS dias_atraso "
                 "FROM Registro_Relacionamento r JOIN Parceiro p ON r.id_parceiro=p.id_parceiro "
@@ -1571,7 +1577,7 @@ if menu == "Painel Geral":
 
         # 4. Doações sem tipo definido
         try:
-            df_sem_tipo = run_query(
+            df_sem_tipo = run_query_slow(
                 "SELECT COUNT(*) as n FROM Doacao "
                 "WHERE (tipo_doacao IS NULL OR tipo_doacao='' OR tipo_doacao='Selecione...') "
                 "AND EXTRACT(YEAR FROM data_doacao)=%s", (int(ano_sel),)
@@ -1629,7 +1635,7 @@ if menu == "Painel Geral":
         # BLOCO 4 — MAIORES DOADORES
         # ════════════════════════════════════════════════════════════════════════
         section("Maiores doadores do ano")
-        df_top = run_query(
+        df_top = run_query_slow(
             "SELECT p.nome_instituicao AS \"Parceiro\", SUM(d.valor_estimado) AS \"Total\", COUNT(*) AS \"Repasses\" "
             "FROM Doacao d JOIN Parceiro p ON d.id_parceiro=p.id_parceiro "
             "WHERE EXTRACT(YEAR FROM d.data_doacao)=%s AND d.tipo_doacao IN ('Financeira','Projetos') "
@@ -1749,14 +1755,14 @@ elif menu == "Calendário":
     st.markdown("<br>", unsafe_allow_html=True)
 
     # ── Busca dados das três fontes ──────────────────────────────────────────
-    df_acoes_cal = run_query("""
+    df_acoes_cal = run_query_cached("""
         SELECT tarefa, data_prevista, status, responsavel
         FROM Demandas_Estrategicas
         WHERE data_prevista IS NOT NULL
           AND status NOT IN ('REALIZADO')
     """)
 
-    df_followup_cal = run_query("""
+    df_followup_cal = run_query_slow("""
         SELECT rr.proxima_acao_data, p.nome_instituicao,
                rr.descricao_do_que_foi_feito
         FROM Registro_Relacionamento rr
@@ -1765,14 +1771,14 @@ elif menu == "Calendário":
           AND rr.proxima_acao_data >= CURRENT_DATE - INTERVAL '30 days'
     """)
 
-    df_almoco_cal = run_query("""
+    df_almoco_cal = run_query_slow("""
         SELECT DISTINCT mes_referencia
         FROM Convidados_Almoco
         ORDER BY mes_referencia
     """)
 
     # ── Carrega eventos personalizados do banco ──────────────────────────────
-    df_eventos_db = run_query("SELECT titulo, data_inicio, data_fim, cor FROM Eventos_Calendario ORDER BY data_inicio")
+    df_eventos_db = run_query_cached("SELECT titulo, data_inicio, data_fim, cor FROM Eventos_Calendario ORDER BY data_inicio")
 
     # ── Monta lista de eventos ──────────────────────────────────────────────
     eventos_cal = []
@@ -2144,7 +2150,7 @@ elif menu == "Plano DI 2026":
     eh_gerente_plano = st.session_state.user_data["perfil"] == "gerencia"
 
     # ── Dados base ──────────────────────────────────────────────────────────
-    df_prog = run_query("SELECT * FROM View_Progresso_PlanoAnual ORDER BY meta_2026 DESC")
+    df_prog = run_query_slow("SELECT * FROM View_Progresso_PlanoAnual ORDER BY meta_2026 DESC")
     df_hist = run_query("""
         SELECT rc.mes_referencia, mf.nome_fonte, rc.valor_realizado,
                rc.observacao, rc.registrado_por, rc.data_registro
@@ -2285,528 +2291,235 @@ elif menu == "Plano DI 2026":
 
 
 elif menu == "Ações":
-    user = st.session_state.user_data
+    user      = st.session_state.user_data
     eh_gerente = user["perfil"] == "gerencia"
-    meu_setor = user["setor"]
-    meu_nome = user["nome"]
+    meu_setor  = user["setor"]
+    meu_nome   = user["nome"]
 
-    page_header("Centro de ações", "Tudo que está pendente — operação interna e relacionamento.")
+    page_header("Centro de Ações", "Gerencie demandas, acompanhe a equipe e veja follow-ups de CRM.")
 
-    if _is_gerente():
-        tab_mim, tab_op, tab_rel, tab_senha, tab_users = st.tabs(["Pra mim", "Planejamento operacional", "Relacionamento", "🔑 Minha Senha", "👥 Usuários"])
-    else:
-        tab_mim, tab_op, tab_rel, tab_senha = st.tabs(["Pra mim", "Planejamento operacional", "Relacionamento", "🔑 Minha Senha"])
-        tab_users = None
+    # ── Reset diário de tarefas recorrentes ──────────────────────────────────
+    run_exec("""
+        UPDATE Demandas_Estrategicas
+        SET status = 'PENDENTE'
+        WHERE is_diaria = 1
+          AND status = 'REALIZADO'
+          AND data_ultima_conclusao::date < CURRENT_DATE
+    """)
 
-    # ========== ABA 1: PRA MIM (inbox unificado) ==========
-    with tab_mim:
-        # Busca tudo da view unificada
-        df_acoes = run_query("SELECT * FROM View_Acoes_Unificadas")
-
-        if df_acoes.empty:
-            empty_state("🎉", "Tudo em dia!", "Nenhuma ação pendente no momento.")
-        else:
-            # Filtrar o que é MEU: setor bate OU responsavel bate OU gerência vê tudo
-            if eh_gerente:
-                df_mim = df_acoes.copy()
-            else:
-                mask_setor = df_acoes["setor"] == meu_setor
-                mask_resp  = df_acoes["responsavel"] == meu_nome
-                mask_livre = df_acoes["responsavel"].isna() & df_acoes["setor"].isna()
-                df_mim = df_acoes[mask_setor | mask_resp | mask_livre].copy()
-
-            # Ordenar por prioridade real: situação + score
-            ordem_sit = {"🔴 ATRASADA": 1, "🟡 URGENTE": 2, "🟢 ESTA SEMANA": 3, "⚪ FUTURA": 4, "⚪ SEM PRAZO": 5}
-            df_mim["_ord"] = df_mim["situacao"].map(ordem_sit).fillna(9)
-            df_mim = df_mim.sort_values(by=["_ord", "score"], ascending=[True, False])
-
-            # KPIs — via Design System
-            n_atrasadas = int((df_mim["situacao"] == "🔴 ATRASADA").sum())
-            kpi_row([
-                {"label": "Total",        "value": len(df_mim)},
-                {"label": "Atrasadas",    "value": n_atrasadas, "accent": n_atrasadas > 0},
-                {"label": "Urgentes",     "value": int((df_mim["situacao"] == "🟡 URGENTE").sum())},
-                {"label": "Esta semana",  "value": int((df_mim["situacao"] == "🟢 ESTA SEMANA").sum())},
-            ])
-
-            section("Filtrar")
-            fc1, fc2 = st.columns(2)
-            fonte_fil = fc1.selectbox("Tipo",     ["TODOS", "DEMANDA", "TAREFA"], key="mim_fonte")
-            sit_fil   = fc2.selectbox("Situação", ["TODAS"] + list(ordem_sit.keys()), key="mim_sit")
-
-            df_view = df_mim.copy()
-            if fonte_fil != "TODOS":
-                df_view = df_view[df_view["fonte"] == fonte_fil]
-            if sit_fil != "TODAS":
-                df_view = df_view[df_view["situacao"] == sit_fil]
-
-            section(f"Ações ({len(df_view)})")
-
-            if df_view.empty:
-                empty_state("✨", "Nada aqui", "Nenhuma ação corresponde aos filtros.")
-            else:
-                # Lista com action_card do DS + botão de ação na coluna lateral
-                for _, a in df_view.iterrows():
-                    ci, cb = st.columns([6, 1])
-                    with ci:
-                        tom = situacao_to_tom(a["situacao"])
-                        extra = [(a["fonte"], "accent" if a["fonte"] == "DEMANDA" else "info")]
-
-                        meta_parts = []
-                        if pd.notna(a["data_prazo"]) and a["data_prazo"]:
-                            meta_parts.append(f"📅 <strong>{a['data_prazo']}</strong>")
-                        if pd.notna(a["setor"]) and a["setor"]:
-                            meta_parts.append(f"🏷️ {a['setor']}")
-                        if pd.notna(a["responsavel"]) and a["responsavel"]:
-                            meta_parts.append(f"👤 {a['responsavel']}")
-                        if pd.notna(a["parceiro"]) and a["parceiro"]:
-                            meta_parts.append(f"🏢 {a['parceiro']}")
-                        meta_parts.append(f"{int(a['score'])} pts")
-
-                        action_card(
-                            titulo=a["titulo"],
-                            meta_parts=meta_parts,
-                            tom=tom,
-                            situacao_badge=a["situacao"],
-                            extra_badges=extra,
-                        )
-                    with cb:
-                        st.write("")  # spacer para alinhar verticalmente
-                        if st.button("✅ Concluir", key=f"mim_ok_{a['id_uniforme']}", use_container_width=True):
-                            real_id = int(a["id_uniforme"][1:])
-                            if a["fonte"] == "DEMANDA":
-                                run_insert("UPDATE Demandas_Estrategicas SET status='REALIZADO', data_ultima_conclusao=CURRENT_TIMESTAMP WHERE id=?", (real_id,))
-                            else:
-                                run_insert("UPDATE Tarefas_Pendentes SET status='CONCLUIDA', data_conclusao=? WHERE id_tarefa=?",
-                                           (datetime.now().strftime("%Y-%m-%d"), real_id))
-                            st.toast("Concluído"); st.rerun()
-
-    # ========== ABA 2: PLANEJAMENTO OPERACIONAL (DEMANDAS) ==========
-    with tab_op:
-        # Captura dados do usuário logado
-        user = st.session_state.user_data
-        eh_gerente = user['perfil'] == 'gerencia'
-        meu_setor = user['setor']
-
-        # --- LÓGICA DE TAREFAS DIÁRIAS (RESET) ---
-        # Se a tarefa for diária e foi concluída em um dia anterior, volta para PENDENTE
-        run_insert("""
-            UPDATE Demandas_Estrategicas
-            SET status = 'PENDENTE'
-            WHERE is_diaria = 1
-              AND status = 'REALIZADO'
-              AND data_ultima_conclusao::date < CURRENT_DATE
-        """)
-
-        # 1. DEFINIÇÃO DOS DADOS (PITs)
-        dados_equipe = {
-            "MARKETING DIGITAL": {"Produção de Peças Avulsas": 2, "Edição de Vídeo/Reels": 3, "Gestão de Redes Sociais": 1, "Campanha Google Ads": 5, "Atualização de Site": 2},
-            "IMPRENSA": {"Redação de Release": 3, "Clipping de Projetos": 7, "Agendamento de Pauta": 2, "Artigos Institucionais": 5, "Boletim Informativo": 2},
-            "PROJETOS": {"Escrita de Novo Edital": 15, "Relatório de Prestação de Contas": 10, "Pesquisa de Editais": 5, "Inscrição em Prêmios": 7},
-            "GERÊNCIA": {"Manutenção de Parcerias": 7, "Análise de Relatórios": 2, "Planejamento Anual": 30, "Gestão de Equipe": 2}
-        }
-
-        # CSS das métricas e task-card já está no CSS_GLOBAL (topo do arquivo)
-
-        # 3. DASHBOARD FILTRADO
-        def contar_status_filtrado(status_nome):
-            try:
-                sql = f"SELECT COUNT(*) as total FROM Demandas_Estrategicas WHERE status = '{status_nome}'"
-                if not eh_gerente: sql += f" AND setor = '{meu_setor}'"
-                res = run_query(sql)
-                return res.iloc[0]['total'] if not res.empty else 0
-            except: return 0
-
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Pendentes", contar_status_filtrado('PENDENTE'))
-        c2.metric("Com barreira", contar_status_filtrado('BLOQUEADO'), delta_color="inverse")
-        c3.metric("Concluídas", contar_status_filtrado('REALIZADO'))
-
-        st.divider()
-
-        # 4. FORMULÁRIO DE CADASTRO
-        with st.expander("**NOVA SOLICITAÇÃO**", expanded=False):
-            col_a, col_b = st.columns(2)
-            with col_a:
-                setor_opcoes = list(dados_equipe.keys())
-                setor_sel = st.selectbox("Setor responsável:", setor_opcoes, index=setor_opcoes.index(meu_setor) if meu_setor in setor_opcoes else 0, disabled=not eh_gerente)
-                solicitante = st.text_input("SOLICITANTE", value=user['nome'])
-                data_p = st.date_input("Data prevista (Prazo):", datetime.now())
-            with col_b:
-                tarefa_sel = st.selectbox("O que precisa ser feito?", list(dados_equipe[setor_sel].keys()))
-                detalhes = st.text_input("Complemento/Descrição:")
-                nomes_equipe = [c["nome"] for c in CONTAS.values() if c["setor"] == setor_sel]
-                resp_opcoes = ["-- A definir --"] + sorted(nomes_equipe)
-                responsavel_sel = st.selectbox("Responsável direto (pessoa):", resp_opcoes)
-                is_diaria = st.checkbox("Tarefa diária")
-
-            st.write("**Prioridade (GUT):**")
-            g1, u1, t1 = st.columns(3)
-            g = g1.select_slider("Gravidade", [1,2,3,4,5], 3, key="g_d")
-            u = u1.select_slider("Urgência", [1,2,3,4,5], 3, key="u_d")
-            t = t1.select_slider("Tendência", [1,2,3,4,5], 3, key="t_d")
-
-            if st.button("Lançar demanda", use_container_width=True):
-                score = g * u * t
-                resp_final = None if responsavel_sel == "-- A definir --" else responsavel_sel
-                sql = """INSERT INTO Demandas_Estrategicas 
-                         (tarefa, setor, gravidade, urgencia, tendencia, score_gut, status, data_prevista, is_diaria, responsavel) 
-                         VALUES (?,?,?,?,?,?,'PENDENTE',?,?,?)"""
-                run_insert(sql, (f"[{tarefa_sel}] {detalhes} | POR: {solicitante}".upper(), 
-                                setor_sel, g, u, t, score, data_p.strftime('%Y-%m-%d'), 1 if is_diaria else 0, resp_final))
-                st.success("Registrado!"); st.rerun()
-
-        # 5. FILA DE TRABALHO COMPACTA
-        section("Fila de trabalho")
-    
-        query_sql = "SELECT * FROM Demandas_Estrategicas WHERE status IN ('PENDENTE', 'BLOQUEADO')"
-        params = []
+    # ── KPI rápido ───────────────────────────────────────────────────────────
+    def _cnt(status):
+        sql = f"SELECT COUNT(*) AS n FROM Demandas_Estrategicas WHERE status = '{status}'"
         if not eh_gerente:
-            query_sql += " AND setor = ?"
-            params.append(meu_setor)
-    
-        demandas = run_query(query_sql + " ORDER BY status DESC, score_gut DESC", tuple(params))
+            sql += f" AND setor = '{meu_setor}'"
+        r = run_query(sql)
+        return int(r.iloc[0]["n"]) if not r.empty else 0
 
-        if not demandas.empty:
-            for _, row in demandas.iterrows():
-                is_b = row['status'] == 'BLOQUEADO'
-                cor = "#7030a0" if is_b else ("#FF4B4B" if row['score_gut'] >= 80 else "#FFA500" if row['score_gut'] >= 40 else "#28A745")
-            
-                with st.container():
-                    # NOVIDADE: 3 colunas perfeitamente alinhadas ao centro (requer Streamlit atualizado)
-                    col_chk, col_info, col_acao = st.columns([0.5, 7.5, 2], vertical_alignment="center")
-                
-                    with col_chk:
-                        marcar_feito = st.checkbox("", key=f"chk_{row['id']}", help="Marcar como concluída")
-                        if marcar_feito:
-                            run_insert("UPDATE Demandas_Estrategicas SET status = 'REALIZADO', data_ultima_conclusao = CURRENT_TIMESTAMP WHERE id = ?", (row['id'],))
-                            st.toast("Tarefa concluída ✅!")
-                            st.rerun()
-                
-                    with col_info:
-                        _dc = row['data_criacao']
-                        dt_cad = (_dc if hasattr(_dc, 'strftime') else datetime.strptime(str(_dc), '%Y-%m-%d %H:%M:%S')).strftime('%d/%m')
-                        dt_prev = row['data_prevista'] if row['data_prevista'] else "---"
-                        tag_d = '<span class="tag-diaria">DIÁRIA</span>' if row['is_diaria'] else ""
-                        prefixo = '🚨 <b style="color:#FF4B4B;">[BLOQUEADO]</b> ' if is_b else ''
-                    
-                        st.markdown(f"""
-                            <div class="task-card" style="border-left-color: {cor};">
-                                <div class="task-title">{prefixo}{row['tarefa']} {tag_d}</div>
-                                <div class="task-meta">Cadastrada: {dt_cad} | <b>Prazo: {dt_prev}</b> | Setor: {row['setor']}</div>
-                            </div>
-                        """, unsafe_allow_html=True)
-                
-                    with col_acao:
-                        # Pontuação e botão agrupados na direita
-                        st.markdown(f"<div style='text-align:center; font-size:15px; font-weight:bold; margin-bottom:5px;'>{row['score_gut']} pts</div>", unsafe_allow_html=True)
-                    
-                        label_btn = "Liberar" if is_b else "Pedir ajuda"
-                        tipo_btn = "primary" if is_b else "secondary"
-                    
-                        if st.button(label_btn, key=f"btn_{row['id']}", type=tipo_btn, use_container_width=True):
-                            novo_st = 'PENDENTE' if is_b else 'BLOQUEADO'
-                            run_insert("UPDATE Demandas_Estrategicas SET status = ? WHERE id = ?", (novo_st, row['id']))
-                            st.rerun()
-            
-                st.write("") # Dá um pequeno respiro invisível entre uma linha e outra
-        else:
-            st.info("Nenhuma demanda pendente para o seu setor no momento.")
+    _pend = _cnt("PENDENTE")
+    _bloq = _cnt("BLOQUEADO")
+    _real = _cnt("REALIZADO")
 
-        # 6. HISTÓRICO
-        with st.expander("Realizadas"):
-            sql_hist = "SELECT tarefa, data_ultima_conclusao as 'Concluído em' FROM Demandas_Estrategicas WHERE status = 'REALIZADO'"
-            if not eh_gerente: sql_hist += f" AND setor = '{meu_setor}'"
-            hist = run_query(sql_hist + " ORDER BY data_ultima_conclusao DESC LIMIT 10")
-            st.table(hist)
+    kpi_row([
+        {"label": "Pendentes",    "value": _pend, "accent": _pend > 0},
+        {"label": "Com barreira", "value": _bloq, "accent": _bloq > 0},
+        {"label": "Concluídas",  "value": _real},
+    ])
 
-        # 7. ESTATÍSTICAS DE PRODUTIVIDADE (O toque final elegante)
-        st.markdown("<br><br>", unsafe_allow_html=True)
-        st.divider()
-    
-        # Título sutil
-        st.markdown("<p style='opacity:0.5; font-size:11px; text-align:center; letter-spacing:2px;'>MÉTRICAS DE ENTREGA MENSAL</p>", unsafe_allow_html=True)
-    
-        # Query para contar tarefas realizadas por mês/ano
-        # Filtramos por setor se o usuário não for gerente
-        sql_stats = """
-            SELECT TO_CHAR(data_ultima_conclusao, 'MM/YYYY') AS "MesAno", COUNT(*) AS "Total"
-            FROM Demandas_Estrategicas
-            WHERE status = 'REALIZADO'
-              AND data_ultima_conclusao IS NOT NULL
-        """
-        if not eh_gerente:
-            sql_stats += f" AND setor = '{meu_setor}'"
-    
-        sql_stats += " GROUP BY TO_CHAR(data_ultima_conclusao, 'MM/YYYY') ORDER BY MIN(data_ultima_conclusao) DESC LIMIT 6"
-    
-        df_stats = run_query(sql_stats)
-    
-        if not df_stats.empty:
-            # Criamos colunas dinâmicas para as estatísticas
-            num_stats = len(df_stats)
-            cols_stats = st.columns(num_stats)
-        
-            for i, row in df_stats.iterrows():
-                with cols_stats[i]:
-                    # Estilo de mini-card minimalista
-                    st.markdown(f"""
-                        <div style="text-align:center; padding: 5px; border-left: 1px solid rgba(255,255,255,0.1);">
-                            <div style="font-size:10px; opacity:0.6; text-transform: uppercase;">{row['MesAno']}</div>
-                            <div style="font-size:22px; font-weight:800; color:#28A745; margin: -5px 0;">{row['Total']}</div>
-                            <div style="font-size:9px; opacity:0.4;">TAREFAS FEITAS</div>
-                        </div>
-                    """, unsafe_allow_html=True)
-        else:
-            st.markdown("<p style='opacity:0.4; font-size:10px; text-align:center;'>Ainda não há dados de conclusão para gerar estatísticas.</p>", unsafe_allow_html=True)
-        
+    # ── Formulário de nova demanda ───────────────────────────────────────────
+    dados_equipe = {
+        "MARKETING DIGITAL": ["Produção de Peças Avulsas", "Edição de Vídeo/Reels", "Gestão de Redes Sociais", "Campanha Google Ads", "Atualização de Site"],
+        "IMPRENSA":          ["Redação de Release", "Clipping de Projetos", "Agendamento de Pauta", "Artigos Institucionais", "Boletim Informativo"],
+        "PROJETOS":          ["Escrita de Novo Edital", "Relatório de Prestação de Contas", "Pesquisa de Editais", "Inscrição em Prêmios"],
+        "GERÊNCIA":          ["Manutenção de Parcerias", "Análise de Relatórios", "Planejamento Anual", "Gestão de Equipe"],
+    }
 
-
-    # ========== ABA 3: RELACIONAMENTO (CRM) ==========
-    with tab_rel:
-        section("Tarefas de CRM pendentes")
-        st.caption("Agradecimentos, follow-ups e ações que precisam ser feitas.")
-
-        # Buscar todas as tarefas abertas
-        df_tarefas = run_query("SELECT * FROM View_Tarefas_Abertas")
-
-        if df_tarefas.empty:
-            empty_state("✨", "Nenhuma tarefa pendente", "Nenhum follow-up nem agradecimento em aberto.")
-        else:
-            total     = len(df_tarefas)
-            atrasadas = len(df_tarefas[df_tarefas['Situacao'].str.contains('ATRASADA', na=False)])
-            urgentes  = len(df_tarefas[df_tarefas['Situacao'].str.contains('URGENTE',  na=False)])
-            semana    = len(df_tarefas[df_tarefas['Situacao'].str.contains('ESTA SEMANA', na=False)])
-
-            kpi_row([
-                {"label": "Total",       "value": total},
-                {"label": "Atrasadas",   "value": atrasadas, "accent": atrasadas > 0},
-                {"label": "Urgentes",    "value": urgentes},
-                {"label": "Esta semana", "value": semana},
-            ])
-
-            section("Filtrar")
-            col_f1, col_f2 = st.columns(2)
-            tipo_filtro = col_f1.selectbox(
-                "Tipo", ["TODOS"] + sorted(df_tarefas['tipo_tarefa'].unique().tolist()),
-                key="rel_tipo"
+    with st.expander("＋ Nova demanda", expanded=False):
+        with st.form("form_nova_demanda", clear_on_submit=True):
+            _fc1, _fc2, _fc3 = st.columns(3)
+            _setor_opcoes = list(dados_equipe.keys())
+            _setor_sel = _fc1.selectbox(
+                "Setor", _setor_opcoes,
+                index=_setor_opcoes.index(meu_setor) if meu_setor in _setor_opcoes else 0,
+                disabled=not eh_gerente,
             )
-            # Remove emojis das situações se existirem na view antiga
-            sit_opcoes = ["TODAS"] + sorted(df_tarefas['Situacao'].dropna().unique().tolist())
-            situacao_filtro = col_f2.selectbox("Situação", sit_opcoes, key="rel_sit")
+            _tarefa_sel  = _fc2.selectbox("Tipo de tarefa", dados_equipe[_setor_sel])
+            _data_p      = _fc3.date_input("Prazo", datetime.now())
 
-            df_filtrado = df_tarefas.copy()
-            if tipo_filtro != "TODOS":
-                df_filtrado = df_filtrado[df_filtrado['tipo_tarefa'] == tipo_filtro]
-            if situacao_filtro != "TODAS":
-                df_filtrado = df_filtrado[df_filtrado['Situacao'] == situacao_filtro]
-
-            section(f"Tarefas ({len(df_filtrado)})")
-
-            if df_filtrado.empty:
-                empty_state("🔍", "Nenhuma tarefa nos filtros atuais", "Ajuste os filtros acima.")
-            else:
-                for _, tarefa in df_filtrado.iterrows():
-                    col_info, col_acao = st.columns([6, 1])
-
-                    with col_info:
-                        situacao_clean = str(tarefa['Situacao']).replace('🔴', '').replace('🟡', '').replace('🟢', '').replace('⚪', '').strip()
-                        tom = situacao_to_tom(situacao_clean)
-
-                        meta_parts = []
-                        if tarefa['Parceiro']:
-                            meta_parts.append(f"<strong>Parceiro:</strong> {tarefa['Parceiro']}")
-                        if tarefa['Contato']:
-                            meta_parts.append(f"Contato: {tarefa['Contato']}")
-                        meta_parts.append(f"Prazo: <strong>{tarefa['data_prazo']}</strong> ({tarefa['Dias_Ate_Prazo']} dias)")
-                        if tarefa['prioridade']:
-                            meta_parts.append(f"Prioridade: {tarefa['prioridade']}")
-
-                        action_card(
-                            titulo=f"{tarefa['tipo_tarefa']} — {tarefa['descricao']}",
-                            meta_parts=meta_parts,
-                            tom=tom,
-                            situacao_badge=situacao_clean,
-                        )
-
-                    with col_acao:
-                        st.write("")
-                        if st.button("Concluir", key=f"concluir_{tarefa['id_tarefa']}", use_container_width=True, type="primary"):
-                            run_insert(
-                                "UPDATE Tarefas_Pendentes SET status='CONCLUIDA', data_conclusao=? WHERE id_tarefa=?",
-                                (datetime.now().strftime('%Y-%m-%d'), int(tarefa['id_tarefa']))
-                            )
-                            st.toast("Concluída"); st.rerun()
-                        if st.button("Cancelar", key=f"cancelar_{tarefa['id_tarefa']}", use_container_width=True):
-                            run_insert(
-                                "UPDATE Tarefas_Pendentes SET status='CANCELADA' WHERE id_tarefa=?",
-                                (int(tarefa['id_tarefa']),)
-                            )
-                            st.toast("Cancelada"); st.rerun()
-
-        # Expander para criar tarefa manual
-        st.markdown("---")
-        with st.expander("➕ Criar nova tarefa manual"):
-            with st.form("form_nova_tarefa", clear_on_submit=True):
-                df_parceiros_form = _parceiros_lista()
-                p_opcoes = ["-- Sem parceiro --"] + df_parceiros_form['nome_instituicao'].tolist()
-                nomes_cdp = ["-- A definir --"] + sorted([c["nome"] for c in CONTAS.values()])
-
-                col_a, col_b = st.columns(2)
-                tipo_novo = col_a.selectbox("Tipo", ["FOLLOW_UP", "RENOVACAO", "AGRADECIMENTO", "PROSPECCAO", "OUTRO"])
-                prioridade_nova = col_b.selectbox("Prioridade", ["ALTA", "MEDIA", "BAIXA"])
-
-                descricao_nova = st.text_area("Descrição da tarefa")
-
-                col_c, col_d = st.columns(2)
-                prazo_novo = col_c.date_input("Prazo", datetime.now() + timedelta(days=7))
-                parceiro_novo = col_d.selectbox("Parceiro relacionado (opcional)", p_opcoes)
-
-                responsavel_novo = st.selectbox("Responsável direto (opcional):", nomes_cdp)
-
-                if st.form_submit_button("Criar tarefa", type="primary"):
-                    if descricao_nova:
-                        id_parc_novo = None
-                        if parceiro_novo != "-- Sem parceiro --":
-                            id_parc_novo = int(df_parceiros_form[df_parceiros_form['nome_instituicao'] == parceiro_novo]['id_parceiro'].values[0])
-                        resp_final = None if responsavel_novo == "-- A definir --" else responsavel_novo
-
-                        run_insert(
-                            "INSERT INTO Tarefas_Pendentes (tipo_tarefa, descricao, data_prazo, prioridade, id_parceiro, responsavel) VALUES (?, ?, ?, ?, ?, ?)",
-                            (tipo_novo, descricao_nova, prazo_novo.strftime('%Y-%m-%d'), prioridade_nova, id_parc_novo, resp_final)
-                        )
-                        st.toast("Tarefa criada!")
-                        st.rerun()
-                    else:
-                        st.warning("Preencha a descrição.")
-
-
-    # ── Aba Minha Senha (todos os usuários) ─────────────────────────────────
-    with tab_senha:
-        section("Alterar minha senha")
-
-        _login_atual = None
-        for _k, _v in CONTAS.items():
-            if _v.get("nome") == _ud.get("nome"):
-                _login_atual = _k
-                break
-
-        # Garante tabela de senhas no banco
-        run_exec("""
-            CREATE TABLE IF NOT EXISTS Usuario_Senhas (
-                login TEXT PRIMARY KEY,
-                senha TEXT NOT NULL
+            _fd1, _fd2 = st.columns(2)
+            _detalhes    = _fd1.text_input("Descrição / complemento")
+            _nomes_eq    = ["-- A definir --"] + sorted(
+                c["nome"] for c in CONTAS.values() if c["setor"] == _setor_sel
             )
-        """)
+            _resp_sel    = _fd2.selectbox("Responsável", _nomes_eq)
+            _is_diaria   = _fd2.checkbox("Tarefa diária (repete todo dia)")
 
-        with st.form("form_troca_senha", clear_on_submit=True):
-            st.markdown("**Senha atual**")
-            _senha_atual_input = st.text_input("Senha atual", type="password",
-                                               label_visibility="collapsed",
-                                               placeholder="Digite sua senha atual")
-            st.markdown("**Nova senha**")
-            _nova_senha = st.text_input("Nova senha", type="password",
-                                        label_visibility="collapsed",
-                                        placeholder="Mínimo 6 caracteres")
-            _confirma_senha = st.text_input("Confirmar nova senha", type="password",
-                                            label_visibility="collapsed",
-                                            placeholder="Repita a nova senha")
-            _btn_salvar = st.form_submit_button("Salvar nova senha",
-                                                use_container_width=True, type="primary")
+            st.markdown("**Prioridade GUT**")
+            _pg1, _pg2, _pg3 = st.columns(3)
+            _g = _pg1.select_slider("Gravidade",  [1,2,3,4,5], 3, key="gut_g")
+            _u = _pg2.select_slider("Urgência",   [1,2,3,4,5], 3, key="gut_u")
+            _t = _pg3.select_slider("Tendência",  [1,2,3,4,5], 3, key="gut_t")
 
-        if _btn_salvar:
-            # Verificar senha atual (DB tem prioridade, fallback para CONTAS)
-            _df_db_senha = run_query(
-                "SELECT senha FROM Usuario_Senhas WHERE login = %s",
-                (_login_atual,)
-            )
-            _senha_correta = (
-                _df_db_senha.iloc[0]["senha"]
-                if not _df_db_senha.empty
-                else CONTAS.get(_login_atual, {}).get("senha", "")
-            )
-
-            if not _senha_atual_input:
-                st.error("Informe sua senha atual.")
-            elif _senha_atual_input != _senha_correta:
-                st.error("Senha atual incorreta.")
-            elif len(_nova_senha) < 6:
-                st.error("A nova senha deve ter pelo menos 6 caracteres.")
-            elif _nova_senha != _confirma_senha:
-                st.error("As senhas não conferem.")
-            else:
+            if st.form_submit_button("Lançar demanda", use_container_width=True, type="primary"):
+                _score     = _g * _u * _t
+                _resp_db   = None if _resp_sel == "-- A definir --" else _resp_sel
+                _titulo_db = f"[{_tarefa_sel}] {_detalhes} | POR: {meu_nome}".upper()
                 run_exec(
-                    """INSERT INTO Usuario_Senhas (login, senha)
-                       VALUES (%s, %s)
-                       ON CONFLICT (login) DO UPDATE SET senha = EXCLUDED.senha""",
-                    (_login_atual, _nova_senha)
+                    """INSERT INTO Demandas_Estrategicas
+                       (tarefa, setor, gravidade, urgencia, tendencia, score_gut,
+                        status, data_prevista, is_diaria, responsavel)
+                       VALUES (%s,%s,%s,%s,%s,%s,'PENDENTE',%s,%s,%s)""",
+                    (_titulo_db, _setor_sel, _g, _u, _t, _score,
+                     _data_p.strftime("%Y-%m-%d"), 1 if _is_diaria else 0, _resp_db),
                 )
-                st.success("✅ Senha alterada com sucesso!")
+                st.success("Demanda lançada!")
+                st.rerun()
 
-        # ── Aba Usuários (somente gerência) ──────────────────────────────────────
-    if tab_users is not None:
-        with tab_users:
-            section("Gerenciar usuários do sistema")
+    st.markdown("<br>", unsafe_allow_html=True)
 
-            # Estado local para edição
-            if "contas_editadas" not in st.session_state:
-                st.session_state.contas_editadas = {k: dict(v) for k, v in CONTAS.items()}
+    # ── Fila de trabalho ─────────────────────────────────────────────────────
+    section("Fila de trabalho")
 
-            contas = st.session_state.contas_editadas
+    _qsql  = "SELECT * FROM Demandas_Estrategicas WHERE status IN ('PENDENTE','BLOQUEADO')"
+    _qpars = []
+    if not eh_gerente:
+        _qsql += " AND setor = %s"
+        _qpars.append(meu_setor)
+    _demandas = run_query(_qsql + " ORDER BY status DESC, score_gut DESC", tuple(_qpars))
 
-            # Tabela de usuários
-            st.markdown("**Usuários cadastrados:**")
-            for login, dados in contas.items():
-                badge_c = "#C0392B" if dados["perfil"] == "gerencia" else "#378ADD"
-                badge_t = "GERÊNCIA" if dados["perfil"] == "gerencia" else "OPERACIONAL"
+    if _demandas.empty:
+        empty_state("🎉", "Tudo em dia!", "Nenhuma demanda pendente no momento.")
+    else:
+        for _, _row in _demandas.iterrows():
+            _is_b = _row["status"] == "BLOQUEADO"
+            _cor  = "#7030A0" if _is_b else (
+                "#DC2626" if _row["score_gut"] >= 80 else
+                "#D97706" if _row["score_gut"] >= 40 else "#1D9E75"
+            )
+            _cc1, _cc2, _cc3 = st.columns([0.5, 7.5, 2], vertical_alignment="center")
+            with _cc1:
+                if st.checkbox("", key=f"chk_{_row['id']}"):
+                    run_exec(
+                        "UPDATE Demandas_Estrategicas SET status='REALIZADO', data_ultima_conclusao=CURRENT_TIMESTAMP WHERE id=%s",
+                        (_row["id"],)
+                    )
+                    st.toast("✅ Concluída!")
+                    st.rerun()
+            with _cc2:
+                _dt_prev = str(_row["data_prevista"])[:10] if _row.get("data_prevista") else "—"
+                _tag_d   = '<span style="background:#378ADD22;color:#378ADD;border:1px solid #378ADD55;border-radius:10px;font-size:9px;padding:1px 6px;margin-left:6px;">DIÁRIA</span>' if _row.get("is_diaria") else ""
+                _prefix  = '🚨 <b style="color:#DC2626;">[BLOQUEADO]</b> ' if _is_b else ""
                 st.markdown(
-                    f'<div style="display:flex;align-items:center;gap:12px;padding:8px 12px;' +
-                    f'background:rgba(255,255,255,0.03);border-radius:8px;margin-bottom:6px;' +
-                    f'border:1px solid rgba(255,255,255,0.06);">' +
-                    f'<div style="flex:1;">' +
-                    f'<span style="font-weight:600;font-size:13px;">{dados["nome"]}</span> ' +
-                    f'<span style="font-size:11px;color:#94A3B8;">@{login}</span><br>' +
-                    f'<span style="font-size:11px;color:#94A3B8;">{dados["setor"]}</span></div>' +
-                    f'<div style="font-size:9px;font-weight:700;letter-spacing:1px;padding:2px 8px;' +
-                    f'border-radius:20px;background:{badge_c}22;color:{badge_c};border:1px solid {badge_c}55;">{badge_t}</div>' +
-                    f'</div>',
-                    unsafe_allow_html=True
+                    f'<div style="border-left:3px solid {_cor};padding:6px 10px;border-radius:0 6px 6px 0;'
+                    f'background:rgba(255,255,255,0.02);margin:2px 0;">'
+                    f'<div style="font-size:13px;font-weight:600;">{_prefix}{_row["tarefa"]}{_tag_d}</div>'
+                    f'<div style="font-size:11px;color:rgba(255,255,255,0.4);margin-top:2px;">'
+                    f'Setor: {_row["setor"]} · Prazo: {_dt_prev}'
+                    + (f' · Resp.: {_row["responsavel"]}' if _row.get("responsavel") else "")
+                    + f'</div></div>',
+                    unsafe_allow_html=True,
+                )
+            with _cc3:
+                st.markdown(
+                    f'<div style="text-align:center;font-size:14px;font-weight:800;color:{_cor};">'
+                    f'{_row["score_gut"]} pts</div>',
+                    unsafe_allow_html=True,
+                )
+                _label_b = "Liberar" if _is_b else "Pedir ajuda"
+                if st.button(_label_b, key=f"btn_{_row['id']}", use_container_width=True,
+                             type="primary" if _is_b else "secondary"):
+                    run_exec(
+                        "UPDATE Demandas_Estrategicas SET status=%s WHERE id=%s",
+                        ("PENDENTE" if _is_b else "BLOQUEADO", _row["id"]),
+                    )
+                    st.rerun()
+
+    # ── Realizadas + Métricas ────────────────────────────────────────────────
+    with st.expander("📊 Histórico e métricas"):
+        _sql_hist = "SELECT tarefa, TO_CHAR(data_ultima_conclusao,'DD/MM/YYYY HH24:MI') AS concluido_em FROM Demandas_Estrategicas WHERE status='REALIZADO'"
+        if not eh_gerente:
+            _sql_hist += f" AND setor='{meu_setor}'"
+        _hist = run_query(_sql_hist + " ORDER BY data_ultima_conclusao DESC LIMIT 10")
+        if not _hist.empty:
+            st.dataframe(_hist, use_container_width=True, hide_index=True)
+
+        _sql_stats = """SELECT TO_CHAR(data_ultima_conclusao,'MM/YYYY') AS mes,
+                               COUNT(*) AS total
+                        FROM Demandas_Estrategicas
+                        WHERE status='REALIZADO' AND data_ultima_conclusao IS NOT NULL"""
+        if not eh_gerente:
+            _sql_stats += f" AND setor='{meu_setor}'"
+        _sql_stats += " GROUP BY TO_CHAR(data_ultima_conclusao,'MM/YYYY') ORDER BY MIN(data_ultima_conclusao) DESC LIMIT 6"
+        _df_stats = run_query(_sql_stats)
+        if not _df_stats.empty:
+            st.markdown("---")
+            _sc = st.columns(len(_df_stats))
+            for _i, (_idx, _r) in enumerate(zip(range(len(_df_stats)), _df_stats.itertuples())):
+                _sc[_i].markdown(
+                    f'<div style="text-align:center;border-left:1px solid rgba(255,255,255,0.1);padding:4px;">'
+                    f'<div style="font-size:10px;opacity:.5;">{_r.mes}</div>'
+                    f'<div style="font-size:22px;font-weight:800;color:#1D9E75;">{_r.total}</div>'
+                    f'<div style="font-size:9px;opacity:.3;">FEITAS</div></div>',
+                    unsafe_allow_html=True,
                 )
 
-            st.divider()
+    # ── Follow-ups de CRM ────────────────────────────────────────────────────
+    with st.expander("🤝 Follow-ups de relacionamento"):
+        _df_crm = run_query("SELECT * FROM View_Tarefas_Abertas")
+        if _df_crm.empty:
+            st.info("Nenhum follow-up pendente.")
+        else:
+            _tot_c  = len(_df_crm)
+            _atras  = len(_df_crm[_df_crm["Situacao"].str.contains("ATRASADA", na=False)])
+            kpi_row([
+                {"label": "Total",     "value": _tot_c},
+                {"label": "Atrasadas", "value": _atras, "accent": _atras > 0},
+            ])
+            _tp = st.selectbox("Filtrar tipo", ["TODOS"] + sorted(_df_crm["tipo_tarefa"].unique().tolist()), key="crm_tipo")
+            if _tp != "TODOS":
+                _df_crm = _df_crm[_df_crm["tipo_tarefa"] == _tp]
+            for _, _r in _df_crm.iterrows():
+                _cor_c = "#DC2626" if "ATRASADA" in str(_r.get("Situacao","")) else "#D97706" if "URGENTE" in str(_r.get("Situacao","")) else "#1D9E75"
+                st.markdown(
+                    f'<div style="border-left:3px solid {_cor_c};padding:5px 10px;border-radius:0 6px 6px 0;'
+                    f'background:rgba(255,255,255,0.02);margin:3px 0;">'
+                    f'<div style="font-size:12px;font-weight:600;">{_r.get("Empresa","—")} — {_r.get("tipo_tarefa","")}</div>'
+                    f'<div style="font-size:11px;color:rgba(255,255,255,0.4);">{_r.get("Situacao","")}'
+                    + (f' · Prazo: {str(_r.get("data_prazo",""))[:10]}' if _r.get("data_prazo") else "")
+                    + f'</div></div>',
+                    unsafe_allow_html=True,
+                )
 
-            # Alterar senha
-            section("Alterar senha de um usuário")
-            login_sel = st.selectbox("Usuário:", list(contas.keys()), key="usr_sel")
-            with st.form("form_senha"):
-                nova_senha = st.text_input("Nova senha:", type="password", key="usr_nova_senha")
-                confirma   = st.text_input("Confirmar senha:", type="password", key="usr_confirma")
-                if st.form_submit_button("Salvar senha", type="primary"):
-                    if not nova_senha:
-                        st.warning("Digite uma senha.")
-                    elif nova_senha != confirma:
-                        st.error("As senhas não coincidem.")
-                    elif len(nova_senha) < 4:
-                        st.warning("Senha muito curta (mínimo 4 caracteres).")
-                    else:
-                        st.session_state.contas_editadas[login_sel]["senha"] = nova_senha
-                        CONTAS[login_sel]["senha"] = nova_senha
-                        st.success(f"Senha de @{login_sel} atualizada para esta sessão.")
-                        st.caption("⚠️ Para tornar a mudança permanente, atualize o dicionário CONTAS no código-fonte.")
+    # ── Admin (gerência) ─────────────────────────────────────────────────────
+    if eh_gerente:
+        with st.expander("👥 Gestão de usuários"):
+            section("Usuários do sistema")
+            for _login, _dados in CONTAS.items():
+                _ua1, _ua2, _ua3 = st.columns([3, 2, 1])
+                _ua1.markdown(f"**{_dados['nome']}** — {_dados['setor']}")
+                _ua2.markdown(f"`{_login}` · perfil: `{_dados['perfil']}`")
 
-            st.divider()
-
-            # Alterar perfil
-            section("Alterar perfil de acesso")
-            login_p = st.selectbox("Usuário:", [l for l in contas.keys() if l != "gerencia"], key="usr_perfil_sel")
-            novo_perfil = st.radio("Perfil:", ["operacional", "gerencia"],
-                index=0 if contas[login_p]["perfil"] == "operacional" else 1,
-                horizontal=True, key="usr_novo_perfil")
-            if st.button("Salvar perfil", key="usr_save_perfil"):
-                st.session_state.contas_editadas[login_p]["perfil"] = novo_perfil
-                CONTAS[login_p]["perfil"] = novo_perfil
-                st.success(f"Perfil de @{login_p} atualizado para {novo_perfil.upper()}.")
-                st.caption("⚠️ Para tornar a mudança permanente, atualize o dicionário CONTAS no código-fonte.")
+    # ── Minha Senha ──────────────────────────────────────────────────────────
+    with st.expander("🔑 Alterar minha senha"):
+        _login_cur = next((k for k, v in CONTAS.items() if v.get("nome") == meu_nome), None)
+        run_exec("""CREATE TABLE IF NOT EXISTS Usuario_Senhas (login TEXT PRIMARY KEY, senha TEXT NOT NULL)""")
+        with st.form("form_senha_acao", clear_on_submit=True):
+            _s1 = st.text_input("Senha atual",        type="password", placeholder="••••••")
+            _s2 = st.text_input("Nova senha",         type="password", placeholder="Mínimo 6 caracteres")
+            _s3 = st.text_input("Confirmar nova senha", type="password", placeholder="Repita a nova senha")
+            if st.form_submit_button("Salvar", use_container_width=True, type="primary"):
+                _df_s = run_query("SELECT senha FROM Usuario_Senhas WHERE login=%s", (_login_cur,))
+                _senha_ok = _df_s.iloc[0]["senha"] if not _df_s.empty else CONTAS.get(_login_cur,{}).get("senha","")
+                if not _s1:
+                    st.error("Informe a senha atual.")
+                elif _s1 != _senha_ok:
+                    st.error("Senha atual incorreta.")
+                elif len(_s2) < 6:
+                    st.error("A nova senha deve ter pelo menos 6 caracteres.")
+                elif _s2 != _s3:
+                    st.error("As senhas não conferem.")
+                else:
+                    run_exec("INSERT INTO Usuario_Senhas (login,senha) VALUES (%s,%s) ON CONFLICT (login) DO UPDATE SET senha=EXCLUDED.senha", (_login_cur, _s2))
+                    st.success("✅ Senha alterada com sucesso!")
 
 
 elif menu == "Eventos":
@@ -2819,7 +2532,7 @@ elif menu == "Eventos":
     mes_atual = datetime.now().strftime("%m/%Y")
     
     # Busca todos os meses que já têm algum cadastro no banco de dados
-    df_meses = run_query("SELECT DISTINCT mes_referencia FROM Convidados_Almoco")
+    df_meses = run_query_slow("SELECT DISTINCT mes_referencia FROM Convidados_Almoco")
     meses_cadastrados = df_meses['mes_referencia'].tolist() if not df_meses.empty else []
     
     # Junta o mês atual, os meses do banco e meses futuros para planejamento (evita duplicidade usando set)
@@ -3438,9 +3151,13 @@ elif menu == "Entrada de Recursos":
                 )
                 with st.form("form_entrada_evento", clear_on_submit=True):
                     ea, eb = st.columns(2)
-                    meses_2026  = [f"2026-{str(m).zfill(2)}" for m in range(1, 13)]
-                    mes_lancto  = ea.selectbox("Mês de referência *", meses_2026,
-                                               index=min(datetime.now().month - 1, 11))
+                    _mes_date  = ea.date_input(
+                        "Mês de referência *",
+                        value=datetime.now().replace(day=1),
+                        format="MM/YYYY",
+                        help="Selecione qualquer dia do mês — apenas mês e ano serão usados.",
+                    )
+                    mes_lancto = _mes_date.strftime("%Y-%m")
                     fonte_ev    = eb.selectbox("Evento / Campanha *",
                                                df_fontes_ev['nome_fonte'].tolist() if not df_fontes_ev.empty
                                                else list(_FONTES_EVENTO.keys()))
