@@ -2699,114 +2699,160 @@ elif menu == "Almoço CDP":
                 _buf = BytesIO()
                 _PW, _PH = A4   # 595.27 x 841.89 pt
 
-                # Caminhos das imagens do timbrado (relativo ao app.py)
-                _assets = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "assets")
+                _assets      = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "assets")
                 _img_lateral = _os.path.join(_assets, "timbrado_lateral.jpeg")
                 _img_logo    = _os.path.join(_assets, "timbrado_logo.png")
                 _img_rodape  = _os.path.join(_assets, "timbrado_rodape.png")
 
-                # Margens respeitando espaço do timbrado
-                _LM  = 2.8 * _rl_cm   # esquerda (após coluna lateral)
-                _RM  = 1.5 * _rl_cm
-                _TM  = 3.8 * _rl_cm   # topo (abaixo do logo)
-                _BM  = 3.2 * _rl_cm   # base (acima do rodapé)
+                # Margens
+                _LM = 2.9 * _rl_cm
+                _RM = 1.6 * _rl_cm
+                _TM = 4.0 * _rl_cm
+                _BM = 3.4 * _rl_cm
+                _CW = _PW - _LM - _RM   # largura útil do conteúdo
 
                 def _draw_timbrado(canvas, doc):
                     canvas.saveState()
-                    # 1. Coluna lateral esquerda — cobre toda a altura
                     if _os.path.exists(_img_lateral):
                         canvas.drawImage(_img_lateral, 0, 0,
-                                         width=1.55*_rl_cm, height=_PH,
+                                         width=1.6*_rl_cm, height=_PH,
                                          preserveAspectRatio=False)
-                    # 2. Logo CDP no canto superior esquerdo
                     if _os.path.exists(_img_logo):
-                        _lh = 2.6 * _rl_cm
+                        _lh = 2.8 * _rl_cm
                         _lw = _lh * (645 / 595)
                         canvas.drawImage(_img_logo,
-                                         1.7*_rl_cm, _PH - _lh - 0.6*_rl_cm,
+                                         1.8*_rl_cm, _PH - _lh - 0.55*_rl_cm,
                                          width=_lw, height=_lh, mask="auto")
-                    # 3. Rodapé institucional
                     if _os.path.exists(_img_rodape):
-                        _fh = 2.6 * _rl_cm
-                        _fw = _PW - 1.65*_rl_cm
+                        _fh = 2.8 * _rl_cm
+                        _fw = _PW - 1.7*_rl_cm
                         canvas.drawImage(_img_rodape,
-                                         1.65*_rl_cm, 0.25*_rl_cm,
+                                         1.7*_rl_cm, 0.2*_rl_cm,
                                          width=_fw, height=_fh,
                                          preserveAspectRatio=True, anchor="sw", mask="auto")
+
+                    # Linha verde fina separando área do logo do conteúdo
+                    from reportlab.lib import colors as _c
+                    canvas.setStrokeColor(_c.HexColor("#00CC96"))
+                    canvas.setLineWidth(1.2)
+                    canvas.line(_LM, _PH - _TM + 0.3*_rl_cm,
+                                _PW - _RM, _PH - _TM + 0.3*_rl_cm)
+                    # Linha verde fina separando conteúdo do rodapé
+                    canvas.line(_LM, _BM - 0.3*_rl_cm,
+                                _PW - _RM, _BM - 0.3*_rl_cm)
                     canvas.restoreState()
 
-                _frame = _RLFrame(_LM, _BM, _PW - _LM - _RM, _PH - _TM - _BM,
+                _frame = _RLFrame(_LM, _BM, _CW, _PH - _TM - _BM,
                                   leftPadding=0, rightPadding=0,
                                   topPadding=0, bottomPadding=0)
-                _tpl   = _RLPageTpl(id="timbrado", frames=[_frame], onPage=_draw_timbrado)
-                _doc   = _RLBase(_buf, pagesize=A4, pageTemplates=[_tpl])
+                _tpl  = _RLPageTpl(id="timbrado", frames=[_frame], onPage=_draw_timbrado)
+                _doc  = _RLBase(_buf, pagesize=A4, pageTemplates=[_tpl])
 
-                # ── Estilos ──────────────────────────────────────────────
-                _GREEN    = _rl_colors.HexColor("#00CC96")
-                _DARK     = _rl_colors.HexColor("#1A1A2E")
-                _LGRAY    = _rl_colors.HexColor("#F4FAFA")
-                _GRAY_TXT = _rl_colors.HexColor("#777777")
+                # ── Cores e estilos ───────────────────────────────────────
+                _GREEN     = _rl_colors.HexColor("#00CC96")
+                _GREEN_DK  = _rl_colors.HexColor("#009970")
+                _DARK      = _rl_colors.HexColor("#1A1A2E")
+                _LGRAY     = _rl_colors.HexColor("#F6FAFA")
+                _MGRAY     = _rl_colors.HexColor("#E8F5F2")
+                _GRAY_TXT  = _rl_colors.HexColor("#666666")
+                _GRAY_LINE = _rl_colors.HexColor("#D5E8E3")
 
-                _title_st = _RLParStyle("cdp_t2", fontSize=16, textColor=_DARK,
-                                        spaceAfter=4, alignment=_TA_LEFT,
-                                        fontName="Helvetica-Bold")
-                _sub_st   = _RLParStyle("cdp_s2", fontSize=10, textColor=_GRAY_TXT,
-                                        spaceAfter=0, alignment=_TA_LEFT,
-                                        fontName="Helvetica")
-                _foot_st  = _RLParStyle("cdp_f2", fontSize=7.5, textColor=_GRAY_TXT,
-                                        alignment=_TA_CENTER, fontName="Helvetica")
+                _st_titulo = _RLParStyle("cdp_titulo",
+                    fontSize=18, textColor=_DARK, leading=22,
+                    spaceAfter=2, alignment=_TA_LEFT,
+                    fontName="Helvetica-Bold")
+                _st_evento = _RLParStyle("cdp_evento",
+                    fontSize=10, textColor=_GREEN_DK, leading=14,
+                    spaceAfter=0, alignment=_TA_LEFT,
+                    fontName="Helvetica-Bold")
+                _st_total  = _RLParStyle("cdp_total",
+                    fontSize=8.5, textColor=_GRAY_TXT, leading=12,
+                    alignment=_TA_LEFT, fontName="Helvetica")
+                _st_rodape = _RLParStyle("cdp_rodape",
+                    fontSize=7.5, textColor=_GRAY_TXT, leading=11,
+                    alignment=_TA_CENTER, fontName="Helvetica")
 
-                # ── Conteúdo ─────────────────────────────────────────────
-                _elems = []
-                _elems.append(_RLPar("Lista de Confirmados", _title_st))
-                _elems.append(_RLPar(f"Almoco CDP &mdash; {mes_r}", _sub_st))
-                _elems.append(_RLSpacer(1, 0.5*_rl_cm))
-
-                # Linha separadora verde
+                # ── Cabeçalho do documento ────────────────────────────────
                 from reportlab.platypus import HRFlowable as _RLHR
-                _elems.append(_RLHR(width="100%", thickness=1.5,
-                                    color=_GREEN, spaceAfter=8))
+                _elems = []
+                _elems.append(_RLSpacer(1, 0.15*_rl_cm))
+                _elems.append(_RLPar("Lista de Confirmados", _st_titulo))
+                _elems.append(_RLPar(f"Almoco CDP &nbsp;&mdash;&nbsp; {mes_r}", _st_evento))
+                _elems.append(_RLSpacer(1, 0.35*_rl_cm))
+                _elems.append(_RLHR(width="100%", thickness=0.8,
+                                    color=_GRAY_LINE, spaceAfter=6))
 
-                # ── Tabela ───────────────────────────────────────────────
-                _pw  = _PW - _LM - _RM
-                _cw  = [_pw * 0.36, _pw * 0.32, _pw * 0.32]
+                # ── Tabela ────────────────────────────────────────────────
+                _cw = [_CW * 0.37, _CW * 0.31, _CW * 0.32]
                 _data = [["Nome", "Cargo / Funcao", "Empresa"]]
 
                 for _, _row in df_c.sort_values("nome").iterrows():
                     _nome = str(_row.get("nome", "")).title()
-                    _car  = str(_row.get("cargo",   "")) if pd.notna(_row.get("cargo",   "")) else "-"
-                    _emp  = str(_row.get("empresa", "")) if pd.notna(_row.get("empresa", "")) else "-"
-                    _car  = _car.title()  if _car.lower()  not in ["nan", "none", ""] else "-"
-                    _emp  = _emp          if _emp.lower()  not in ["nan", "none", ""] else "-"
+                    _car  = str(_row.get("cargo",   "")) if pd.notna(_row.get("cargo",   "")) else ""
+                    _emp  = str(_row.get("empresa", "")) if pd.notna(_row.get("empresa", "")) else ""
+                    _car  = _car.title() if _car.lower() not in ["nan", "none", ""] else "-"
+                    _emp  = _emp         if _emp.lower() not in ["nan", "none", ""] else "-"
                     _data.append([_nome, _car, _emp])
 
                 _t = _RLTable(_data, colWidths=_cw, repeatRows=1)
+                _n_rows = len(_data)
+                _row_bgs = []
+                for _ri in range(1, _n_rows):
+                    _bg = _LGRAY if _ri % 2 == 0 else _rl_colors.white
+                    _row_bgs.append(("BACKGROUND", (0, _ri), (-1, _ri), _bg))
+
                 _t.setStyle(_RLTableStyle([
+                    # Cabeçalho
                     ("BACKGROUND",     (0, 0), (-1, 0), _GREEN),
                     ("TEXTCOLOR",      (0, 0), (-1, 0), _rl_colors.white),
                     ("FONTNAME",       (0, 0), (-1, 0), "Helvetica-Bold"),
-                    ("FONTSIZE",       (0, 0), (-1, 0), 9.5),
+                    ("FONTSIZE",       (0, 0), (-1, 0), 9),
                     ("ALIGN",          (0, 0), (-1, 0), "CENTER"),
-                    ("TOPPADDING",     (0, 0), (-1, 0), 8),
-                    ("BOTTOMPADDING",  (0, 0), (-1, 0), 8),
+                    ("VALIGN",         (0, 0), (-1, 0), "MIDDLE"),
+                    ("TOPPADDING",     (0, 0), (-1, 0), 9),
+                    ("BOTTOMPADDING",  (0, 0), (-1, 0), 9),
+                    ("LEFTPADDING",    (0, 0), (-1, 0), 10),
+                    ("RIGHTPADDING",   (0, 0), (-1, 0), 10),
+                    # Corpo
                     ("FONTNAME",       (0, 1), (-1, -1), "Helvetica"),
-                    ("FONTSIZE",       (0, 1), (-1, -1), 9),
+                    ("FONTSIZE",       (0, 1), (-1, -1), 8.5),
+                    ("TEXTCOLOR",      (0, 1), (-1, -1), _DARK),
                     ("ALIGN",          (0, 1), (-1, -1), "LEFT"),
-                    ("TOPPADDING",     (0, 1), (-1, -1), 6),
-                    ("BOTTOMPADDING",  (0, 1), (-1, -1), 6),
-                    ("LEFTPADDING",    (0, 0), (-1, -1), 9),
-                    ("RIGHTPADDING",   (0, 0), (-1, -1), 9),
-                    ("ROWBACKGROUNDS", (0, 1), (-1, -1), [_rl_colors.white, _LGRAY]),
-                    ("GRID",           (0, 0), (-1, -1), 0.25, _rl_colors.HexColor("#DDDDDD")),
-                    ("LINEBELOW",      (0, 0), (-1, 0), 0, _rl_colors.white),
-                ]))
+                    ("VALIGN",         (0, 1), (-1, -1), "MIDDLE"),
+                    ("TOPPADDING",     (0, 1), (-1, -1), 7),
+                    ("BOTTOMPADDING",  (0, 1), (-1, -1), 7),
+                    ("LEFTPADDING",    (0, 1), (-1, -1), 10),
+                    ("RIGHTPADDING",   (0, 1), (-1, -1), 10),
+                    # Bordas
+                    ("LINEBELOW",      (0, 0), (-1, -2), 0.4, _GRAY_LINE),
+                    ("LINEBELOW",      (0, -1), (-1, -1), 0.8, _GREEN),
+                    ("LINEBEFORE",     (1, 0), (1, -1), 0.4, _GRAY_LINE),
+                    ("LINEBEFORE",     (2, 0), (2, -1), 0.4, _GRAY_LINE),
+                    ("BOX",            (0, 0), (-1, -1), 0.4, _GRAY_LINE),
+                ] + _row_bgs))
+
                 _elems.append(_t)
-                _elems.append(_RLSpacer(1, 0.4*_rl_cm))
-                _elems.append(_RLPar(
-                    f"Total: {len(df_c)} confirmados  |  "
-                    f"Gerado em {datetime.now().strftime('%d/%m/%Y %H:%M')}",
-                    _foot_st
-                ))
+                _elems.append(_RLSpacer(1, 0.3*_rl_cm))
+
+                # Linha de total + data
+                _total_tbl = _RLTable(
+                    [[f"{len(df_c)} confirmados",
+                      f"Gerado em {datetime.now().strftime('%d/%m/%Y  %H:%M')}"]],
+                    colWidths=[_CW * 0.5, _CW * 0.5]
+                )
+                _total_tbl.setStyle(_RLTableStyle([
+                    ("FONTNAME",  (0, 0), (-1, -1), "Helvetica"),
+                    ("FONTSIZE",  (0, 0), (-1, -1), 8),
+                    ("TEXTCOLOR", (0, 0), (-1, -1), _GRAY_TXT),
+                    ("ALIGN",     (0, 0), (0, 0), "LEFT"),
+                    ("ALIGN",     (1, 0), (1, 0), "RIGHT"),
+                    ("TOPPADDING",    (0, 0), (-1, -1), 0),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+                    ("LEFTPADDING",   (0, 0), (-1, -1), 0),
+                    ("RIGHTPADDING",  (0, 0), (-1, -1), 0),
+                ]))
+                _elems.append(_total_tbl)
+
                 _doc.build(_elems)
                 _buf.seek(0)
                 return _buf.read()
@@ -4342,6 +4388,64 @@ elif menu == "Relacionamento":
                         data=pdf_bytes,
                         file_name=f"RelatorioParcerias_{data_inicio.strftime('%Y%m%d')}_{data_fim.strftime('%Y%m%d')}.pdf",
                         mime="application/pdf",
+                        use_container_width=True,
+                    )
+                except Exception as e:
+                    st.warning(f"PDF não gerado: {e}")
+
+
+
+def _gerar_backup_completo():
+    """Gera backup de todas as tabelas como XLSX ou ZIP de CSVs."""
+    tabelas = [
+        ("Parceiro",               "SELECT * FROM Parceiro"),
+        ("Doacao",                 "SELECT * FROM Doacao"),
+        ("Registro_Relacionamento","SELECT * FROM Registro_Relacionamento"),
+        ("Demandas_Estrategicas",  "SELECT * FROM Demandas_Estrategicas"),
+        ("Registro_Captacao_DI",   "SELECT * FROM Registro_Captacao_DI"),
+        ("Meta_Fonte_2026",        "SELECT * FROM Meta_Fonte_2026"),
+        ("Contato_Direto",         "SELECT * FROM Contato_Direto"),
+    ]
+    try:
+        dfs = {nome: run_query(sql) for nome, sql in tabelas}
+    except Exception:
+        return None
+
+    for engine in ("openpyxl", "xlsxwriter"):
+        try:
+            output = BytesIO()
+            with pd.ExcelWriter(output, engine=engine) as writer:
+                for nome, df in dfs.items():
+                    df.to_excel(writer, index=False, sheet_name=nome[:31])
+            return (
+                output.getvalue(),
+                "xlsx",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+        except Exception:
+            continue
+
+    import zipfile
+    output = BytesIO()
+    with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as zf:
+        for nome, df in dfs.items():
+            zf.writestr(f"{nome}.csv", df.to_csv(index=False))
+    return output.getvalue(), "zip", "application/zip"
+
+if _is_gerente():
+    _backup = _gerar_backup_completo()
+    if _backup:
+        _b_data, _b_ext, _b_mime = _backup
+        _b_nome = "CDP_backup_" + datetime.now().strftime("%Y%m%d") + "." + _b_ext
+        st.sidebar.download_button(
+            "Backup completo",
+            data=_b_data,
+            file_name=_b_nome,
+            mime=_b_mime,
+            use_container_width=True,
+            key="sidebar_backup_dl",
+        )
+pdf",
                         use_container_width=True,
                     )
                 except Exception as e:
