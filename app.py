@@ -4433,15 +4433,19 @@ def _gerar_backup_completo():
     return output.getvalue(), "zip", "application/zip"
 
 if _is_gerente():
-    _backup = _gerar_backup_completo()
-    if _backup:
-        _b_data, _b_ext, _b_mime = _backup
-        _b_nome = "CDP_backup_" + datetime.now().strftime("%Y%m%d") + "." + _b_ext
-        st.sidebar.download_button(
-            "Backup completo",
-            data=_b_data,
-            file_name=_b_nome,
-            mime=_b_mime,
-            use_container_width=True,
-            key="sidebar_backup_dl",
-        )
+    # Backup gerado apenas quando solicitado (evita 7 queries a cada navegação)
+    if st.sidebar.button("⬇ Backup completo", use_container_width=True, key="sidebar_backup_btn"):
+        with st.sidebar:
+            with st.spinner("Gerando backup..."):
+                _backup = _gerar_backup_completo()
+        if _backup:
+            _b_data, _b_ext, _b_mime = _backup
+            _b_nome = "CDP_backup_" + datetime.now().strftime("%Y%m%d") + "." + _b_ext
+            st.sidebar.download_button(
+                "📥 Baixar agora",
+                data=_b_data,
+                file_name=_b_nome,
+                mime=_b_mime,
+                use_container_width=True,
+                key="sidebar_backup_dl",
+            )
