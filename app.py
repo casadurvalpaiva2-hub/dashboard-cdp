@@ -107,34 +107,9 @@ def _perfil():
 def _is_gerente(): return _perfil() == "gerencia"
 
 def _verificar_senha(login: str, senha_digitada: str) -> bool:
-    """Verifica senha: prioridade DB > CONTAS dict. Seguro a falhas."""
+    """Verifica senha: CONTAS dict (lookup instantâneo, sem DB no login)."""
     if login not in CONTAS:
         return False
-    # Tenta checar tabela Usuario_Senhas no banco
-    try:
-        _url = os.environ.get("DATABASE_URL", "")
-        if not _url:
-            try:
-                _url = st.secrets["DATABASE_URL"]
-            except Exception:
-                _url = ""
-        if _url.startswith("postgres://"):
-            _url = _url.replace("postgres://", "postgresql://", 1)
-        if _url:
-            import psycopg2 as _pg2
-            _conn = _pg2.connect(_url)
-            with _conn.cursor() as _cur:
-                _cur.execute(
-                    "SELECT senha FROM Usuario_Senhas WHERE login = %s",
-                    (login,)
-                )
-                _row = _cur.fetchone()
-            _conn.close()
-            if _row:
-                return _row[0] == senha_digitada
-    except Exception:
-        pass
-    # Fallback: CONTAS dict
     return CONTAS[login]["senha"] == senha_digitada
 
 
@@ -780,6 +755,32 @@ div[data-testid="stMetricLabel"] p {
 st.markdown(CSS_GLOBAL, unsafe_allow_html=True)
 
 # (overlay JS removido)
+
+# ── Sincroniza senhas alteradas pelo usuário (DB → CONTAS em memória) ─────────
+# Roda apenas uma vez por sessão para evitar queries repetidas
+if not st.session_state.get("_senhas_sincronizadas"):
+    try:
+        _url_sync = os.environ.get("DATABASE_URL", "")
+        if not _url_sync:
+            try:
+                _url_sync = st.secrets["DATABASE_URL"]
+            except Exception:
+                _url_sync = ""
+        if _url_sync.startswith("postgres://"):
+            _url_sync = _url_sync.replace("postgres://", "postgresql://", 1)
+        if _url_sync:
+            _conn_sync = psycopg2.connect(_url_sync, connect_timeout=3)
+            with _conn_sync.cursor() as _cur_sync:
+                _cur_sync.execute(
+                    "SELECT login, senha FROM Usuario_Senhas"
+                )
+                for _row_s in _cur_sync.fetchall():
+                    if _row_s[0] in CONTAS:
+                        CONTAS[_row_s[0]]["senha"] = _row_s[1]
+            _conn_sync.close()
+    except Exception:
+        pass
+    st.session_state["_senhas_sincronizadas"] = True
 
 
 # ============================================================
