@@ -2787,11 +2787,11 @@ elif menu == "Almoço CDP":
                 _data = [["Nome", "Cargo / Funcao", "Empresa"]]
 
                 for _, _row in df_c.sort_values("nome").iterrows():
-                    _nome = str(_row.get("nome", "")).title()
+                    _nome = str(_row.get("nome", "")).upper()
                     _car  = str(_row.get("cargo",   "")) if pd.notna(_row.get("cargo",   "")) else ""
                     _emp  = str(_row.get("empresa", "")) if pd.notna(_row.get("empresa", "")) else ""
-                    _car  = _car.title() if _car.lower() not in ["nan", "none", ""] else "-"
-                    _emp  = _emp         if _emp.lower() not in ["nan", "none", ""] else "-"
+                    _car  = _car.upper() if _car.lower() not in ["nan", "none", ""] else "-"
+                    _emp  = _emp.upper() if _emp.lower() not in ["nan", "none", ""] else "-"
                     _data.append([_nome, _car, _emp])
 
                 _t = _RLTable(_data, colWidths=_cw, repeatRows=1)
@@ -2836,8 +2836,8 @@ elif menu == "Almoço CDP":
 
                 # Linha de total + data
                 _total_tbl = _RLTable(
-                    [[f"{len(df_c)} confirmados",
-                      f"Gerado em {datetime.now().strftime('%d/%m/%Y  %H:%M')}"]],
+                    [[f"Sistema DI  •  {len(df_c)} confirmados",
+                      f"Gerado em {(datetime.now() - timedelta(hours=3)).strftime('%d/%m/%Y  %H:%M')} (Brasília)"]],
                     colWidths=[_CW * 0.5, _CW * 0.5]
                 )
                 _total_tbl.setStyle(_RLTableStyle([
