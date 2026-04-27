@@ -1288,7 +1288,7 @@ def setup_schema():
                 LEFT JOIN (
                     SELECT id_fonte, valor_realizado
                     FROM Registro_Captacao_DI
-                    WHERE mes_referencia BETWEEN '2026-01' AND '2026-12'
+                    WHERE LEFT(mes_referencia, 7) BETWEEN '2026-01' AND '2026-12'
                     UNION ALL
                     SELECT m2.id_fonte, d.valor_estimado AS valor_realizado
                     FROM Doacao d
@@ -2152,8 +2152,14 @@ elif menu == "Plano DI 2026":
     # ── Dados base ──────────────────────────────────────────────────────────
     df_prog = run_query_slow("SELECT * FROM View_Progresso_PlanoAnual ORDER BY meta_2026 DESC")
     df_hist = run_query("""
-        SELECT rc.mes_referencia, mf.nome_fonte, rc.valor_realizado,
-               rc.observacao, rc.registrado_por, rc.data_registro
+        SELECT
+            CASE
+                WHEN LENGTH(rc.mes_referencia) = 10
+                THEN TO_CHAR(rc.mes_referencia::date, 'DD/MM/YYYY')
+                ELSE rc.mes_referencia
+            END AS mes_referencia,
+            mf.nome_fonte, rc.valor_realizado,
+            rc.observacao, rc.registrado_por, rc.data_registro
         FROM Registro_Captacao_DI rc
         JOIN Meta_Fonte_2026 mf ON rc.id_fonte = mf.id_fonte
         ORDER BY rc.mes_referencia DESC, mf.nome_fonte
@@ -3151,15 +3157,12 @@ elif menu == "Entrada de Recursos":
                 )
                 with st.form("form_entrada_evento", clear_on_submit=True):
                     ea, eb = st.columns(2)
-                    # Seletor de mês/ano compatível com todas versões do Streamlit
-                    _ea1, _ea2 = ea.columns(2)
-                    _meses_nomes = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"]
-                    _mes_sel  = _ea1.selectbox("Mês *", range(1,13),
-                                               index=datetime.now().month - 1,
-                                               format_func=lambda m: _meses_nomes[m-1])
-                    _ano_sel  = _ea2.selectbox("Ano *", [2025, 2026, 2027],
-                                               index=1)
-                    mes_lancto = f"{_ano_sel}-{str(_mes_sel).zfill(2)}"
+                    _data_repasse = ea.date_input(
+                        "Data do repasse *",
+                        value=datetime.now().date(),
+                        help="Informe o dia exato em que o valor foi repassado.",
+                    )
+                    mes_lancto = _data_repasse.strftime("%Y-%m-%d")
                     fonte_ev    = eb.selectbox("Evento / Campanha *",
                                                df_fontes_ev['nome_fonte'].tolist() if not df_fontes_ev.empty
                                                else list(_FONTES_EVENTO.keys()))
