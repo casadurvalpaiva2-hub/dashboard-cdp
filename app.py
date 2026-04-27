@@ -2878,7 +2878,7 @@ elif menu == "Eventos":
                             run_insert("""
                                 INSERT INTO Convidados_Almoco 
                                 (mes_referencia, segmento, nome, cargo, empresa, telefone, confirmado, compareceu) 
-                                VALUES (?,?,?,?,?,?, 1, 1)
+                                VALUES (%s,%s,%s,%s,%s,%s, TRUE, TRUE)
                             """, (mes_ref, fast_seg, fast_nome.title(), fast_cargo.title(), fast_empresa, fast_telefone))
                             st.toast(f"Entrada liberada para {fast_nome}!")
                             st.rerun()
@@ -2905,8 +2905,8 @@ elif menu == "Eventos":
                         
                         label_btn = "Fazer Check-in" if not row['compareceu'] else "Anular Presença"
                         if st.button(label_btn, key=f"btn_{row['id']}", type="primary" if not row['compareceu'] else "secondary", use_container_width=True):
-                            novo_status = 1 if not row['compareceu'] else 0
-                            run_insert("UPDATE Convidados_Almoco SET compareceu = ? WHERE id = ?", (novo_status, row['id']))
+                            novo_status = not bool(row['compareceu'])
+                            run_insert("UPDATE Convidados_Almoco SET compareceu = %s WHERE id = %s", (novo_status, row['id']))
                             st.rerun()
 
         # --- DOSSIÊ EXECUTIVO ---
@@ -2994,7 +2994,7 @@ elif menu == "Eventos":
                         UPDATE Convidados_Almoco 
                         SET contato_1=?, contato_2=?, confirmado=?, telefone=?, cargo=?, empresa=?, nome=?
                         WHERE id=?
-                    """, (int(r['contato_1']), int(r['contato_2']), int(r['confirmado']), r['telefone'], r['cargo'], r['empresa'], r['nome'], r['id']))
+                    """, (bool(r['contato_1']), bool(r['contato_2']), bool(r['confirmado']), r['telefone'], r['cargo'], r['empresa'], r['nome'], r['id']))
                 st.success("Tabela atualizada com sucesso!")
                 st.rerun()
 
