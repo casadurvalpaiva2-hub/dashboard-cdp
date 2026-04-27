@@ -3151,13 +3151,15 @@ elif menu == "Entrada de Recursos":
                 )
                 with st.form("form_entrada_evento", clear_on_submit=True):
                     ea, eb = st.columns(2)
-                    _mes_date  = ea.date_input(
-                        "Mês de referência *",
-                        value=datetime.now().replace(day=1),
-                        format="MM/YYYY",
-                        help="Selecione qualquer dia do mês — apenas mês e ano serão usados.",
-                    )
-                    mes_lancto = _mes_date.strftime("%Y-%m")
+                    # Seletor de mês/ano compatível com todas versões do Streamlit
+                    _ea1, _ea2 = ea.columns(2)
+                    _meses_nomes = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"]
+                    _mes_sel  = _ea1.selectbox("Mês *", range(1,13),
+                                               index=datetime.now().month - 1,
+                                               format_func=lambda m: _meses_nomes[m-1])
+                    _ano_sel  = _ea2.selectbox("Ano *", [2025, 2026, 2027],
+                                               index=1)
+                    mes_lancto = f"{_ano_sel}-{str(_mes_sel).zfill(2)}"
                     fonte_ev    = eb.selectbox("Evento / Campanha *",
                                                df_fontes_ev['nome_fonte'].tolist() if not df_fontes_ev.empty
                                                else list(_FONTES_EVENTO.keys()))
