@@ -2683,42 +2683,93 @@ elif menu == "Almoço CDP":
         )
 
         if _n_conf > 0:
+            import os as _os
             from io import BytesIO
             from reportlab.lib.pagesizes import A4
             from reportlab.lib import colors as _rl_colors
             from reportlab.lib.units import cm as _rl_cm
-            from reportlab.platypus import (SimpleDocTemplate as _RLDoc, Table as _RLTable,
-                                            TableStyle as _RLTableStyle, Paragraph as _RLPar,
-                                            Spacer as _RLSpacer)
+            from reportlab.platypus import (BaseDocTemplate as _RLBase, Frame as _RLFrame,
+                                            PageTemplate as _RLPageTpl,
+                                            Table as _RLTable, TableStyle as _RLTableStyle,
+                                            Paragraph as _RLPar, Spacer as _RLSpacer)
             from reportlab.lib.styles import ParagraphStyle as _RLParStyle
-            from reportlab.lib.enums import TA_CENTER as _TA_CENTER
+            from reportlab.lib.enums import TA_CENTER as _TA_CENTER, TA_LEFT as _TA_LEFT
 
             def _gerar_pdf_confirmados(df_c, mes_r):
                 _buf = BytesIO()
-                _doc = _RLDoc(
-                    _buf, pagesize=A4,
-                    leftMargin=2*_rl_cm, rightMargin=2*_rl_cm,
-                    topMargin=2.5*_rl_cm, bottomMargin=2*_rl_cm
-                )
-                _GREEN = _rl_colors.HexColor("#00CC96")
-                _DARK  = _rl_colors.HexColor("#0F2027")
-                _LGRAY = _rl_colors.HexColor("#F4FAFA")
-                _GRAY_TXT = _rl_colors.HexColor("#888888")
+                _PW, _PH = A4   # 595.27 x 841.89 pt
 
-                _title_st = _RLParStyle("cdp_t", fontSize=20, textColor=_GREEN,
-                                        spaceAfter=6, alignment=_TA_CENTER, fontName="Helvetica-Bold")
-                _sub_st   = _RLParStyle("cdp_s", fontSize=11, textColor=_DARK,
-                                        spaceAfter=2, alignment=_TA_CENTER, fontName="Helvetica")
-                _foot_st  = _RLParStyle("cdp_f", fontSize=8,  textColor=_GRAY_TXT,
+                # Caminhos das imagens do timbrado (relativo ao app.py)
+                _assets = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "assets")
+                _img_lateral = _os.path.join(_assets, "timbrado_lateral.jpeg")
+                _img_logo    = _os.path.join(_assets, "timbrado_logo.png")
+                _img_rodape  = _os.path.join(_assets, "timbrado_rodape.png")
+
+                # Margens respeitando espaço do timbrado
+                _LM  = 2.8 * _rl_cm   # esquerda (após coluna lateral)
+                _RM  = 1.5 * _rl_cm
+                _TM  = 3.8 * _rl_cm   # topo (abaixo do logo)
+                _BM  = 3.2 * _rl_cm   # base (acima do rodapé)
+
+                def _draw_timbrado(canvas, doc):
+                    canvas.saveState()
+                    # 1. Coluna lateral esquerda — cobre toda a altura
+                    if _os.path.exists(_img_lateral):
+                        canvas.drawImage(_img_lateral, 0, 0,
+                                         width=1.55*_rl_cm, height=_PH,
+                                         preserveAspectRatio=False)
+                    # 2. Logo CDP no canto superior esquerdo
+                    if _os.path.exists(_img_logo):
+                        _lh = 2.6 * _rl_cm
+                        _lw = _lh * (645 / 595)
+                        canvas.drawImage(_img_logo,
+                                         1.7*_rl_cm, _PH - _lh - 0.6*_rl_cm,
+                                         width=_lw, height=_lh, mask="auto")
+                    # 3. Rodapé institucional
+                    if _os.path.exists(_img_rodape):
+                        _fh = 2.6 * _rl_cm
+                        _fw = _PW - 1.65*_rl_cm
+                        canvas.drawImage(_img_rodape,
+                                         1.65*_rl_cm, 0.25*_rl_cm,
+                                         width=_fw, height=_fh,
+                                         preserveAspectRatio=True, anchor="sw", mask="auto")
+                    canvas.restoreState()
+
+                _frame = _RLFrame(_LM, _BM, _PW - _LM - _RM, _PH - _TM - _BM,
+                                  leftPadding=0, rightPadding=0,
+                                  topPadding=0, bottomPadding=0)
+                _tpl   = _RLPageTpl(id="timbrado", frames=[_frame], onPage=_draw_timbrado)
+                _doc   = _RLBase(_buf, pagesize=A4, pageTemplates=[_tpl])
+
+                # ── Estilos ──────────────────────────────────────────────
+                _GREEN    = _rl_colors.HexColor("#00CC96")
+                _DARK     = _rl_colors.HexColor("#1A1A2E")
+                _LGRAY    = _rl_colors.HexColor("#F4FAFA")
+                _GRAY_TXT = _rl_colors.HexColor("#777777")
+
+                _title_st = _RLParStyle("cdp_t2", fontSize=16, textColor=_DARK,
+                                        spaceAfter=4, alignment=_TA_LEFT,
+                                        fontName="Helvetica-Bold")
+                _sub_st   = _RLParStyle("cdp_s2", fontSize=10, textColor=_GRAY_TXT,
+                                        spaceAfter=0, alignment=_TA_LEFT,
+                                        fontName="Helvetica")
+                _foot_st  = _RLParStyle("cdp_f2", fontSize=7.5, textColor=_GRAY_TXT,
                                         alignment=_TA_CENTER, fontName="Helvetica")
 
+                # ── Conteúdo ─────────────────────────────────────────────
                 _elems = []
-                _elems.append(_RLPar("ALMOCO CDP", _title_st))
-                _elems.append(_RLPar(f"Lista de Confirmados &mdash; {mes_r}", _sub_st))
-                _elems.append(_RLSpacer(1, 0.6*_rl_cm))
+                _elems.append(_RLPar("Lista de Confirmados", _title_st))
+                _elems.append(_RLPar(f"Almoco CDP &mdash; {mes_r}", _sub_st))
+                _elems.append(_RLSpacer(1, 0.5*_rl_cm))
 
-                _pw = A4[0] - 4*_rl_cm
-                _cw = [_pw * 0.36, _pw * 0.32, _pw * 0.32]
+                # Linha separadora verde
+                from reportlab.platypus import HRFlowable as _RLHR
+                _elems.append(_RLHR(width="100%", thickness=1.5,
+                                    color=_GREEN, spaceAfter=8))
+
+                # ── Tabela ───────────────────────────────────────────────
+                _pw  = _PW - _LM - _RM
+                _cw  = [_pw * 0.36, _pw * 0.32, _pw * 0.32]
                 _data = [["Nome", "Cargo / Funcao", "Empresa"]]
 
                 for _, _row in df_c.sort_values("nome").iterrows():
@@ -2731,30 +2782,29 @@ elif menu == "Almoço CDP":
 
                 _t = _RLTable(_data, colWidths=_cw, repeatRows=1)
                 _t.setStyle(_RLTableStyle([
-                    ("BACKGROUND",    (0, 0), (-1, 0), _GREEN),
-                    ("TEXTCOLOR",     (0, 0), (-1, 0), _rl_colors.white),
-                    ("FONTNAME",      (0, 0), (-1, 0), "Helvetica-Bold"),
-                    ("FONTSIZE",      (0, 0), (-1, 0), 10),
-                    ("ALIGN",         (0, 0), (-1, 0), "CENTER"),
-                    ("TOPPADDING",    (0, 0), (-1, 0), 9),
-                    ("BOTTOMPADDING", (0, 0), (-1, 0), 9),
-                    ("FONTNAME",      (0, 1), (-1, -1), "Helvetica"),
-                    ("FONTSIZE",      (0, 1), (-1, -1), 9),
-                    ("ALIGN",         (0, 1), (-1, -1), "LEFT"),
-                    ("TOPPADDING",    (0, 1), (-1, -1), 7),
-                    ("BOTTOMPADDING", (0, 1), (-1, -1), 7),
-                    ("LEFTPADDING",   (0, 0), (-1, -1), 10),
-                    ("RIGHTPADDING",  (0, 0), (-1, -1), 10),
+                    ("BACKGROUND",     (0, 0), (-1, 0), _GREEN),
+                    ("TEXTCOLOR",      (0, 0), (-1, 0), _rl_colors.white),
+                    ("FONTNAME",       (0, 0), (-1, 0), "Helvetica-Bold"),
+                    ("FONTSIZE",       (0, 0), (-1, 0), 9.5),
+                    ("ALIGN",          (0, 0), (-1, 0), "CENTER"),
+                    ("TOPPADDING",     (0, 0), (-1, 0), 8),
+                    ("BOTTOMPADDING",  (0, 0), (-1, 0), 8),
+                    ("FONTNAME",       (0, 1), (-1, -1), "Helvetica"),
+                    ("FONTSIZE",       (0, 1), (-1, -1), 9),
+                    ("ALIGN",          (0, 1), (-1, -1), "LEFT"),
+                    ("TOPPADDING",     (0, 1), (-1, -1), 6),
+                    ("BOTTOMPADDING",  (0, 1), (-1, -1), 6),
+                    ("LEFTPADDING",    (0, 0), (-1, -1), 9),
+                    ("RIGHTPADDING",   (0, 0), (-1, -1), 9),
                     ("ROWBACKGROUNDS", (0, 1), (-1, -1), [_rl_colors.white, _LGRAY]),
-                    ("GRID",          (0, 0), (-1, -1), 0.3, _rl_colors.HexColor("#DDDDDD")),
-                    ("LINEBELOW",     (0, 0), (-1, 0), 1.5, _GREEN),
-                    ("LINEAFTER",     (0, 0), (-1, -1), 0, _rl_colors.white),
+                    ("GRID",           (0, 0), (-1, -1), 0.25, _rl_colors.HexColor("#DDDDDD")),
+                    ("LINEBELOW",      (0, 0), (-1, 0), 0, _rl_colors.white),
                 ]))
                 _elems.append(_t)
-                _elems.append(_RLSpacer(1, 0.5*_rl_cm))
+                _elems.append(_RLSpacer(1, 0.4*_rl_cm))
                 _elems.append(_RLPar(
                     f"Total: {len(df_c)} confirmados  |  "
-                    f"Gerado em {datetime.now().strftime('%d/%m/%Y %H:%M')}  |  Casa Durval Paiva",
+                    f"Gerado em {datetime.now().strftime('%d/%m/%Y %H:%M')}",
                     _foot_st
                 ))
                 _doc.build(_elems)
@@ -4277,6 +4327,79 @@ elif menu == "Relacionamento":
                             _dr  = row['data_registro']
                             drf  = (_dr if hasattr(_dr,'strftime') else datetime.strptime(str(_dr),'%Y-%m-%d')).strftime('%d/%m/%Y')
                             val  = float(row['valor_estimado']) if pd.notna(row['valor_estimado']) else 0
+                            vf   = f"R$ {val:,.2f}".replace(',','X').replace('.',',').replace('X','.') if val > 0 else "—"
+                            desc = str(row['descricao']).capitalize() if pd.notna(row['descricao']) else "—"
+                            story.append(Paragraph(f"<b>{str(row['nome_instituicao']).upper()}</b> &nbsp;&nbsp; <font color='#888888' size='9'>{drf}</font> &nbsp; <b>{vf}</b>", st_item))
+                            story.append(Paragraph(f"↳ {desc}", st_detalhe))
+
+                    doc.build(story)
+                    return buf.getvalue()
+
+                try:
+                    pdf_bytes = _gerar_pdf_diretoria(df_relatorio, dt_ini_fmt, dt_fim_fmt)
+                    st.download_button(
+                        "Baixar PDF para diretoria",
+                        data=pdf_bytes,
+                        file_name=f"RelatorioParcerias_{data_inicio.strftime('%Y%m%d')}_{data_fim.strftime('%Y%m%d')}.pdf",
+                        mime="application/pdf",
+                        use_container_width=True,
+                    )
+                except Exception as e:
+                    st.warning(f"PDF não gerado: {e}")
+
+
+
+def _gerar_backup_completo():
+    """Gera backup de todas as tabelas como XLSX ou ZIP de CSVs."""
+    tabelas = [
+        ("Parceiro",               "SELECT * FROM Parceiro"),
+        ("Doacao",                 "SELECT * FROM Doacao"),
+        ("Registro_Relacionamento","SELECT * FROM Registro_Relacionamento"),
+        ("Demandas_Estrategicas",  "SELECT * FROM Demandas_Estrategicas"),
+        ("Registro_Captacao_DI",   "SELECT * FROM Registro_Captacao_DI"),
+        ("Meta_Fonte_2026",        "SELECT * FROM Meta_Fonte_2026"),
+        ("Contato_Direto",         "SELECT * FROM Contato_Direto"),
+    ]
+    try:
+        dfs = {nome: run_query(sql) for nome, sql in tabelas}
+    except Exception:
+        return None
+
+    for engine in ("openpyxl", "xlsxwriter"):
+        try:
+            output = BytesIO()
+            with pd.ExcelWriter(output, engine=engine) as writer:
+                for nome, df in dfs.items():
+                    df.to_excel(writer, index=False, sheet_name=nome[:31])
+            return (
+                output.getvalue(),
+                "xlsx",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+        except Exception:
+            continue
+
+    import zipfile
+    output = BytesIO()
+    with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as zf:
+        for nome, df in dfs.items():
+            zf.writestr(f"{nome}.csv", df.to_csv(index=False))
+    return output.getvalue(), "zip", "application/zip"
+
+if _is_gerente():
+    _backup = _gerar_backup_completo()
+    if _backup:
+        _b_data, _b_ext, _b_mime = _backup
+        _b_nome = "CDP_backup_" + datetime.now().strftime("%Y%m%d") + "." + _b_ext
+        st.sidebar.download_button(
+            "Backup completo",
+            data=_b_data,
+            file_name=_b_nome,
+            mime=_b_mime,
+            use_container_width=True,
+            key="sidebar_backup_dl",
+        )
+row['valor_estimado']) if pd.notna(row['valor_estimado']) else 0
                             vf   = f"R$ {val:,.2f}".replace(',','X').replace('.',',').replace('X','.') if val > 0 else "—"
                             desc = str(row['descricao']).capitalize() if pd.notna(row['descricao']) else "—"
                             story.append(Paragraph(f"<b>{str(row['nome_instituicao']).upper()}</b> &nbsp;&nbsp; <font color='#888888' size='9'>{drf}</font> &nbsp; <b>{vf}</b>", st_item))
