@@ -922,8 +922,8 @@ if "open_form" not in st.session_state:
 if "_qa_nonce" not in st.session_state:
     st.session_state._qa_nonce = 0
 
-_menus_gerencia = ["Painel Geral", "Calendário", "Plano DI 2026", "Parcerias", "Contatos", "Eventos", "Ações", "Entrada de Recursos", "Relacionamento"]
-_menus_operacional = ["Painel Geral", "Calendário", "Plano DI 2026", "Parcerias", "Contatos", "Eventos", "Ações", "Entrada de Recursos", "Relacionamento"]
+_menus_gerencia = ["Painel Geral", "Calendário", "Plano DI 2026", "Parcerias", "Contatos", "Almoço CDP", "Ações", "Entrada de Recursos", "Relacionamento"]
+_menus_operacional = ["Painel Geral", "Calendário", "Plano DI 2026", "Parcerias", "Contatos", "Almoço CDP", "Ações", "Entrada de Recursos", "Relacionamento"]
 _opcoes_menu = _menus_gerencia if _is_gerente() else _menus_operacional
 
 def _trigger_quick_add(tipo: str):
@@ -954,7 +954,7 @@ with st.sidebar:
     unsafe_allow_html=True)
 
     _opcoes_nav = ["Painel Geral", "Calendário", "Plano DI 2026", "Parcerias", "Contatos",
-                   "Eventos", "Ações", "Entrada de Recursos", "Relacionamento"]
+                   "Almoço CDP", "Ações", "Entrada de Recursos", "Relacionamento"]
     _nav_items = [(p, p) for p in _opcoes_nav]
 
     _nav_idx = _opcoes_nav.index(st.session_state.current_page) \
@@ -2528,7 +2528,7 @@ elif menu == "Ações":
                     st.success("✅ Senha alterada com sucesso!")
 
 
-elif menu == "Eventos":
+elif menu == "Almoço CDP":
     # datetime, timedelta e pandas já importados no topo
     # CSS (.glass-card e .guest-item) já está no CSS_GLOBAL
 
@@ -2547,7 +2547,8 @@ elif menu == "Eventos":
     # Ordena a lista cronologicamente do mais recente para o mais antigo
     lista_meses.sort(key=lambda x: datetime.strptime(x, "%m/%Y"), reverse=True)
     
-    mes_ref = st.selectbox("Mês do evento", lista_meses, help="Selecione o mês do evento")
+    _idx_mes = lista_meses.index(mes_atual) if mes_atual in lista_meses else 0
+    mes_ref = st.selectbox("Mês do evento", lista_meses, index=_idx_mes, help="Selecione o mês do evento")
     
     # BUSCA OS DADOS
     df_almoco = run_query("SELECT * FROM Convidados_Almoco WHERE mes_referencia = ?", (mes_ref,))
@@ -2669,6 +2670,109 @@ elif menu == "Eventos":
                     st.code(msg_whatsapp, language="markdown")
             else:
                 st.info("Nenhum convidado presente no momento.")
+
+        # --- DOWNLOAD PDF DE CONFIRMADOS ---
+        st.divider()
+        _col_pdf_info, _col_pdf_btn = st.columns([3, 1])
+        _n_conf = len(df_conf)
+        _col_pdf_info.markdown(
+            f"<span style='font-size:0.95rem;opacity:0.8;'>"
+            f"<b style='color:#00CC96;'>{_n_conf}</b> confirmados para o Almoço CDP de <b>{mes_ref}</b>"
+            f"</span>",
+            unsafe_allow_html=True
+        )
+
+        if _n_conf > 0:
+            from io import BytesIO
+            from reportlab.lib.pagesizes import A4
+            from reportlab.lib import colors as _rl_colors
+            from reportlab.lib.units import cm as _rl_cm
+            from reportlab.platypus import (SimpleDocTemplate as _RLDoc, Table as _RLTable,
+                                            TableStyle as _RLTableStyle, Paragraph as _RLPar,
+                                            Spacer as _RLSpacer)
+            from reportlab.lib.styles import ParagraphStyle as _RLParStyle
+            from reportlab.lib.enums import TA_CENTER as _TA_CENTER
+
+            def _gerar_pdf_confirmados(df_c, mes_r):
+                _buf = BytesIO()
+                _doc = _RLDoc(
+                    _buf, pagesize=A4,
+                    leftMargin=2*_rl_cm, rightMargin=2*_rl_cm,
+                    topMargin=2.5*_rl_cm, bottomMargin=2*_rl_cm
+                )
+                _GREEN = _rl_colors.HexColor("#00CC96")
+                _DARK  = _rl_colors.HexColor("#0F2027")
+                _LGRAY = _rl_colors.HexColor("#F4FAFA")
+                _GRAY_TXT = _rl_colors.HexColor("#888888")
+
+                _title_st = _RLParStyle("cdp_t", fontSize=20, textColor=_GREEN,
+                                        spaceAfter=6, alignment=_TA_CENTER, fontName="Helvetica-Bold")
+                _sub_st   = _RLParStyle("cdp_s", fontSize=11, textColor=_DARK,
+                                        spaceAfter=2, alignment=_TA_CENTER, fontName="Helvetica")
+                _foot_st  = _RLParStyle("cdp_f", fontSize=8,  textColor=_GRAY_TXT,
+                                        alignment=_TA_CENTER, fontName="Helvetica")
+
+                _elems = []
+                _elems.append(_RLPar("ALMOCO CDP", _title_st))
+                _elems.append(_RLPar(f"Lista de Confirmados &mdash; {mes_r}", _sub_st))
+                _elems.append(_RLSpacer(1, 0.6*_rl_cm))
+
+                _pw = A4[0] - 4*_rl_cm
+                _cw = [_pw * 0.36, _pw * 0.32, _pw * 0.32]
+                _data = [["Nome", "Cargo / Funcao", "Empresa"]]
+
+                for _, _row in df_c.sort_values("nome").iterrows():
+                    _nome = str(_row.get("nome", "")).title()
+                    _car  = str(_row.get("cargo",   "")) if pd.notna(_row.get("cargo",   "")) else "-"
+                    _emp  = str(_row.get("empresa", "")) if pd.notna(_row.get("empresa", "")) else "-"
+                    _car  = _car.title()  if _car.lower()  not in ["nan", "none", ""] else "-"
+                    _emp  = _emp          if _emp.lower()  not in ["nan", "none", ""] else "-"
+                    _data.append([_nome, _car, _emp])
+
+                _t = _RLTable(_data, colWidths=_cw, repeatRows=1)
+                _t.setStyle(_RLTableStyle([
+                    ("BACKGROUND",    (0, 0), (-1, 0), _GREEN),
+                    ("TEXTCOLOR",     (0, 0), (-1, 0), _rl_colors.white),
+                    ("FONTNAME",      (0, 0), (-1, 0), "Helvetica-Bold"),
+                    ("FONTSIZE",      (0, 0), (-1, 0), 10),
+                    ("ALIGN",         (0, 0), (-1, 0), "CENTER"),
+                    ("TOPPADDING",    (0, 0), (-1, 0), 9),
+                    ("BOTTOMPADDING", (0, 0), (-1, 0), 9),
+                    ("FONTNAME",      (0, 1), (-1, -1), "Helvetica"),
+                    ("FONTSIZE",      (0, 1), (-1, -1), 9),
+                    ("ALIGN",         (0, 1), (-1, -1), "LEFT"),
+                    ("TOPPADDING",    (0, 1), (-1, -1), 7),
+                    ("BOTTOMPADDING", (0, 1), (-1, -1), 7),
+                    ("LEFTPADDING",   (0, 0), (-1, -1), 10),
+                    ("RIGHTPADDING",  (0, 0), (-1, -1), 10),
+                    ("ROWBACKGROUNDS", (0, 1), (-1, -1), [_rl_colors.white, _LGRAY]),
+                    ("GRID",          (0, 0), (-1, -1), 0.3, _rl_colors.HexColor("#DDDDDD")),
+                    ("LINEBELOW",     (0, 0), (-1, 0), 1.5, _GREEN),
+                    ("LINEAFTER",     (0, 0), (-1, -1), 0, _rl_colors.white),
+                ]))
+                _elems.append(_t)
+                _elems.append(_RLSpacer(1, 0.5*_rl_cm))
+                _elems.append(_RLPar(
+                    f"Total: {len(df_c)} confirmados  |  "
+                    f"Gerado em {datetime.now().strftime('%d/%m/%Y %H:%M')}  |  Casa Durval Paiva",
+                    _foot_st
+                ))
+                _doc.build(_elems)
+                _buf.seek(0)
+                return _buf.read()
+
+            _pdf_bytes = _gerar_pdf_confirmados(df_conf, mes_ref)
+            _col_pdf_btn.download_button(
+                label="📄 Baixar PDF",
+                data=_pdf_bytes,
+                file_name=f"almoco_cdp_{mes_ref.replace('/', '-')}.pdf",
+                mime="application/pdf",
+                type="primary",
+                use_container_width=True,
+            )
+        else:
+            _col_pdf_btn.button("📄 Baixar PDF", disabled=True, use_container_width=True,
+                                help="Nenhum confirmado ainda para este mês.")
 
     # ==========================================
     # ABA 2: PLANEJAMENTO
