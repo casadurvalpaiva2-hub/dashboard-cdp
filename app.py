@@ -4443,14 +4443,14 @@ elif menu == "Relacionamento":
                     # ── Story ─────────────────────────────────────────────────
                     story = []
                     story.append(Paragraph(
-                        f"Relatorio Estrategico de Parcerias  —  {d_ini_fmt} a {d_fim_fmt}",
+                        f"Relat&oacute;rio Estrat&eacute;gico de Parcerias  &mdash;  {d_ini_fmt} a {d_fim_fmt}",
                         st_subtitulo))
                     story.append(HRFlowable(width="100%", thickness=1, color=_BORDA, spaceAfter=10))
 
                     # ── KPIs ──────────────────────────────────────────────────
                     _cw4 = _CW / 4
                     dados_kpi = [
-                        ["Parceiros movimentados", "Interações", "Doações financeiras", "Doações em bens"],
+                        ["Parceiros movimentados", "Intera\u00e7\u00f5es", "Doa\u00e7\u00f5es financeiras", "Doa\u00e7\u00f5es em bens"],
                         [str(n_parcerias), str(n_interacoes), _fmt_brl(total_fin), _fmt_brl(total_est)],
                     ]
                     t_kpi = Table(dados_kpi, colWidths=[_cw4]*4)
@@ -4478,20 +4478,20 @@ elif menu == "Relacionamento":
 
                     # ── Interações ────────────────────────────────────────────
                     if not relac_period.empty:
-                        story.append(Paragraph("Interacoes com parceiros", st_secao))
+                        story.append(Paragraph("INTERA&Ccedil;&Otilde;ES COM PARCEIROS", st_secao))
                         for _, row in relac_period.iterrows():
                             _dr  = row['data_registro']
                             drf  = (_dr if hasattr(_dr,'strftime') else datetime.strptime(str(_dr),'%Y-%m-%d')).strftime('%d/%m/%Y')
                             desc = str(row['descricao']).capitalize() if pd.notna(row['descricao']) else "—"
                             story.append(Paragraph(
                                 f"<b>{str(row['nome_instituicao']).upper()}</b>"
-                                f"&nbsp;&nbsp;<font color='#888888' size='8'>{drf}</font>",
+                                f"&nbsp;&nbsp;<font color='#C0392B' size='8'>{drf}</font>",
                                 st_item))
                             story.append(Paragraph(f"   {desc}", st_detalhe))
 
                     # ── Doações financeiras ───────────────────────────────────
                     if not doacoes_fin.empty:
-                        story.append(Paragraph("Doacoes financeiras — entram na conta", st_secao_fin))
+                        story.append(Paragraph("DOA&Ccedil;&Otilde;ES FINANCEIRAS &mdash; ENTRAM NA CONTA", st_secao_fin))
                         for _, row in doacoes_fin.iterrows():
                             _dr  = row['data_registro']
                             drf  = (_dr if hasattr(_dr,'strftime') else datetime.strptime(str(_dr),'%Y-%m-%d')).strftime('%d/%m/%Y')
@@ -4500,14 +4500,14 @@ elif menu == "Relacionamento":
                             desc = str(row['descricao']).capitalize() if pd.notna(row['descricao']) else "—"
                             story.append(Paragraph(
                                 f"<b>{str(row['nome_instituicao']).upper()}</b>"
-                                f"&nbsp;&nbsp;<font color='#888888' size='8'>{drf}</font>"
+                                f"&nbsp;&nbsp;<font color='#C0392B' size='8'>{drf}</font>"
                                 f"&nbsp;&nbsp;<font color='#1A5FA8'><b>{vf}</b></font>",
                                 st_item))
                             story.append(Paragraph(f"   {desc}", st_detalhe))
 
                     # ── Doações estimadas ─────────────────────────────────────
                     if not doacoes_est.empty:
-                        story.append(Paragraph("Doacoes em bens e servicos — valor estimado pelo parceiro", st_secao_est))
+                        story.append(Paragraph("DOA&Ccedil;&Otilde;ES EM BENS E SERVI&Ccedil;OS &mdash; VALOR ESTIMADO PELO PARCEIRO", st_secao_est))
                         for _, row in doacoes_est.iterrows():
                             _dr  = row['data_registro']
                             drf  = (_dr if hasattr(_dr,'strftime') else datetime.strptime(str(_dr),'%Y-%m-%d')).strftime('%d/%m/%Y')
@@ -4516,7 +4516,7 @@ elif menu == "Relacionamento":
                             desc = str(row['descricao']).capitalize() if pd.notna(row['descricao']) else "—"
                             story.append(Paragraph(
                                 f"<b>{str(row['nome_instituicao']).upper()}</b>"
-                                f"&nbsp;&nbsp;<font color='#888888' size='8'>{drf}</font>"
+                                f"&nbsp;&nbsp;<font color='#C0392B' size='8'>{drf}</font>"
                                 f"&nbsp;&nbsp;<font color='#1B7A4A'><b>{vf}</b></font>",
                                 st_item))
                             story.append(Paragraph(f"   {desc}", st_detalhe))
@@ -4526,7 +4526,7 @@ elif menu == "Relacionamento":
                     from datetime import datetime as _dt, timedelta as _td
                     _agora = (_dt.now() - _td(hours=3)).strftime("%d/%m/%Y %H:%M")
                     story.append(Paragraph(
-                        f"Sistema DI  •  Gerado em {_agora} (Brasilia)",
+                        f"Sistema DI  &bull;  Gerado em {_agora} (Bras&iacute;lia)",
                         st_nota))
 
                     _doc.build(story)
