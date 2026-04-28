@@ -3978,14 +3978,18 @@ elif menu == "Relacionamento":
             score_df['freq_180']   = score_df['freq_180'].fillna(0)
             score_df['valor_12m']  = score_df['valor_12m'].fillna(0)
 
-            # Normalização 0-1 → pontos
-            max_freq  = max(score_df['freq_180'].max(), 1)
-            max_valor = max(score_df['valor_12m'].max(), 1)
-            max_dias  = max(score_df['dias_parceria'].max(), 1)
+            # ── Pontuação com metas absolutas (não relativas ao grupo) ──────────
+            # Critério         Peso   Meta para 100%
+            # Frequência       40 pts  >= 6 contatos nos últimos 180 dias
+            # Valor doado      40 pts  >= R$ 30.000 nos últimos 12 meses
+            # Tempo parceria   20 pts  >= 5 anos (1.825 dias)
+            META_FREQ  = 6        # contatos em 180 dias
+            META_VALOR = 30_000   # R$ em 12 meses
+            META_DIAS  = 1_825    # dias (~5 anos)
 
-            score_df['pts_freq']  = (score_df['freq_180']    / max_freq)  * 40
-            score_df['pts_valor'] = (score_df['valor_12m']   / max_valor) * 40
-            score_df['pts_tempo'] = (score_df['dias_parceria']/ max_dias)  * 20
+            score_df['pts_freq']  = (score_df['freq_180'].clip(upper=META_FREQ)      / META_FREQ)  * 40
+            score_df['pts_valor'] = (score_df['valor_12m'].clip(upper=META_VALOR)    / META_VALOR) * 40
+            score_df['pts_tempo'] = (score_df['dias_parceria'].clip(upper=META_DIAS) / META_DIAS)  * 20
             score_df['score']     = (score_df['pts_freq'] + score_df['pts_valor'] + score_df['pts_tempo']).round(1)
 
             # Merge com saúde
@@ -4011,21 +4015,39 @@ elif menu == "Relacionamento":
             if filtro_status != "Todos":
                 df_show = df_show[df_show['status_limpo'].str.contains(filtro_status.upper(), na=False)]
 
+            # ── Legenda do score ──────────────────────────────────────────────
+            with st.expander("Como o Score é calculado?", expanded=False):
+                st.markdown(
+                    "**Score de 0 a 100 pontos** — metas absolutas:\n\n"
+                    "| Critério | Peso | Meta para nota máxima |\n"
+                    "|---|---|---|\n"
+                    "| Frequência de contato | 40 pts | 6+ interações nos últimos 180 dias |\n"
+                    "| Valor doado | 40 pts | R\\$ 30.000+ nos últimos 12 meses |\n"
+                    "| Tempo de parceria | 20 pts | 5+ anos desde a adesão |\n\n"
+                    "> **Interpretação:** 80–100 = Parceiro estratégico · 50–79 = Em desenvolvimento · Abaixo de 50 = Requer atenção"
+                )
+
             # ── Tabela scorecard ─────────────────────────────────────────────
             st.dataframe(
-                df_show[['nome_instituicao', 'score', 'status_limpo', 'freq_180', 'valor_12m', 'saude', 'dias_pc', 'prox_ac']].rename(columns={
+                df_show[['nome_instituicao', 'score', 'pts_freq', 'pts_valor', 'pts_tempo', 'status_limpo', 'freq_180', 'valor_12m', 'saude', 'dias_pc', 'prox_ac']].rename(columns={
                     'nome_instituicao': 'Parceiro',
                     'score':            'Score',
+                    'pts_freq':         'Freq. Contatos',
+                    'pts_valor':        'Valor Doado',
+                    'pts_tempo':        'Tempo Parceria',
                     'status_limpo':     'Status',
                     'freq_180':         'Contatos (180d)',
-                    'valor_12m':        'Doado (12m) R$',
+                    'valor_12m':        'Doado (12m)',
                     'saude':            'Saúde',
                     'dias_pc':          'Dias parado',
                     'prox_ac':          'Próxima ação',
                 }),
                 column_config={
                     "Score":           st.column_config.ProgressColumn("Score", min_value=0, max_value=100, format="%.1f"),
-                    "Doado (12m) R$":  st.column_config.NumberColumn("Doado (12m)", format="R$ %.2f"),
+                    "Freq. Contatos":  st.column_config.NumberColumn("Freq. Contatos (max 40)", format="%.1f pts"),
+                    "Valor Doado":     st.column_config.NumberColumn("Valor Doado (max 40)", format="%.1f pts"),
+                    "Tempo Parceria":  st.column_config.NumberColumn("Tempo Parceria (max 20)", format="%.1f pts"),
+                    "Doado (12m)":     st.column_config.NumberColumn("Doado (12m)", format="R$ %.0f"),
                     "Dias parado":     st.column_config.NumberColumn("Dias parado", format="%d d"),
                     "Próxima ação":    st.column_config.DateColumn("Próxima ação", format="DD/MM/YYYY"),
                     "Contatos (180d)": st.column_config.NumberColumn("Contatos (180d)", format="%d"),
