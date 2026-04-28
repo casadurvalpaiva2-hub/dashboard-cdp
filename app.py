@@ -4329,79 +4329,208 @@ elif menu == "Relacionamento":
 
                 # ── PDF ─────────────────────────────────────────────────────
                 def _gerar_pdf_diretoria(df_rel, d_ini_fmt, d_fim_fmt):
+                    import os as _os
                     from io import BytesIO
                     from reportlab.lib.pagesizes import A4
-                    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-                    from reportlab.lib import colors
-                    from reportlab.lib.units import cm
-                    from reportlab.platypus import (
-                        SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable
-                    )
-                    buf = BytesIO()
-                    doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=2*cm, rightMargin=2*cm, topMargin=2*cm, bottomMargin=2*cm)
-                    estilos        = getSampleStyleSheet()
-                    cor_principal  = colors.HexColor("#C0392B")
-                    cor_cinza      = colors.HexColor("#555555")
-                    cor_fundo      = colors.HexColor("#F7F7F7")
-                    st_titulo      = ParagraphStyle("titulo",    parent=estilos["Title"],   fontSize=20, textColor=cor_principal, spaceAfter=4)
-                    st_subtitulo   = ParagraphStyle("sub",       parent=estilos["Normal"],  fontSize=11, textColor=cor_cinza, spaceAfter=12)
-                    st_secao       = ParagraphStyle("secao",     parent=estilos["Heading2"],fontSize=13, textColor=cor_principal, spaceBefore=14, spaceAfter=6)
-                    st_item        = ParagraphStyle("item",      parent=estilos["Normal"],  fontSize=10, textColor=colors.HexColor("#222222"), spaceAfter=2, leading=14)
-                    st_detalhe     = ParagraphStyle("detalhe",   parent=estilos["Normal"],  fontSize=9,  textColor=cor_cinza, leftIndent=12, spaceAfter=8, leading=13)
+                    from reportlab.lib import colors as _rl_colors
+                    from reportlab.lib.units import cm as _rl_cm
+                    from reportlab.lib.styles import ParagraphStyle as _RLParStyle
+                    from reportlab.lib.enums import TA_LEFT as _TA_LEFT, TA_CENTER as _TA_CENTER, TA_RIGHT as _TA_RIGHT
+                    from reportlab.platypus import (BaseDocTemplate as _RLBase, Frame as _RLFrame,
+                                                    PageTemplate as _RLPageTpl, Paragraph, Spacer,
+                                                    Table, TableStyle, HRFlowable)
+                    _buf = BytesIO()
+                    _PW, _PH = A4
+
+                    _assets      = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "assets")
+                    _img_lateral = _os.path.join(_assets, "timbrado_lateral.jpeg")
+                    _img_logo    = _os.path.join(_assets, "timbrado_logo.png")
+                    _img_rodape  = _os.path.join(_assets, "timbrado_rodape.png")
+
+                    _LM = 2.9 * _rl_cm
+                    _RM = 1.6 * _rl_cm
+                    _TM = 4.0 * _rl_cm
+                    _BM = 3.4 * _rl_cm
+                    _CW = _PW - _LM - _RM
+
+                    def _draw_timbrado(canvas, doc):
+                        canvas.saveState()
+                        if _os.path.exists(_img_lateral):
+                            canvas.drawImage(_img_lateral, 0, 0,
+                                             width=1.6*_rl_cm, height=_PH,
+                                             preserveAspectRatio=False)
+                        if _os.path.exists(_img_logo):
+                            _lh = 2.8 * _rl_cm
+                            _lw = _lh * (645 / 595)
+                            canvas.drawImage(_img_logo,
+                                             1.8*_rl_cm, _PH - _lh - 0.55*_rl_cm,
+                                             width=_lw, height=_lh, mask="auto")
+                        if _os.path.exists(_img_rodape):
+                            _fh = 2.8 * _rl_cm
+                            _fw = _PW - 1.7*_rl_cm
+                            canvas.drawImage(_img_rodape,
+                                             1.7*_rl_cm, 0.2*_rl_cm,
+                                             width=_fw, height=_fh,
+                                             preserveAspectRatio=True, anchor="sw", mask="auto")
+                        from reportlab.lib import colors as _c
+                        canvas.setStrokeColor(_c.HexColor("#C0392B"))
+                        canvas.setLineWidth(1.2)
+                        canvas.line(_LM, _PH - _TM + 0.3*_rl_cm,
+                                    _PW - _RM, _PH - _TM + 0.3*_rl_cm)
+                        canvas.line(_LM, _BM - 0.3*_rl_cm,
+                                    _PW - _RM, _BM - 0.3*_rl_cm)
+                        canvas.restoreState()
+
+                    _frame = _RLFrame(_LM, _BM, _CW, _PH - _TM - _BM,
+                                      leftPadding=0, rightPadding=0,
+                                      topPadding=0, bottomPadding=0)
+                    _tpl  = _RLPageTpl(id="timbrado", frames=[_frame], onPage=_draw_timbrado)
+                    _doc  = _RLBase(_buf, pagesize=A4, pageTemplates=[_tpl])
+
+                    # ── Paleta ────────────────────────────────────────────────
+                    _RED      = _rl_colors.HexColor("#C0392B")
+                    _CINZA    = _rl_colors.HexColor("#555555")
+                    _CINZA_LT = _rl_colors.HexColor("#F7F7F7")
+                    _AZUL     = _rl_colors.HexColor("#1A5FA8")
+                    _AZUL_LT  = _rl_colors.HexColor("#EBF3FC")
+                    _VERDE    = _rl_colors.HexColor("#1B7A4A")
+                    _VERDE_LT = _rl_colors.HexColor("#EAF5EE")
+                    _PRETO    = _rl_colors.HexColor("#1A1A1A")
+                    _BORDA    = _rl_colors.HexColor("#DDDDDD")
+
+                    # ── Estilos ───────────────────────────────────────────────
+                    st_subtitulo = _RLParStyle("sub",    fontSize=11, textColor=_CINZA,
+                                               spaceAfter=10, alignment=_TA_LEFT,
+                                               fontName="Helvetica")
+                    st_secao     = _RLParStyle("secao",  fontSize=12, textColor=_RED,
+                                               spaceBefore=14, spaceAfter=6,
+                                               fontName="Helvetica-Bold")
+                    st_secao_fin = _RLParStyle("s_fin",  fontSize=12, textColor=_AZUL,
+                                               spaceBefore=14, spaceAfter=6,
+                                               fontName="Helvetica-Bold")
+                    st_secao_est = _RLParStyle("s_est",  fontSize=12, textColor=_VERDE,
+                                               spaceBefore=14, spaceAfter=6,
+                                               fontName="Helvetica-Bold")
+                    st_item      = _RLParStyle("item",   fontSize=10, textColor=_PRETO,
+                                               spaceAfter=2, leading=14,
+                                               fontName="Helvetica-Bold")
+                    st_detalhe   = _RLParStyle("det",    fontSize=9,  textColor=_CINZA,
+                                               leftIndent=12, spaceAfter=8, leading=13,
+                                               fontName="Helvetica")
+                    st_nota      = _RLParStyle("nota",   fontSize=8,  textColor=_CINZA,
+                                               spaceAfter=4, leading=12, alignment=_TA_RIGHT,
+                                               fontName="Helvetica-Oblique")
+
+                    # ── Separar doações ───────────────────────────────────────
+                    _TIPOS_FIN = ('Financeira', 'Projetos')
+                    doacoes_all  = df_rel[df_rel['tipo'].str.contains("DOA", na=False, case=False)].copy()
+                    relac_period = df_rel[~df_rel['tipo'].str.contains("DOA", na=False, case=False)].copy()
+
+                    def _eh_financeira(tipo_str):
+                        return any(t in str(tipo_str) for t in _TIPOS_FIN)
+
+                    doacoes_fin  = doacoes_all[doacoes_all['tipo'].apply(_eh_financeira)]
+                    doacoes_est  = doacoes_all[~doacoes_all['tipo'].apply(_eh_financeira)]
+
+                    total_fin   = doacoes_fin['valor_estimado'].sum() if not doacoes_fin.empty else 0
+                    total_est   = doacoes_est['valor_estimado'].sum() if not doacoes_est.empty else 0
+                    n_parcerias = df_rel['nome_instituicao'].nunique()
+                    n_interacoes= len(relac_period)
+
+                    def _fmt_brl(v):
+                        return f"R$ {v:,.2f}".replace(',','X').replace('.',',').replace('X','.')
+
+                    # ── Story ─────────────────────────────────────────────────
                     story = []
-                    story.append(Paragraph("Casa Durval Paiva", st_titulo))
-                    story.append(Paragraph(f"Relatório Estratégico de Parcerias — {d_ini_fmt} a {d_fim_fmt}", st_subtitulo))
-                    story.append(HRFlowable(width="100%", thickness=1.5, color=cor_principal, spaceAfter=10))
+                    story.append(Paragraph(
+                        f"Relatorio Estrategico de Parcerias  —  {d_ini_fmt} a {d_fim_fmt}",
+                        st_subtitulo))
+                    story.append(HRFlowable(width="100%", thickness=1, color=_BORDA, spaceAfter=10))
 
-                    doacoes_period = df_rel[df_rel['tipo'].str.contains("DOA", na=False, case=False)]
-                    relac_period   = df_rel[df_rel['tipo'] == 'RELACIONAMENTO']
-                    total_fin      = doacoes_period['valor_estimado'].sum()
-                    n_parcerias    = df_rel['nome_instituicao'].nunique()
-
+                    # ── KPIs ──────────────────────────────────────────────────
+                    _cw4 = _CW / 4
                     dados_kpi = [
-                        ["Parceiros movimentados", "Interações registradas", "Doações no período"],
-                        [str(n_parcerias), str(len(relac_period)), f"R$ {total_fin:,.2f}".replace(',','X').replace('.',',').replace('X','.')]
+                        ["Parceiros movimentados", "Interações", "Doações financeiras", "Doações em bens"],
+                        [str(n_parcerias), str(n_interacoes), _fmt_brl(total_fin), _fmt_brl(total_est)],
                     ]
-                    t_kpi = Table(dados_kpi, colWidths=[5.5*cm, 5.5*cm, 5.5*cm])
+                    t_kpi = Table(dados_kpi, colWidths=[_cw4]*4)
                     t_kpi.setStyle(TableStyle([
-                        ("BACKGROUND",    (0,0),(-1,0), cor_fundo),
-                        ("TEXTCOLOR",     (0,0),(-1,0), cor_cinza),
-                        ("FONTSIZE",      (0,0),(-1,0), 9),
-                        ("FONTSIZE",      (0,1),(-1,1), 14),
-                        ("FONTNAME",      (0,1),(-1,1), "Helvetica-Bold"),
-                        ("TEXTCOLOR",     (0,1),(-1,1), cor_principal),
+                        ("BACKGROUND",    (0,0),(-1,0), _CINZA_LT),
+                        ("TEXTCOLOR",     (0,0),(-1,0), _CINZA),
+                        ("FONTNAME",      (0,0),(-1,0), "Helvetica"),
+                        ("FONTSIZE",      (0,0),(-1,0), 8),
+                        ("FONTSIZE",      (0,1),(-1,1), 13),
+                        ("FONTNAME",      (0,1),(1,1), "Helvetica-Bold"),
+                        ("FONTNAME",      (2,1),(2,1), "Helvetica-Bold"),
+                        ("FONTNAME",      (3,1),(3,1), "Helvetica-Bold"),
+                        ("TEXTCOLOR",     (0,1),(1,1), _RED),
+                        ("TEXTCOLOR",     (2,1),(2,1), _AZUL),
+                        ("TEXTCOLOR",     (3,1),(3,1), _VERDE),
                         ("ALIGN",         (0,0),(-1,-1), "CENTER"),
                         ("VALIGN",        (0,0),(-1,-1), "MIDDLE"),
-                        ("BOX",           (0,0),(-1,-1), 0.5, cor_cinza),
-                        ("INNERGRID",     (0,0),(-1,-1), 0.3, colors.HexColor("#DDDDDD")),
+                        ("BOX",           (0,0),(-1,-1), 0.5, _BORDA),
+                        ("INNERGRID",     (0,0),(-1,-1), 0.3, _BORDA),
                         ("TOPPADDING",    (0,0),(-1,-1), 8),
                         ("BOTTOMPADDING", (0,0),(-1,-1), 8),
                     ]))
                     story.append(t_kpi)
-                    story.append(Spacer(1, 0.4*cm))
+                    story.append(Spacer(1, 0.3*_rl_cm))
 
+                    # ── Interações ────────────────────────────────────────────
                     if not relac_period.empty:
-                        story.append(Paragraph("Interações com parceiros", st_secao))
+                        story.append(Paragraph("Interacoes com parceiros", st_secao))
                         for _, row in relac_period.iterrows():
                             _dr  = row['data_registro']
                             drf  = (_dr if hasattr(_dr,'strftime') else datetime.strptime(str(_dr),'%Y-%m-%d')).strftime('%d/%m/%Y')
                             desc = str(row['descricao']).capitalize() if pd.notna(row['descricao']) else "—"
-                            story.append(Paragraph(f"<b>{str(row['nome_instituicao']).upper()}</b> &nbsp;&nbsp; <font color='#888888' size='9'>{drf}</font>", st_item))
-                            story.append(Paragraph(f"↳ {desc}", st_detalhe))
+                            story.append(Paragraph(
+                                f"<b>{str(row['nome_instituicao']).upper()}</b>"
+                                f"&nbsp;&nbsp;<font color='#888888' size='8'>{drf}</font>",
+                                st_item))
+                            story.append(Paragraph(f"   {desc}", st_detalhe))
 
-                    if not doacoes_period.empty:
-                        story.append(Paragraph("Doações recebidas no período", st_secao))
-                        for _, row in doacoes_period.iterrows():
+                    # ── Doações financeiras ───────────────────────────────────
+                    if not doacoes_fin.empty:
+                        story.append(Paragraph("Doacoes financeiras — entram na conta", st_secao_fin))
+                        for _, row in doacoes_fin.iterrows():
                             _dr  = row['data_registro']
                             drf  = (_dr if hasattr(_dr,'strftime') else datetime.strptime(str(_dr),'%Y-%m-%d')).strftime('%d/%m/%Y')
                             val  = float(row['valor_estimado']) if pd.notna(row['valor_estimado']) else 0
-                            vf   = f"R$ {val:,.2f}".replace(',','X').replace('.',',').replace('X','.') if val > 0 else "—"
+                            vf   = _fmt_brl(val) if val > 0 else "—"
                             desc = str(row['descricao']).capitalize() if pd.notna(row['descricao']) else "—"
-                            story.append(Paragraph(f"<b>{str(row['nome_instituicao']).upper()}</b> &nbsp;&nbsp; <font color='#888888' size='9'>{drf}</font> &nbsp; <b>{vf}</b>", st_item))
-                            story.append(Paragraph(f"↳ {desc}", st_detalhe))
+                            story.append(Paragraph(
+                                f"<b>{str(row['nome_instituicao']).upper()}</b>"
+                                f"&nbsp;&nbsp;<font color='#888888' size='8'>{drf}</font>"
+                                f"&nbsp;&nbsp;<font color='#1A5FA8'><b>{vf}</b></font>",
+                                st_item))
+                            story.append(Paragraph(f"   {desc}", st_detalhe))
 
-                    doc.build(story)
-                    return buf.getvalue()
+                    # ── Doações estimadas ─────────────────────────────────────
+                    if not doacoes_est.empty:
+                        story.append(Paragraph("Doacoes em bens e servicos — valor estimado pelo parceiro", st_secao_est))
+                        for _, row in doacoes_est.iterrows():
+                            _dr  = row['data_registro']
+                            drf  = (_dr if hasattr(_dr,'strftime') else datetime.strptime(str(_dr),'%Y-%m-%d')).strftime('%d/%m/%Y')
+                            val  = float(row['valor_estimado']) if pd.notna(row['valor_estimado']) else 0
+                            vf   = _fmt_brl(val) if val > 0 else "—"
+                            desc = str(row['descricao']).capitalize() if pd.notna(row['descricao']) else "—"
+                            story.append(Paragraph(
+                                f"<b>{str(row['nome_instituicao']).upper()}</b>"
+                                f"&nbsp;&nbsp;<font color='#888888' size='8'>{drf}</font>"
+                                f"&nbsp;&nbsp;<font color='#1B7A4A'><b>{vf}</b></font>",
+                                st_item))
+                            story.append(Paragraph(f"   {desc}", st_detalhe))
+
+                    # ── Nota de rodapé ────────────────────────────────────────
+                    story.append(Spacer(1, 0.4*_rl_cm))
+                    from datetime import datetime as _dt, timedelta as _td
+                    _agora = (_dt.now() - _td(hours=3)).strftime("%d/%m/%Y %H:%M")
+                    story.append(Paragraph(
+                        f"Sistema DI  •  Gerado em {_agora} (Brasilia)",
+                        st_nota))
+
+                    _doc.build(story)
+                    return _buf.getvalue()
 
                 try:
                     pdf_bytes = _gerar_pdf_diretoria(df_relatorio, dt_ini_fmt, dt_fim_fmt)
