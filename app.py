@@ -4019,131 +4019,261 @@ elif menu == "Contatos":
 elif menu == "Relacionamento":
     import plotly.graph_objects as go
 
-    # ── Dados base ──────────────────────────────────────────────────────────
-    df_parceiros = run_query_cached(
-        "SELECT id_parceiro, nome_instituicao, UPPER(TRIM(status)) AS status_limpo, "
-        "data_adesao FROM Parceiro"
-    )
-
-    df_rel = run_query_cached("SELECT * FROM View_Relacionamento_Critico")
-
-    # ── Migração: adicionar colunas se não existirem ─────────────────────
-    for _col, _tipo in [("tipo_interacao","TEXT"), ("canal","TEXT"), ("responsavel","TEXT")]:
+    # ══════════════════════════════════════════════════════════════════════════
+    # SETUP E MIGRAÇÃO
+    # ══════════════════════════════════════════════════════════════════════════
+    for _col, _tipo in [
+        ("tipo_interacao", "TEXT"), ("canal", "TEXT"), ("responsavel", "TEXT")
+    ]:
         try:
             run_exec(f"ALTER TABLE Registro_Relacionamento ADD COLUMN IF NOT EXISTS {_col} {_tipo}")
         except Exception:
             pass
 
+    try:
+        run_exec("ALTER TABLE Parceiro ADD COLUMN IF NOT EXISTS tipo_publico_regua TEXT")
+    except Exception:
+        pass
+
+    run_exec("""
+        CREATE TABLE IF NOT EXISTS Regua_Pendencias (
+            id            SERIAL PRIMARY KEY,
+            id_parceiro   INTEGER REFERENCES Parceiro(id_parceiro) ON DELETE CASCADE,
+            tipo_acao     TEXT NOT NULL,
+            canal_sugerido TEXT,
+            data_sugerida DATE,
+            status        TEXT DEFAULT 'PENDENTE',
+            gerado_em     TIMESTAMP DEFAULT NOW(),
+            feito_em      TIMESTAMP,
+            observacao    TEXT
+        )
+    """)
+
+    # ── Régua de relacionamento: config mestra ────────────────────────────────
+    REGUA_CONFIG = {
+        "Parceiros Importantes": [
+            {"acao": "Cartao de aniversario digital",   "periodo_dias": 365, "canal": "WhatsApp/E-mail"},
+            {"acao": "Agradecimento personalizado",      "periodo_dias": 90,  "canal": "E-mail/Presencial"},
+            {"acao": "Destaque em redes + Selo Amigo",   "periodo_dias": 180, "canal": "Redes Sociais"},
+            {"acao": "Mensagem mensal",                  "periodo_dias": 30,  "canal": "E-mail/WhatsApp"},
+            {"acao": "Boletim semanal",                  "periodo_dias": 7,   "canal": "WhatsApp/E-mail"},
+            {"acao": "Brindes e datas comemorativas",    "periodo_dias": 365, "canal": "Presencial"},
+            {"acao": "Cartao de boas festas digital",    "periodo_dias": 365, "canal": "E-mail"},
+            {"acao": "Balanco social",                   "periodo_dias": 365, "canal": "E-mail/Fisico"},
+        ],
+        "Financiador": [
+            {"acao": "Cartao de aniversario digital",   "periodo_dias": 365, "canal": "WhatsApp/E-mail"},
+            {"acao": "Agradecimento personalizado",      "periodo_dias": 90,  "canal": "E-mail/Presencial"},
+            {"acao": "Destaque em redes + Selo Amigo",   "periodo_dias": 180, "canal": "Redes Sociais"},
+            {"acao": "Mensagem mensal",                  "periodo_dias": 30,  "canal": "E-mail/WhatsApp"},
+            {"acao": "Mensagem de campanha",             "periodo_dias": 45,  "canal": "WhatsApp/E-mail"},
+            {"acao": "Boletim semanal",                  "periodo_dias": 7,   "canal": "WhatsApp/E-mail"},
+            {"acao": "Brindes e datas comemorativas",    "periodo_dias": 365, "canal": "Presencial"},
+            {"acao": "Cartao de boas festas digital",    "periodo_dias": 365, "canal": "E-mail"},
+            {"acao": "Balanco social",                   "periodo_dias": 365, "canal": "E-mail/Fisico"},
+        ],
+        "Imprensa": [
+            {"acao": "Agradecimento padrao",             "periodo_dias": 90,  "canal": "E-mail"},
+            {"acao": "Mensagem mensal",                  "periodo_dias": 30,  "canal": "E-mail/WhatsApp"},
+            {"acao": "Mensagem de campanha",             "periodo_dias": 45,  "canal": "WhatsApp/E-mail"},
+            {"acao": "Boletim semanal",                  "periodo_dias": 7,   "canal": "WhatsApp/E-mail"},
+            {"acao": "Cartao de boas festas digital",    "periodo_dias": 365, "canal": "E-mail"},
+            {"acao": "Balanco social",                   "periodo_dias": 365, "canal": "E-mail"},
+        ],
+        "Doadores Especiais (nao monetario)": [
+            {"acao": "Cartao de aniversario digital",   "periodo_dias": 365, "canal": "WhatsApp/E-mail"},
+            {"acao": "Agradecimento personalizado",      "periodo_dias": 90,  "canal": "E-mail"},
+            {"acao": "Mensagem mensal",                  "periodo_dias": 30,  "canal": "E-mail/WhatsApp"},
+            {"acao": "Mensagem de campanha",             "periodo_dias": 45,  "canal": "WhatsApp/E-mail"},
+            {"acao": "Boletim semanal",                  "periodo_dias": 7,   "canal": "WhatsApp/E-mail"},
+            {"acao": "Brindes e datas comemorativas",    "periodo_dias": 365, "canal": "Presencial"},
+            {"acao": "Cartao de boas festas digital",    "periodo_dias": 365, "canal": "E-mail"},
+        ],
+        "Doador Pontual": [
+            {"acao": "Boas-vindas",                      "periodo_dias": None, "canal": "E-mail"},
+            {"acao": "Agradecimento padrao",             "periodo_dias": 90,   "canal": "E-mail"},
+            {"acao": "Boletim semanal",                  "periodo_dias": 7,    "canal": "WhatsApp/E-mail"},
+            {"acao": "Cartao de boas festas digital",    "periodo_dias": 365,  "canal": "E-mail"},
+        ],
+        "Voluntario": [
+            {"acao": "Cartao de aniversario digital",   "periodo_dias": 365, "canal": "WhatsApp/E-mail"},
+            {"acao": "Boas-vindas",                      "periodo_dias": None, "canal": "E-mail"},
+            {"acao": "Mensagem mensal",                  "periodo_dias": 30,  "canal": "E-mail/WhatsApp"},
+            {"acao": "Mensagem de campanha",             "periodo_dias": 45,  "canal": "WhatsApp/E-mail"},
+            {"acao": "Boletim semanal",                  "periodo_dias": 7,   "canal": "WhatsApp/E-mail"},
+            {"acao": "Cartao de boas festas digital",    "periodo_dias": 365, "canal": "E-mail"},
+        ],
+        "Apoiadores de Eventos": [
+            {"acao": "Agradecimento padrao",             "periodo_dias": 90,  "canal": "E-mail"},
+            {"acao": "Mensagem mensal",                  "periodo_dias": 30,  "canal": "E-mail/WhatsApp"},
+            {"acao": "Cartao de boas festas digital",    "periodo_dias": 365, "canal": "E-mail"},
+        ],
+        "Conselho e Diretoria": [
+            {"acao": "Cartao de aniversario digital",   "periodo_dias": 365, "canal": "WhatsApp"},
+            {"acao": "Mensagem mensal",                  "periodo_dias": 30,  "canal": "E-mail/WhatsApp"},
+            {"acao": "Mensagem de campanha",             "periodo_dias": 45,  "canal": "WhatsApp"},
+            {"acao": "Boletim semanal",                  "periodo_dias": 7,   "canal": "WhatsApp/E-mail"},
+            {"acao": "Cartao de boas festas digital",    "periodo_dias": 365, "canal": "E-mail"},
+            {"acao": "Balanco social",                   "periodo_dias": 365, "canal": "E-mail/Fisico"},
+        ],
+    }
+
+    def _gerar_regua_pendencias(id_parceiro: int, tipo_publico: str):
+        """Gera tarefas da régua para um parceiro, evitando duplicatas e respeitando periodicidade."""
+        if not tipo_publico or tipo_publico not in REGUA_CONFIG:
+            return
+        hoje_dt = datetime.now().date()
+        for item in REGUA_CONFIG[tipo_publico]:
+            # Verificar se já existe pendente
+            ex_pend = run_query(
+                "SELECT id FROM Regua_Pendencias WHERE id_parceiro=%s AND tipo_acao=%s AND status=\'PENDENTE\'",
+                (id_parceiro, item["acao"])
+            )
+            if not ex_pend.empty:
+                continue
+            # Verificar última vez que foi feito
+            if item["periodo_dias"]:
+                ex_feito = run_query(
+                    "SELECT feito_em FROM Regua_Pendencias WHERE id_parceiro=%s AND tipo_acao=%s "
+                    "AND status=\'FEITO\' ORDER BY feito_em DESC LIMIT 1",
+                    (id_parceiro, item["acao"])
+                )
+                if not ex_feito.empty:
+                    ultima = pd.to_datetime(ex_feito["feito_em"].values[0])
+                    if (datetime.now() - ultima).days < item["periodo_dias"]:
+                        continue
+            # Gerar pendência
+            data_sug = (datetime.now() + timedelta(days=7)).date()
+            run_exec(
+                "INSERT INTO Regua_Pendencias (id_parceiro, tipo_acao, canal_sugerido, data_sugerida) "
+                "VALUES (%s, %s, %s, %s)",
+                (id_parceiro, item["acao"], item["canal"], data_sug)
+            )
+
+    # ── Dados base ────────────────────────────────────────────────────────────
+    df_parceiros = run_query_cached(
+        "SELECT id_parceiro, nome_instituicao, UPPER(TRIM(status)) AS status_limpo, "
+        "data_adesao, tipo_publico_regua FROM Parceiro"
+    )
+    df_rel = run_query_cached("SELECT * FROM View_Relacionamento_Critico")
     df_interacoes = run_query_cached(
         "SELECT id_registro, id_parceiro, id_contato, data_interacao, "
-        "descricao_do_que_foi_feito, proxima_acao_data, "
-        "tipo_interacao, canal, responsavel "
+        "descricao_do_que_foi_feito, proxima_acao_data, tipo_interacao, canal, responsavel "
         "FROM Registro_Relacionamento ORDER BY data_interacao DESC"
     )
-
     df_doacoes_rel = run_query_cached(
         "SELECT id_parceiro, data_doacao, tipo_doacao, valor_estimado, descricao "
-        "FROM Doacao WHERE tipo_doacao IN ('Financeira','Projetos') ORDER BY data_doacao DESC"
+        "FROM Doacao WHERE tipo_doacao IN (\'Financeira\',\'Projetos\') ORDER BY data_doacao DESC"
+    )
+    df_regua_pend = run_query_cached(
+        "SELECT rp.*, p.nome_instituicao FROM Regua_Pendencias rp "
+        "JOIN Parceiro p ON rp.id_parceiro = p.id_parceiro "
+        "WHERE rp.status = \'PENDENTE\' ORDER BY rp.data_sugerida ASC"
     )
 
-    page_header("Relacionamento", "CRM de parceiros — saúde, linha do tempo e follow-ups.")
+    page_header("Relacionamento", "Registro, automacoes da regua e historico de parceiros.")
 
-    # ── KPIs topo ────────────────────────────────────────────────────────────
-    m_p = df_parceiros['status_limpo'].str.contains('PROSPEC', na=False)
-    m_a = df_parceiros['status_limpo'].str.contains('ATIVO',   na=False)
-    m_i = df_parceiros['status_limpo'].str.contains('INATIVO', na=False)
-
-    # Follow-ups vencidos (proxima_acao_data < hoje)
+    # ── KPIs topo ─────────────────────────────────────────────────────────────
     hoje = datetime.now().date()
+    m_a  = df_parceiros["status_limpo"].str.contains("ATIVO",   na=False)
+    m_p  = df_parceiros["status_limpo"].str.contains("PROSPEC", na=False)
+    m_i  = df_parceiros["status_limpo"].str.contains("INATIVO", na=False)
+
     vencidos = 0
-    if not df_interacoes.empty and 'proxima_acao_data' in df_interacoes.columns:
-        df_int_dt = df_interacoes.dropna(subset=['proxima_acao_data']).copy()
-        df_int_dt['_d'] = pd.to_datetime(df_int_dt['proxima_acao_data'], errors='coerce').dt.date
-        vencidos = int((df_int_dt['_d'] < hoje).sum())
+    if not df_interacoes.empty and "proxima_acao_data" in df_interacoes.columns:
+        _d = pd.to_datetime(df_interacoes["proxima_acao_data"], errors="coerce").dt.date
+        vencidos = int((_d < hoje).sum())
+
+    pendencias_regua = len(df_regua_pend) if not df_regua_pend.empty else 0
 
     kpi_row([
-        {"label": "Prospecção", "value": int(m_p.sum())},
-        {"label": "Ativos",     "value": int(m_a.sum()), "accent": True},
-        {"label": "Inativos",   "value": int(m_i.sum())},
-        {"label": "Follow-ups vencidos", "value": vencidos, "hint": "proxima_acao_data < hoje"},
+        {"label": "Ativos",              "value": int(m_a.sum()), "accent": True},
+        {"label": "Prospecção",          "value": int(m_p.sum())},
+        {"label": "Inativos",            "value": int(m_i.sum())},
+        {"label": "Follow-ups vencidos", "value": vencidos},
+        {"label": "Pendencias da regua", "value": pendencias_regua, "hint": "acoes da regua nao realizadas"},
     ])
 
-    # ── Abas ─────────────────────────────────────────────────────────────────
-    tab_reg, tab_vis, tab_timeline, tab_followup, tab_diretoria = st.tabs([
-        "Registrar interacao", "Visão consolidada", "Linha do tempo", "Follow-ups", "Relatório diretoria"
+    # ── Abas ──────────────────────────────────────────────────────────────────
+    tab_reg, tab_timeline, tab_followup, tab_diretoria = st.tabs([
+        "Registrar interacao", "Linha do tempo", "Follow-ups e Regua", "Relatorio diretoria"
     ])
 
     # ══════════════════════════════════════════════════════════════════════════
-    # ABA 0 — REGISTRAR INTERAÇÃO
+    # ABA 1 — REGISTRAR INTERAÇÃO
     # ══════════════════════════════════════════════════════════════════════════
     with tab_reg:
         _rc1, _rc2 = st.columns([3, 2], gap="large")
 
-        # ── Formulário de registro ────────────────────────────────────────────
         with _rc1:
             section("Nova interacao")
-
             _TIPOS_INTERACAO = [
-                "Almoco CDP",
-                "Reuniao presencial",
-                "Ligacao telefonica",
-                "WhatsApp",
-                "E-mail",
-                "Visita ao parceiro",
-                "Evento externo",
-                "Envio de material",
-                "Agradecimento",
-                "Outro",
+                "Almoco CDP", "Reuniao presencial", "Ligacao telefonica",
+                "WhatsApp", "E-mail", "Visita ao parceiro",
+                "Evento externo", "Envio de material", "Agradecimento", "Follow-up", "Outro",
             ]
-            _CANAIS = ["Presencial", "WhatsApp", "E-mail", "Telefone", "Plataforma"]
+            _CANAIS = ["Presencial", "WhatsApp", "E-mail", "Telefone", "Redes Sociais", "Plataforma"]
 
             with st.form("form_nova_interacao", clear_on_submit=True):
                 _nomes_parc = sorted(df_parceiros["nome_instituicao"].dropna().tolist())
-                _fi1, _fi2 = st.columns(2)
-                _parc_sel  = _fi1.selectbox("Parceiro *", ["-- selecione --"] + _nomes_parc, key="ni_parc")
-                _tipo_sel  = _fi2.selectbox("Tipo de interacao *", _TIPOS_INTERACAO, key="ni_tipo")
+                _fi1, _fi2  = st.columns(2)
+                _parc_sel   = _fi1.selectbox("Parceiro *", ["-- selecione --"] + _nomes_parc, key="ni_parc")
+                _tipo_sel   = _fi2.selectbox("Tipo de interacao *", _TIPOS_INTERACAO, key="ni_tipo")
 
-                _fi3, _fi4 = st.columns(2)
-                _canal_sel = _fi3.selectbox("Canal", _CANAIS, key="ni_canal")
-                _data_int  = _fi4.date_input("Data *", datetime.now().date(), key="ni_data")
+                _fi3, _fi4  = st.columns(2)
+                _canal_sel  = _fi3.selectbox("Canal", _CANAIS, key="ni_canal")
+                _data_int   = _fi4.date_input("Data *", datetime.now().date(), key="ni_data")
 
-                # Contatos do parceiro selecionado
-                _contatos_disp = [("Nenhum", None)]
+                # Tipo público da régua (define quais automações gerar)
+                _tipo_pub_atual = None
+                _id_p_form_val  = None
                 if _parc_sel != "-- selecione --":
-                    _id_p_form = df_parceiros[df_parceiros["nome_instituicao"] == _parc_sel]["id_parceiro"]
-                    if not _id_p_form.empty:
-                        _ct = run_query(
-                            "SELECT id_contato, nome_pessoa FROM Contato_Direto WHERE id_parceiro = %s ORDER BY nome_pessoa",
-                            (int(_id_p_form.values[0]),)
-                        )
-                        if not _ct.empty:
-                            _contatos_disp += [(r["nome_pessoa"], r["id_contato"]) for _, r in _ct.iterrows()]
-                _contato_sel = st.selectbox(
-                    "Contato envolvido (opcional)",
-                    options=[c[0] for c in _contatos_disp],
-                    key="ni_contato"
+                    _row_p = df_parceiros[df_parceiros["nome_instituicao"] == _parc_sel]
+                    if not _row_p.empty:
+                        _id_p_form_val  = int(_row_p["id_parceiro"].values[0])
+                        _tipo_pub_atual = _row_p["tipo_publico_regua"].values[0]
+
+                _opts_pub = ["(nao definir)"] + list(REGUA_CONFIG.keys())
+                _idx_pub  = 0
+                if _tipo_pub_atual and _tipo_pub_atual in _opts_pub:
+                    _idx_pub = _opts_pub.index(_tipo_pub_atual)
+                _tipo_pub_sel = st.selectbox(
+                    "Tipo de publico (regua) — define automacoes",
+                    options=_opts_pub, index=_idx_pub, key="ni_pub"
                 )
+
+                # Contato envolvido
+                _contatos_disp = [("Nenhum", None)]
+                if _id_p_form_val:
+                    _ct = run_query(
+                        "SELECT id_contato, nome_pessoa FROM Contato_Direto "
+                        "WHERE id_parceiro = %s ORDER BY nome_pessoa",
+                        (_id_p_form_val,)
+                    )
+                    if not _ct.empty:
+                        _contatos_disp += [(r["nome_pessoa"], r["id_contato"]) for _, r in _ct.iterrows()]
+                _contato_sel    = st.selectbox("Contato envolvido (opcional)",
+                                               [c[0] for c in _contatos_disp], key="ni_contato")
                 _id_contato_form = dict(_contatos_disp).get(_contato_sel)
 
                 _descricao = st.text_area(
                     "O que foi feito / conversado *",
-                    placeholder="Descreva o que aconteceu, o que foi tratado, decisoes tomadas...",
-                    height=110, key="ni_desc"
+                    placeholder="Descreva o que aconteceu, decisoes, encaminhamentos...",
+                    height=100, key="ni_desc"
                 )
+                _fi5, _fi6  = st.columns(2)
+                _prox_acao  = _fi5.text_input("Proxima acao", placeholder="ex: Enviar proposta", key="ni_prox")
+                _prox_data  = _fi6.date_input("Data da proxima acao", value=None, key="ni_prox_data")
+                _resp       = st.text_input("Responsavel", placeholder="Quem fez o contato?", key="ni_resp")
 
-                _fi5, _fi6 = st.columns(2)
-                _prox_acao = _fi5.text_input("Proxima acao (opcional)", placeholder="ex: Enviar proposta, Ligar na sexta", key="ni_prox")
-                _prox_data = _fi6.date_input("Data da proxima acao", value=None, key="ni_prox_data")
-                _resp      = st.text_input("Responsavel", placeholder="Quem fez o contato?", key="ni_resp")
-
-                _submitted = st.form_submit_button("Registrar interacao", type="primary", use_container_width=True)
+                _submitted = st.form_submit_button("Registrar", type="primary", use_container_width=True)
                 if _submitted:
                     if _parc_sel == "-- selecione --":
                         st.warning("Selecione o parceiro.")
                     elif not _descricao.strip():
                         st.warning("Descreva o que foi feito.")
                     else:
-                        _id_p_reg = int(df_parceiros[df_parceiros["nome_instituicao"] == _parc_sel]["id_parceiro"].values[0])
+                        _id_p_reg   = int(df_parceiros[df_parceiros["nome_instituicao"] == _parc_sel]["id_parceiro"].values[0])
                         _desc_final = f"[{_tipo_sel}] {_descricao.strip()}"
                         if _prox_acao.strip():
                             _desc_final += f" | Proxima acao: {_prox_acao.strip()}"
@@ -4153,399 +4283,336 @@ elif menu == "Relacionamento":
                             " proxima_acao_data, tipo_interacao, canal, responsavel) "
                             "VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
                             (
-                                _id_p_reg,
-                                _id_contato_form,
-                                _data_int,
-                                _desc_final,
+                                _id_p_reg, _id_contato_form, _data_int, _desc_final,
                                 _prox_data if _prox_data else None,
-                                _tipo_sel,
-                                _canal_sel,
+                                _tipo_sel, _canal_sel,
                                 _resp.strip() if _resp.strip() else None,
                             )
                         )
-                        run_exec(
-                            "INSERT INTO Logs (acao) VALUES (%s)",
-                            (f"Interacao registrada: {_parc_sel} — {_tipo_sel}",)
-                        )
+                        # Atualizar tipo_publico_regua do parceiro se selecionado
+                        if _tipo_pub_sel != "(nao definir)":
+                            run_exec(
+                                "UPDATE Parceiro SET tipo_publico_regua = %s WHERE id_parceiro = %s",
+                                (_tipo_pub_sel, _id_p_reg)
+                            )
+                            # Gerar pendências da régua
+                            _gerar_regua_pendencias(_id_p_reg, _tipo_pub_sel)
+
+                        run_exec("INSERT INTO Logs (acao) VALUES (%s)",
+                                 (f"Interacao: {_parc_sel} — {_tipo_sel}",))
                         st.success(f"Interacao com {_parc_sel} registrada.")
                         st.rerun()
 
-        # ── Régua de relacionamento (referência rápida) ───────────────────────
+        # ── Painel direito: alertas da régua para o parceiro selecionado ──────
         with _rc2:
             section("Regua de relacionamento")
-            _REGUA = [
-                ("Parceiros Importantes", ["Agradecimento personalizado", "Destaque em redes + Selo Amigo", "Mensagens mensais", "Boletim semanal", "Brindes e datas", "Cartao de boas festas", "Balanco social"]),
-                ("Financiador",           ["Agradecimento personalizado", "Destaque em redes + Selo Amigo", "Mensagens mensais", "Mensagens de campanhas", "Boletim semanal", "Brindes e datas", "Cartao de boas festas", "Balanco social"]),
-                ("Imprensa",              ["Agradecimento padrao", "Mensagens mensais", "Mensagens de campanhas", "Boletim semanal", "Cartao de boas festas", "Balanco social"]),
-                ("Doadores Especiais",    ["Agradecimento personalizado", "Mensagens mensais", "Mensagens de campanhas", "Boletim semanal", "Brindes e datas", "Cartao de boas festas"]),
-                ("Doador Pontual",        ["Boas-vindas", "Agradecimento padrao", "Boletim semanal", "Cartao de boas festas"]),
-                ("Doador via Site",       ["Agradecimento automatico"]),
-                ("Voluntario",            ["Cartao de aniversario", "Boas-vindas", "Mensagens mensais", "Mensagens de campanhas", "Boletim semanal", "Cartao de boas festas"]),
-                ("Apoiadores de Eventos", ["Agradecimento padrao", "Mensagens mensais", "Cartao de boas festas"]),
-                ("Conselho e Diretoria",  ["Cartao de aniversario", "Mensagens mensais", "Mensagens de campanhas", "Boletim semanal", "Cartao de boas festas", "Balanco social"]),
-            ]
-            st.markdown("<div style='font-size:0.82rem;color:#94A3B8;margin-bottom:6px;'>Acoes previstas por tipo de publico</div>", unsafe_allow_html=True)
-            for _pub, _acoes in _REGUA:
-                with st.expander(_pub, expanded=False):
-                    for _a in _acoes:
-                        st.markdown(f"- {_a}")
+            if "ni_parc" in st.session_state and st.session_state["ni_parc"] != "-- selecione --":
+                _pn = st.session_state["ni_parc"]
+                _row_sel = df_parceiros[df_parceiros["nome_instituicao"] == _pn]
+                if not _row_sel.empty:
+                    _id_sel_reg = int(_row_sel["id_parceiro"].values[0])
+                    _pub_sel    = _row_sel["tipo_publico_regua"].values[0]
+                    if _pub_sel and _pub_sel in REGUA_CONFIG:
+                        st.markdown(
+                            f"<div style=\'font-size:0.8rem;color:#94A3B8;margin-bottom:8px;\'>"
+                            f"Publico: <b style='color:#E5E7EB;'>{_pub_sel}</b></div>",
+                            unsafe_allow_html=True
+                        )
+                        _pend_parc = run_query(
+                            "SELECT tipo_acao, canal_sugerido, data_sugerida FROM Regua_Pendencias "
+                            "WHERE id_parceiro=%s AND status=\'PENDENTE\' ORDER BY data_sugerida",
+                            (_id_sel_reg,)
+                        )
+                        if not _pend_parc.empty:
+                            st.markdown("<div style=\'font-size:0.82rem;color:#FBBF24;font-weight:600;margin-bottom:4px;\'>Pendente para este parceiro:</div>", unsafe_allow_html=True)
+                            for _, _rp in _pend_parc.iterrows():
+                                _ds = str(_rp["data_sugerida"])[:10] if pd.notna(_rp["data_sugerida"]) else "—"
+                                st.markdown(
+                                    f"<div style=\'padding:5px 10px;margin-bottom:4px;background:rgba(251,191,36,0.08);"
+                                    f"border-left:2px solid #FBBF24;border-radius:4px;font-size:0.82rem;\'>"
+                                    f"<b>{_rp['tipo_acao']}</b><br>"
+                                    f"<span style='color:#94A3B8;'>{_rp['canal_sugerido']} · ate {_ds}</span></div>",
+                                    unsafe_allow_html=True
+                                )
+                        else:
+                            st.markdown("<div style=\'font-size:0.82rem;color:#059669;\'>Sem pendencias na regua para este parceiro.</div>", unsafe_allow_html=True)
+                    else:
+                        st.info("Defina o tipo de publico (campo acima) para ativar as automacoes da regua.")
+            else:
+                # Mostrar referência geral da régua
+                st.markdown("<div style=\'font-size:0.82rem;color:#94A3B8;margin-bottom:8px;\'>Acoes por tipo de publico:</div>", unsafe_allow_html=True)
+                _REGUA_REF = [
+                    ("Parceiros Importantes", ["Agradec. personalizado", "Destaque em redes", "Mensagem mensal", "Boletim semanal", "Brindes", "Boas festas", "Balanco social"]),
+                    ("Financiador",           ["Agradec. personalizado", "Destaque em redes", "Mensagem mensal", "Mensagem campanha", "Boletim semanal", "Brindes", "Balanco social"]),
+                    ("Imprensa",              ["Agradec. padrao", "Mensagem mensal", "Mensagem campanha", "Boletim semanal"]),
+                    ("Doadores Especiais",    ["Agradec. personalizado", "Mensagem mensal", "Boletim semanal", "Brindes"]),
+                    ("Doador Pontual",        ["Boas-vindas", "Agradec. padrao", "Boletim semanal"]),
+                    ("Voluntario",            ["Aniversario", "Mensagem mensal", "Boletim semanal"]),
+                    ("Apoiadores de Eventos", ["Agradec. padrao", "Mensagem mensal"]),
+                    ("Conselho e Diretoria",  ["Aniversario", "Mensagem mensal", "Boletim semanal", "Balanco social"]),
+                ]
+                for _pub, _acoes in _REGUA_REF:
+                    with st.expander(_pub, expanded=False):
+                        for _a in _acoes:
+                            st.markdown(f"- {_a}")
 
-        # ── Ultimas interacoes registradas ────────────────────────────────────
-        section("Ultimas interacoes")
-        _df_ult = df_interacoes.head(10) if not df_interacoes.empty else pd.DataFrame()
+        # ── Últimas interações ────────────────────────────────────────────────
+        st.divider()
+        section("Ultimas interacoes registradas")
+        _df_ult     = df_interacoes.head(8) if not df_interacoes.empty else pd.DataFrame()
+        _nomes_map  = df_parceiros.set_index("id_parceiro")["nome_instituicao"].to_dict()
         if _df_ult.empty:
             st.info("Nenhuma interacao registrada ainda.")
         else:
-            _nomes_map = df_parceiros.set_index("id_parceiro")["nome_instituicao"].to_dict()
             for _, _r in _df_ult.iterrows():
-                _nome_p = _nomes_map.get(_r["id_parceiro"], "—")
-                _data_r = str(_r["data_interacao"])[:10] if pd.notna(_r["data_interacao"]) else "—"
-                _tipo_r = str(_r.get("tipo_interacao","")) if pd.notna(_r.get("tipo_interacao")) else ""
-                _tipo_tag = f"<span style='background:rgba(59,130,246,0.18);color:#93C5FD;padding:1px 8px;border-radius:10px;font-size:0.78rem;margin-right:6px;'>{_tipo_r}</span>" if _tipo_r else ""
-                _desc_r = str(_r["descricao_do_que_foi_feito"])[:120] if pd.notna(_r["descricao_do_que_foi_feito"]) else "—"
+                _nome_p  = _nomes_map.get(_r["id_parceiro"], "—")
+                _data_r  = str(_r["data_interacao"])[:10] if pd.notna(_r["data_interacao"]) else "—"
+                _tipo_r  = str(_r.get("tipo_interacao", "")) if pd.notna(_r.get("tipo_interacao")) else ""
+                _tipo_tag = (f"<span style=\'background:rgba(59,130,246,0.18);color:#93C5FD;"
+                             f"padding:1px 8px;border-radius:10px;font-size:0.78rem;margin-right:6px;\'>"
+                             f"{_tipo_r}</span>") if _tipo_r else ""
+                _desc_r  = str(_r["descricao_do_que_foi_feito"])[:130] if pd.notna(_r["descricao_do_que_foi_feito"]) else "—"
+                _resp_r  = str(_r.get("responsavel", "")) if pd.notna(_r.get("responsavel")) else ""
+                _resp_tag = (f" <span style='font-size:0.75rem;color:#64748B;'>por {_resp_r}</span>") if _resp_r else ""
                 st.markdown(
-                    f"<div style='padding:8px 14px;margin-bottom:8px;background:rgba(255,255,255,0.04);"
-                    f"border-radius:8px;border-left:3px solid #3B82F6;'>"
+                    f"<div style=\'padding:8px 14px;margin-bottom:6px;background:rgba(255,255,255,0.04);"
+                    f"border-radius:8px;border-left:3px solid #3B82F6;\'>"
+                    f"<div style=\'display:flex;justify-content:space-between;\'>"
                     f"<span style='font-weight:600;color:#E5E7EB;'>{_nome_p}</span>"
-                    f"<span style='font-size:0.78rem;color:#94A3B8;margin-left:10px;'>{_data_r}</span>"
-                    f"<br>{_tipo_tag}<span style='font-size:0.88rem;color:#CBD5E1;'>{_desc_r}</span>"
-                    f"</div>",
+                    f"<span style='font-size:0.78rem;color:#94A3B8;'>{_data_r}</span></div>"
+                    f"<div style='margin-top:3px;'>{_tipo_tag}"
+                    f"<span style='font-size:0.87rem;color:#CBD5E1;'>{_desc_r}</span>"
+                    f"{_resp_tag}</div></div>",
                     unsafe_allow_html=True
                 )
-
-
-    # ══════════════════════════════════════════════════════════════════════════
-    # ABA 1 — VISÃO CONSOLIDADA COM SCORE
-    # ══════════════════════════════════════════════════════════════════════════
-    with tab_vis:
-        section("Scorecard de parceiros")
-
-        if df_parceiros.empty:
-            empty_state("—", "Sem parceiros", "Cadastre parceiros para ativar o scorecard.")
-        else:
-            # ── Calcular score por parceiro ──────────────────────────────────
-            # Score (0-100): frequência (40pts) + valor doado (40pts) + tempo parceria (20pts)
-
-            # Frequência: interações nos últimos 180 dias
-            freq_df = pd.DataFrame()
-            if not df_interacoes.empty:
-                df_int_c = df_interacoes.copy()
-                df_int_c['_data'] = pd.to_datetime(df_int_c['data_interacao'], errors='coerce')
-                corte = pd.Timestamp.now() - pd.Timedelta(days=180)
-                freq_df = (
-                    df_int_c[df_int_c['_data'] >= corte]
-                    .groupby('id_parceiro')
-                    .size()
-                    .reset_index(name='freq_180')
-                )
-
-            # Valor total doado (últimos 12 meses)
-            valor_df = pd.DataFrame()
-            if not df_doacoes_rel.empty:
-                df_doa_c = df_doacoes_rel.copy()
-                df_doa_c['_data'] = pd.to_datetime(df_doa_c['data_doacao'], errors='coerce')
-                corte12 = pd.Timestamp.now() - pd.Timedelta(days=365)
-                valor_df = (
-                    df_doa_c[df_doa_c['_data'] >= corte12]
-                    .groupby('id_parceiro')['valor_estimado']
-                    .sum()
-                    .reset_index(name='valor_12m')
-                )
-
-            # Dias de parceria
-            parc_c = df_parceiros.copy()
-            if 'data_adesao' in parc_c.columns:
-                parc_c['_inicio'] = pd.to_datetime(parc_c['data_adesao'], errors='coerce')
-                parc_c['dias_parceria'] = (pd.Timestamp.now() - parc_c['_inicio']).dt.days.fillna(0)
-            else:
-                parc_c['dias_parceria'] = 0
-
-            # Merge
-            score_df = parc_c.merge(freq_df, on='id_parceiro', how='left')
-            score_df = score_df.merge(valor_df, on='id_parceiro', how='left')
-            score_df['freq_180']   = score_df['freq_180'].fillna(0)
-            score_df['valor_12m']  = score_df['valor_12m'].fillna(0)
-
-            # ── Pontuação com metas absolutas (não relativas ao grupo) ──────────
-            # Critério         Peso   Meta para 100%
-            # Frequência       40 pts  >= 6 contatos nos últimos 180 dias
-            # Valor doado      40 pts  >= R$ 30.000 nos últimos 12 meses
-            # Tempo parceria   20 pts  >= 5 anos (1.825 dias)
-            META_FREQ  = 6        # contatos em 180 dias
-            META_VALOR = 30_000   # R$ em 12 meses
-            META_DIAS  = 1_825    # dias (~5 anos)
-
-            score_df['pts_freq']  = (score_df['freq_180'].clip(upper=META_FREQ)      / META_FREQ)  * 40
-            score_df['pts_valor'] = (score_df['valor_12m'].clip(upper=META_VALOR)    / META_VALOR) * 40
-            score_df['pts_tempo'] = (score_df['dias_parceria'].clip(upper=META_DIAS) / META_DIAS)  * 20
-            score_df['score']     = (score_df['pts_freq'] + score_df['pts_valor'] + score_df['pts_tempo']).round(1)
-
-            # Merge com saúde
-            if not df_rel.empty:
-                saude_map = df_rel.drop_duplicates(subset='Empresa', keep='first').set_index('Empresa')[['Status_Relacionamento', 'Dias_Sem_Contato', 'Proxima_Acao_Planejada']].to_dict('index')
-            else:
-                saude_map = {}
-
-            score_df['saude']    = score_df['nome_instituicao'].map(lambda n: saude_map.get(n, {}).get('Status_Relacionamento', 'SEM HISTORICO'))
-            score_df['dias_pc']  = score_df['nome_instituicao'].map(lambda n: saude_map.get(n, {}).get('Dias_Sem_Contato', None))
-            score_df['prox_ac']  = score_df['nome_instituicao'].map(lambda n: saude_map.get(n, {}).get('Proxima_Acao_Planejada', None))
-
-            score_df = score_df.sort_values('score', ascending=False)
-
-            # ── Filtros rápidos ──────────────────────────────────────────────
-            cf1, cf2 = st.columns([2, 1])
-            filtro_nome   = cf1.text_input("Buscar parceiro:", placeholder="Digite o nome...", key="sc_busca")
-            filtro_status = cf2.selectbox("Status:", ["Todos", "Prospecção", "Ativo", "Inativo"], key="sc_status")
-
-            df_show = score_df.copy()
-            if filtro_nome:
-                df_show = df_show[df_show['nome_instituicao'].str.contains(filtro_nome, case=False, na=False)]
-            if filtro_status != "Todos":
-                df_show = df_show[df_show['status_limpo'].str.contains(filtro_status.upper(), na=False)]
-
-            # ── Legenda do score ──────────────────────────────────────────────
-            with st.expander("Como o Score é calculado?", expanded=False):
-                st.markdown(
-                    "**Score de 0 a 100 pontos** — metas absolutas:\n\n"
-                    "| Critério | Peso | Meta para nota máxima |\n"
-                    "|---|---|---|\n"
-                    "| Frequência de contato | 40 pts | 6+ interações nos últimos 180 dias |\n"
-                    "| Valor doado | 40 pts | R\\$ 30.000+ nos últimos 12 meses |\n"
-                    "| Tempo de parceria | 20 pts | 5+ anos desde a adesão |\n\n"
-                    "> **Interpretação:** 80–100 = Parceiro estratégico · 50–79 = Em desenvolvimento · Abaixo de 50 = Requer atenção"
-                )
-
-            # ── Tabela scorecard ─────────────────────────────────────────────
-            st.dataframe(
-                df_show[['nome_instituicao', 'score', 'pts_freq', 'pts_valor', 'pts_tempo', 'status_limpo', 'freq_180', 'valor_12m', 'saude', 'dias_pc', 'prox_ac']].rename(columns={
-                    'nome_instituicao': 'Parceiro',
-                    'score':            'Score',
-                    'pts_freq':         'Freq. Contatos',
-                    'pts_valor':        'Valor Doado',
-                    'pts_tempo':        'Tempo Parceria',
-                    'status_limpo':     'Status',
-                    'freq_180':         'Contatos (180d)',
-                    'valor_12m':        'Doado (12m)',
-                    'saude':            'Saúde',
-                    'dias_pc':          'Dias parado',
-                    'prox_ac':          'Próxima ação',
-                }),
-                column_config={
-                    "Score":           st.column_config.ProgressColumn("Score", min_value=0, max_value=100, format="%.1f"),
-                    "Freq. Contatos":  st.column_config.NumberColumn("Freq. Contatos (max 40)", format="%.1f pts"),
-                    "Valor Doado":     st.column_config.NumberColumn("Valor Doado (max 40)", format="%.1f pts"),
-                    "Tempo Parceria":  st.column_config.NumberColumn("Tempo Parceria (max 20)", format="%.1f pts"),
-                    "Doado (12m)":     st.column_config.NumberColumn("Doado (12m)", format="R$ %.0f"),
-                    "Dias parado":     st.column_config.NumberColumn("Dias parado", format="%d d"),
-                    "Próxima ação":    st.column_config.DateColumn("Próxima ação", format="DD/MM/YYYY"),
-                    "Contatos (180d)": st.column_config.NumberColumn("Contatos (180d)", format="%d"),
-                },
-                use_container_width=True, hide_index=True
-            )
-
-            # ── Gráfico top 10 ───────────────────────────────────────────────
-            top10 = df_show.head(10)
-            if not top10.empty:
-                section("Top 10 por score")
-                cores_bar = ['#DC2626' if 'CRITICO' in str(s) else '#D97706' if 'ATENCAO' in str(s) else '#059669' if 'EM DIA' in str(s) else '#64748B' for s in top10['saude']]
-                fig_sc = go.Figure(go.Bar(
-                    x=top10['score'], y=top10['nome_instituicao'],
-                    orientation='h', marker_color=cores_bar,
-                    text=top10['score'].apply(lambda v: f"{v:.0f} pts"),
-                    textposition='outside',
-                ))
-                fig_sc.update_layout(
-                    height=360, margin=dict(t=10, b=10, l=0, r=60),
-                    paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
-                    xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
-                    yaxis=dict(autorange='reversed'),
-                    font=dict(color='#E5E7EB'),
-                )
-                st.plotly_chart(fig_sc, use_container_width=True)
 
     # ══════════════════════════════════════════════════════════════════════════
     # ABA 2 — LINHA DO TEMPO POR PARCEIRO
     # ══════════════════════════════════════════════════════════════════════════
     with tab_timeline:
-        section("Histórico completo por parceiro")
+        section("Historico por parceiro")
 
-        p_lista = ["-- selecione --"] + sorted(df_parceiros['nome_instituicao'].dropna().tolist())
-        sel_p = st.selectbox("Parceiro:", p_lista, key="tl_parceiro")
+        _tl1, _tl2 = st.columns([2, 1])
+        p_lista = ["-- selecione --"] + sorted(df_parceiros["nome_instituicao"].dropna().tolist())
+        sel_p   = _tl1.selectbox("Parceiro:", p_lista, key="tl_parceiro")
 
         if sel_p != "-- selecione --":
-            id_p = int(df_parceiros[df_parceiros['nome_instituicao'] == sel_p]['id_parceiro'].values[0])
+            _row_tl  = df_parceiros[df_parceiros["nome_instituicao"] == sel_p]
+            id_p     = int(_row_tl["id_parceiro"].values[0])
+            _pub_tl  = _row_tl["tipo_publico_regua"].values[0] if not _row_tl.empty else None
 
-            # Busca interações
+            # KPIs do parceiro no topo direito
+            with _tl2:
+                if _pub_tl:
+                    st.markdown(
+                        f"<div style=\'font-size:0.82rem;color:#94A3B8;margin-top:28px;\'>Tipo publico: "
+                        f"<b style='color:#E5E7EB;'>{_pub_tl}</b></div>", unsafe_allow_html=True
+                    )
+                _pend_tl = run_query(
+                    "SELECT COUNT(*) AS n FROM Regua_Pendencias WHERE id_parceiro=%s AND status=\'PENDENTE\'",
+                    (id_p,)
+                )
+                if not _pend_tl.empty:
+                    _n_pend = int(_pend_tl["n"].values[0])
+                    if _n_pend > 0:
+                        st.warning(f"{_n_pend} pendencia(s) da regua para este parceiro.")
+
             hist_int = run_query(
-                "SELECT data_interacao AS data, "
-                "descricao_do_que_foi_feito AS descricao, "
-                "proxima_acao_data "
+                "SELECT data_interacao AS data, descricao_do_que_foi_feito AS descricao, "
+                "proxima_acao_data, tipo_interacao, canal, responsavel "
                 "FROM Registro_Relacionamento WHERE id_parceiro = %s "
-                "ORDER BY data_interacao DESC",
-                (id_p,)
+                "ORDER BY data_interacao DESC", (id_p,)
             )
-
-            # Busca doações
             hist_doa = run_query(
                 "SELECT data_doacao AS data, tipo_doacao AS tipo, "
                 "descricao AS descricao, valor_estimado "
-                "FROM Doacao WHERE id_parceiro = %s ORDER BY data_doacao DESC",
-                (id_p,)
+                "FROM Doacao WHERE id_parceiro = %s ORDER BY data_doacao DESC", (id_p,)
             )
 
             if hist_int.empty and hist_doa.empty:
-                empty_state("—", "Sem histórico", "Nenhuma interação ou doação registrada para este parceiro.")
+                empty_state("—", "Sem historico", "Nenhuma interacao ou doacao registrada para este parceiro.")
             else:
-                # Unifica eventos
+                # Totais
+                total_int     = len(hist_int)
+                total_doa_val = hist_doa["valor_estimado"].fillna(0).sum() if not hist_doa.empty else 0
+                total_doa_fmt = f"R$ {total_doa_val:,.2f}".replace(",","X").replace(".",",").replace("X",".")
+                kpi_row([
+                    {"label": "Interacoes",       "value": total_int},
+                    {"label": "Total doado",       "value": total_doa_fmt},
+                ])
+
+                # Unifica e ordena
                 eventos = []
-                if not hist_int.empty:
-                    for _, r in hist_int.iterrows():
-                        eventos.append({
-                            'data': pd.to_datetime(r['data'], errors='coerce'),
-                            'tipo_icon': '>',
-                            'tipo_label': 'Interação',
-                            'descricao': str(r['descricao']) if pd.notna(r['descricao']) else '—',
-                            'extra': (f"Proxima acao: {r['proxima_acao_data']}"
-                                      if pd.notna(r.get('proxima_acao_data')) else None),
-                            'cor': '#3B82F6',
-                        })
-                if not hist_doa.empty:
-                    for _, r in hist_doa.iterrows():
-                        val = r['valor_estimado'] if pd.notna(r['valor_estimado']) else 0
-                        val_fmt = f"R$ {val:,.2f}".replace(',','X').replace('.',',').replace('X','.')
-                        eventos.append({
-                            'data': pd.to_datetime(r['data'], errors='coerce'),
-                            'tipo_icon': 'R$',
-                            'tipo_label': str(r['tipo']) if pd.notna(r['tipo']) else 'Doação',
-                            'descricao': str(r['descricao']) if pd.notna(r['descricao']) else '—',
-                            'extra': f"Valor: {val_fmt}" if val > 0 else None,
-                            'cor': '#059669',
-                        })
+                for _, r in hist_int.iterrows():
+                    tipo_r = str(r["tipo_interacao"]) if pd.notna(r.get("tipo_interacao")) else "Interacao"
+                    resp_r = str(r["responsavel"])    if pd.notna(r.get("responsavel"))    else ""
+                    eventos.append({
+                        "data":    pd.to_datetime(r["data"], errors="coerce"),
+                        "label":   tipo_r,
+                        "desc":    str(r["descricao"]) if pd.notna(r["descricao"]) else "—",
+                        "extra":   (f"Proxima acao: {r['proxima_acao_data']}" if pd.notna(r.get("proxima_acao_data")) else None),
+                        "extra2":  f"por {resp_r}" if resp_r else None,
+                        "cor":     "#3B82F6",
+                    })
+                for _, r in hist_doa.iterrows():
+                    val     = r["valor_estimado"] if pd.notna(r["valor_estimado"]) else 0
+                    val_fmt = f"R$ {val:,.2f}".replace(",","X").replace(".",",").replace("X",".")
+                    eventos.append({
+                        "data":   pd.to_datetime(r["data"], errors="coerce"),
+                        "label":  str(r["tipo"]) if pd.notna(r["tipo"]) else "Doacao",
+                        "desc":   str(r["descricao"]) if pd.notna(r["descricao"]) else "—",
+                        "extra":  f"Valor: {val_fmt}" if val > 0 else None,
+                        "extra2": None,
+                        "cor":    "#059669",
+                    })
 
-                eventos = sorted(eventos, key=lambda e: e['data'] or pd.Timestamp('1900-01-01'), reverse=True)
+                eventos.sort(key=lambda e: e["data"] or pd.Timestamp("1900-01-01"), reverse=True)
 
-                # Render timeline
                 for ev in eventos:
-                    data_str = ev['data'].strftime('%d/%m/%Y') if ev['data'] is not pd.NaT and ev['data'] is not None else '—'
-                    cor = ev['cor']
-                    extra_html = f"<div style='margin-top:6px;font-size:0.82rem;color:#94A3B8;'>{ev['extra']}</div>" if ev['extra'] else ""
+                    data_str  = ev["data"].strftime("%d/%m/%Y") if ev["data"] is not pd.NaT else "—"
+                    cor       = ev["cor"]
+                    extra_h   = f"<div style='margin-top:4px;font-size:0.8rem;color:#94A3B8;'>{ev['extra']}</div>" if ev["extra"] else ""
+                    extra2_h  = f"<div style='font-size:0.75rem;color:#64748B;'>{ev['extra2']}</div>" if ev["extra2"] else ""
                     st.markdown(
-                        f"""<div style='display:flex;gap:12px;margin-bottom:16px;align-items:flex-start;'>
-                          <div style='flex-shrink:0;width:36px;height:36px;border-radius:50%;background:{cor}22;
-                               border:2px solid {cor};display:flex;align-items:center;justify-content:center;font-size:16px;'>
-                            {ev['tipo_icon']}
-                          </div>
-                          <div style='flex:1;background:rgba(255,255,255,0.04);border-radius:8px;
-                               padding:10px 14px;border-left:3px solid {cor};'>
-                            <div style='display:flex;justify-content:space-between;align-items:center;'>
-                              <span style='font-weight:600;font-size:0.9rem;color:#E5E7EB;'>{ev['tipo_label']}</span>
-                              <span style='font-size:0.8rem;color:#94A3B8;background:rgba(255,255,255,0.08);
-                                   padding:2px 8px;border-radius:12px;'>{data_str}</span>
-                            </div>
-                            <div style='margin-top:6px;font-size:0.92rem;color:#CBD5E1;'>{ev['descricao']}</div>
-                            {extra_html}
-                          </div>
-                        </div>""",
+                        f"<div style=\'display:flex;gap:10px;margin-bottom:12px;\'>"
+                        f"<div style=\'flex-shrink:0;width:32px;height:32px;border-radius:50%;"
+                        f"background:{cor}22;border:2px solid {cor};display:flex;align-items:center;"
+                        f"justify-content:center;font-size:11px;font-weight:700;color:{cor};'>"
+                        f"{'I' if cor == '#3B82F6' else 'R$'}</div>"
+                        f"<div style=\'flex:1;background:rgba(255,255,255,0.04);border-radius:8px;"
+                        f"padding:8px 12px;border-left:3px solid {cor};'>"
+                        f"<div style=\'display:flex;justify-content:space-between;\'>"
+                        f"<span style='font-weight:600;font-size:0.88rem;color:#E5E7EB;'>{ev['label']}</span>"
+                        f"<span style=\'font-size:0.78rem;color:#94A3B8;background:rgba(255,255,255,0.08);"
+                        f"padding:1px 7px;border-radius:10px;'>{data_str}</span></div>"
+                        f"<div style='margin-top:4px;font-size:0.9rem;color:#CBD5E1;'>{ev['desc']}</div>"
+                        f"{extra_h}{extra2_h}</div></div>",
                         unsafe_allow_html=True
                     )
 
-                # KPIs do parceiro
-                st.divider()
-                total_int = len(hist_int)
-                total_doa_val = hist_doa['valor_estimado'].fillna(0).sum() if not hist_doa.empty else 0
-                total_doa_val_fmt = f"R$ {total_doa_val:,.2f}".replace(',','X').replace('.',',').replace('X','.')
-                ultima = eventos[0]['data'].strftime('%d/%m/%Y') if eventos and eventos[0]['data'] is not None else '—'
-                kpi_row([
-                    {"label": "Interações registradas", "value": total_int},
-                    {"label": "Total doado (histórico)", "value": total_doa_val_fmt},
-                    {"label": "Última atividade", "value": ultima},
-                ])
-
     # ══════════════════════════════════════════════════════════════════════════
-    # ABA 3 — FOLLOW-UPS
+    # ABA 3 — FOLLOW-UPS E RÉGUA
     # ══════════════════════════════════════════════════════════════════════════
     with tab_followup:
-        section("Agenda de follow-ups")
+        _fu_sub1, _fu_sub2 = st.tabs(["Follow-ups manuais", "Pendencias da regua"])
 
-        df_fu = run_query_cached(
-            "SELECT r.proxima_acao_data, "
-            "p.nome_instituicao, r.id_parceiro, r.data_interacao "
-            "FROM Registro_Relacionamento r "
-            "JOIN Parceiro p ON r.id_parceiro = p.id_parceiro "
-            "WHERE r.proxima_acao_data IS NOT NULL "
-            "ORDER BY r.proxima_acao_data ASC"
-        )
-
-        if df_fu.empty:
-            empty_state("—", "Nenhum follow-up agendado",
-                        "Ao registrar uma interação, preencha 'Próxima ação' para aparecer aqui.")
-        else:
-            df_fu['_data'] = pd.to_datetime(df_fu['proxima_acao_data'], errors='coerce').dt.date
-            df_fu['_dias'] = (df_fu['_data'] - hoje).apply(lambda d: d.days if d is not pd.NaT else 999)
-
-            # Filtro de período
-            ff1, ff2 = st.columns(2)
-            filtro_periodo = ff1.selectbox(
-                "Período:", ["Todos", "Vencidos", "Esta semana", "Este mês", "Futuros"],
-                key="fu_periodo"
+        # ── Sub-aba: Follow-ups manuais ───────────────────────────────────────
+        with _fu_sub1:
+            section("Agenda de follow-ups")
+            df_fu = run_query_cached(
+                "SELECT r.id_registro, r.proxima_acao_data, p.nome_instituicao, "
+                "r.id_parceiro, r.data_interacao, r.tipo_interacao "
+                "FROM Registro_Relacionamento r "
+                "JOIN Parceiro p ON r.id_parceiro = p.id_parceiro "
+                "WHERE r.proxima_acao_data IS NOT NULL "
+                "ORDER BY r.proxima_acao_data ASC"
             )
-            filtro_parc = ff2.text_input("Filtrar por parceiro:", key="fu_parc")
 
-            df_fshow = df_fu.copy()
-            if filtro_periodo == "Vencidos":
-                df_fshow = df_fshow[df_fshow['_dias'] < 0]
-            elif filtro_periodo == "Esta semana":
-                df_fshow = df_fshow[(df_fshow['_dias'] >= 0) & (df_fshow['_dias'] <= 7)]
-            elif filtro_periodo == "Este mês":
-                df_fshow = df_fshow[(df_fshow['_dias'] >= 0) & (df_fshow['_dias'] <= 30)]
-            elif filtro_periodo == "Futuros":
-                df_fshow = df_fshow[df_fshow['_dias'] > 30]
-
-            if filtro_parc:
-                df_fshow = df_fshow[df_fshow['nome_instituicao'].str.contains(filtro_parc, case=False, na=False)]
-
-            if df_fshow.empty:
-                st.info("Nenhum follow-up encontrado para o filtro selecionado.")
+            if df_fu.empty:
+                empty_state("—", "Nenhum follow-up agendado",
+                            "Ao registrar uma interacao, preencha \'Proxima acao\' para aparecer aqui.")
             else:
-                for _, row in df_fshow.iterrows():
-                    dias = int(row['_dias'])
-                    if dias < 0:
-                        tom = "danger"
-                        badge = f"Vencido há {abs(dias)}d"
-                    elif dias == 0:
-                        tom = "warning"
-                        badge = "Hoje"
-                    elif dias <= 7:
-                        tom = "warning"
-                        badge = f"Em {dias}d"
-                    else:
-                        tom = "info"
-                        badge = f"Em {dias}d"
+                df_fu["_data"] = pd.to_datetime(df_fu["proxima_acao_data"], errors="coerce").dt.date
+                df_fu["_dias"] = df_fu["_data"].apply(lambda d: (d - hoje).days if d else 999)
 
-                    acao = "Fazer follow-up"
-                    data_fmt = row['_data'].strftime('%d/%m/%Y') if row['_data'] else '—'
-                    _fu_c1, _fu_c2 = st.columns([5, 1])
-                    with _fu_c1:
-                        action_card(
-                            titulo=str(row['nome_instituicao']),
-                            meta_parts=[acao, f"Prazo: {data_fmt} ({badge})"],
-                            tom=tom,
-                        )
-                    with _fu_c2:
-                        _fu_key = f"fu_done_{row.get('id_parceiro','')}_{row.get('proxima_acao_data','')}"  
-                        if st.button("Feito", key=_fu_key, use_container_width=True):
-                            _id_fu = int(row["id_parceiro"]) if pd.notna(row.get("id_parceiro")) else None
-                            if _id_fu:
+                _ff1, _ff2 = st.columns(2)
+                _filtro_per = _ff1.selectbox("Periodo:", ["Todos", "Vencidos", "Esta semana", "Este mes", "Futuros"], key="fu_periodo")
+                _filtro_par = _ff2.text_input("Filtrar por parceiro:", key="fu_parc")
+
+                df_fshow = df_fu.copy()
+                if _filtro_per == "Vencidos":      df_fshow = df_fshow[df_fshow["_dias"] < 0]
+                elif _filtro_per == "Esta semana":  df_fshow = df_fshow[(df_fshow["_dias"] >= 0) & (df_fshow["_dias"] <= 7)]
+                elif _filtro_per == "Este mes":     df_fshow = df_fshow[(df_fshow["_dias"] >= 0) & (df_fshow["_dias"] <= 30)]
+                elif _filtro_per == "Futuros":      df_fshow = df_fshow[df_fshow["_dias"] > 30]
+                if _filtro_par:
+                    df_fshow = df_fshow[df_fshow["nome_instituicao"].str.contains(_filtro_par, case=False, na=False)]
+
+                if df_fshow.empty:
+                    st.info("Nenhum follow-up encontrado para o filtro selecionado.")
+                else:
+                    for _, row in df_fshow.iterrows():
+                        dias = int(row["_dias"])
+                        if   dias < 0:  tom = "danger";  badge = f"Vencido ha {abs(dias)}d"
+                        elif dias == 0: tom = "warning"; badge = "Hoje"
+                        elif dias <= 7: tom = "warning"; badge = f"Em {dias}d"
+                        else:           tom = "info";    badge = f"Em {dias}d"
+                        data_fmt = row["_data"].strftime("%d/%m/%Y") if row["_data"] else "—"
+                        _fuc1, _fuc2 = st.columns([5, 1])
+                        with _fuc1:
+                            action_card(
+                                titulo=str(row["nome_instituicao"]),
+                                meta_parts=[
+                                    str(row.get("tipo_interacao","")) or "Follow-up",
+                                    f"Prazo: {data_fmt} ({badge})"
+                                ],
+                                tom=tom,
+                            )
+                        with _fuc2:
+                            _fk = f"fu_done_{row.get('id_registro','')}"
+                            if st.button("Feito", key=_fk, use_container_width=True):
+                                _id_p_fu = int(row["id_parceiro"]) if pd.notna(row.get("id_parceiro")) else None
+                                if _id_p_fu:
+                                    run_exec(
+                                        "INSERT INTO Registro_Relacionamento "
+                                        "(id_parceiro, data_interacao, descricao_do_que_foi_feito, tipo_interacao) "
+                                        "VALUES (%s, %s, %s, %s)",
+                                        (_id_p_fu, hoje, f"Follow-up concluido (prazo: {data_fmt})", "Follow-up")
+                                    )
+                                    st.success(f"Follow-up de {row['nome_instituicao']} concluido.")
+                                    st.rerun()
+
+        # ── Sub-aba: Pendências da Régua ──────────────────────────────────────
+        with _fu_sub2:
+            section("Pendencias geradas pela regua")
+
+            if df_regua_pend.empty:
+                st.success("Nenhuma pendencia da regua no momento.")
+            else:
+                # Filtro por parceiro
+                _rp_parc = st.text_input("Filtrar por parceiro:", key="rp_parc_filtro")
+                _df_rp = df_regua_pend.copy()
+                if _rp_parc:
+                    _df_rp = _df_rp[_df_rp["nome_instituicao"].str.contains(_rp_parc, case=False, na=False)]
+
+                # Agrupar por parceiro
+                _parceiros_pend = _df_rp["nome_instituicao"].unique() if not _df_rp.empty else []
+                for _np in _parceiros_pend:
+                    _df_p_rp = _df_rp[_df_rp["nome_instituicao"] == _np]
+                    with st.expander(f"{_np}  ({len(_df_p_rp)} pendencia(s))", expanded=True):
+                        for _, _rp in _df_p_rp.iterrows():
+                            _ds    = str(_rp["data_sugerida"])[:10] if pd.notna(_rp["data_sugerida"]) else "—"
+                            _dias_rp = (pd.to_datetime(_rp["data_sugerida"]).date() - hoje).days if pd.notna(_rp["data_sugerida"]) else 0
+                            _cor_rp  = "#DC2626" if _dias_rp < 0 else "#D97706" if _dias_rp <= 7 else "#3B82F6"
+                            _rp_c1, _rp_c2, _rp_c3 = st.columns([4, 2, 1])
+                            _rp_c1.markdown(
+                                f"<div style='font-size:0.9rem;color:#E5E7EB;font-weight:600;'>{_rp['tipo_acao']}</div>"
+                                f"<div style='font-size:0.78rem;color:#94A3B8;'>{_rp['canal_sugerido']}</div>",
+                                unsafe_allow_html=True
+                            )
+                            _rp_c2.markdown(
+                                f"<div style='font-size:0.82rem;color:{_cor_rp};margin-top:4px;'>ate {_ds}</div>",
+                                unsafe_allow_html=True
+                            )
+                            _rp_btn_key = f"rp_feito_{_rp['id']}"
+                            _rp_ign_key = f"rp_ign_{_rp['id']}"
+                            if _rp_c3.button("Feito", key=_rp_btn_key, use_container_width=True):
+                                run_exec(
+                                    "UPDATE Regua_Pendencias SET status=\'FEITO\', feito_em=NOW() WHERE id=%s",
+                                    (int(_rp["id"]),)
+                                )
+                                # Registrar como interacao
                                 run_exec(
                                     "INSERT INTO Registro_Relacionamento "
                                     "(id_parceiro, data_interacao, descricao_do_que_foi_feito, tipo_interacao) "
                                     "VALUES (%s, %s, %s, %s)",
-                                    (_id_fu, hoje, f"Follow-up concluido (prazo: {data_fmt})", "Follow-up")
+                                    (int(_rp["id_parceiro"]), hoje,
+                                     f"[Regua] {_rp['tipo_acao']} — concluido", _rp["tipo_acao"])
                                 )
-                                st.success(f"Follow-up de {row['nome_instituicao']} marcado como feito.")
+                                st.success(f"{_rp['tipo_acao']} marcado como feito.")
                                 st.rerun()
 
-
+    # ══════════════════════════════════════════════════════════════════════════
+    # ABA 4 — RELATÓRIO PARA A DIRETORIA
     # ══════════════════════════════════════════════════════════════════════════
     # ABA 4 — RELATÓRIO PARA A DIRETORIA
     # ══════════════════════════════════════════════════════════════════════════
