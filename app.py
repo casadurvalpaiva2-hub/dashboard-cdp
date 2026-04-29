@@ -838,9 +838,9 @@ def situacao_to_tom(situacao: str) -> str:
     """Mapeia os emojis de situação para o tom do DS."""
     if not situacao:
         return "neutral"
-    if "🔴" in situacao or "ATRASAD" in situacao:   return "danger"
-    if "🟡" in situacao or "URGENTE" in situacao:   return "warning"
-    if "🟢" in situacao or "ESTA SEMANA" in situacao: return "success"
+    if any(k in situacao for k in ("ATRASAD", "CRITICO")):                      return "danger"
+    if any(k in situacao for k in ("URGENTE", "ATENCAO", "EM PROGRESSO", "ABAIXO")): return "warning"
+    if any(k in situacao for k in ("ESTA SEMANA", "EM DIA", "ATINGIDO")):       return "success"
     return "neutral"
 
 
@@ -1178,11 +1178,11 @@ def setup_schema():
                     d.is_diaria                                        AS is_diaria,
                     d.data_criacao                                     AS data_criacao,
                     CASE
-                        WHEN d.data_prevista IS NULL                        THEN '⚪ SEM PRAZO'
-                        WHEN d.data_prevista < CURRENT_DATE                 THEN '🔴 ATRASADA'
-                        WHEN (d.data_prevista - CURRENT_DATE) <= 2          THEN '🟡 URGENTE'
-                        WHEN (d.data_prevista - CURRENT_DATE) <= 7          THEN '🟢 ESTA SEMANA'
-                        ELSE '⚪ FUTURA'
+                        WHEN d.data_prevista IS NULL                        THEN 'SEM PRAZO'
+                        WHEN d.data_prevista < CURRENT_DATE                 THEN 'ATRASADA'
+                        WHEN (d.data_prevista - CURRENT_DATE) <= 2          THEN 'URGENTE'
+                        WHEN (d.data_prevista - CURRENT_DATE) <= 7          THEN 'ESTA SEMANA'
+                        ELSE 'FUTURA'
                     END                                                AS situacao
                 FROM Demandas_Estrategicas d
                 WHERE d.status IN ('PENDENTE', 'BLOQUEADO')
@@ -1208,10 +1208,10 @@ def setup_schema():
                     0                                                  AS is_diaria,
                     t.data_criacao::TIMESTAMPTZ                        AS data_criacao,
                     CASE
-                        WHEN t.data_prazo < CURRENT_DATE               THEN '🔴 ATRASADA'
-                        WHEN (t.data_prazo - CURRENT_DATE) <= 2        THEN '🟡 URGENTE'
-                        WHEN (t.data_prazo - CURRENT_DATE) <= 7        THEN '🟢 ESTA SEMANA'
-                        ELSE '⚪ FUTURA'
+                        WHEN t.data_prazo < CURRENT_DATE               THEN 'ATRASADA'
+                        WHEN (t.data_prazo - CURRENT_DATE) <= 2        THEN 'URGENTE'
+                        WHEN (t.data_prazo - CURRENT_DATE) <= 7        THEN 'ESTA SEMANA'
+                        ELSE 'FUTURA'
                     END                                                AS situacao
                 FROM Tarefas_Pendentes t
                 LEFT JOIN Parceiro       p ON t.id_parceiro = p.id_parceiro
@@ -1234,10 +1234,10 @@ def setup_schema():
                     c.nome_pessoa                                AS "Contato",
                     (t.data_prazo - CURRENT_DATE)::INTEGER       AS "Dias_Ate_Prazo",
                     CASE
-                        WHEN t.data_prazo < CURRENT_DATE               THEN '🔴 ATRASADA'
-                        WHEN (t.data_prazo - CURRENT_DATE) <= 2        THEN '🟡 URGENTE'
-                        WHEN (t.data_prazo - CURRENT_DATE) <= 7        THEN '🟢 ESTA SEMANA'
-                        ELSE '⚪ FUTURA'
+                        WHEN t.data_prazo < CURRENT_DATE               THEN 'ATRASADA'
+                        WHEN (t.data_prazo - CURRENT_DATE) <= 2        THEN 'URGENTE'
+                        WHEN (t.data_prazo - CURRENT_DATE) <= 7        THEN 'ESTA SEMANA'
+                        ELSE 'FUTURA'
                     END                                          AS "Situacao"
                 FROM Tarefas_Pendentes t
                 LEFT JOIN Parceiro       p ON t.id_parceiro = p.id_parceiro
@@ -1253,10 +1253,10 @@ def setup_schema():
                     MAX(r.data_interacao)                                           AS "Ultima_Interacao",
                     (CURRENT_DATE - MAX(r.data_interacao)::date)::INTEGER           AS "Dias_Sem_Contato",
                     CASE
-                        WHEN MAX(r.data_interacao) IS NULL                          THEN '⚫ SEM HISTÓRICO'
-                        WHEN (CURRENT_DATE - MAX(r.data_interacao)::date) > 90      THEN '🔴 CRÍTICO (+3 meses)'
-                        WHEN (CURRENT_DATE - MAX(r.data_interacao)::date) > 45      THEN '🟡 ATENÇÃO (+45 dias)'
-                        ELSE '🟢 EM DIA'
+                        WHEN MAX(r.data_interacao) IS NULL                          THEN 'SEM HISTORICO'
+                        WHEN (CURRENT_DATE - MAX(r.data_interacao)::date) > 90      THEN 'CRITICO (+3 meses)'
+                        WHEN (CURRENT_DATE - MAX(r.data_interacao)::date) > 45      THEN 'ATENCAO (+45 dias)'
+                        ELSE 'EM DIA'
                     END                                                             AS "Status_Relacionamento",
                     (
                         SELECT proxima_acao_data
@@ -1280,10 +1280,10 @@ def setup_schema():
                     ROUND((COALESCE(SUM(c.valor_realizado),0)/m.meta_2026*100)::NUMERIC, 1)          AS pct_meta,
                     m.meta_2026 - COALESCE(SUM(c.valor_realizado), 0)                                AS saldo_pendente,
                     CASE
-                        WHEN COALESCE(SUM(c.valor_realizado),0) >= m.meta_2026          THEN '🟢 ATINGIDO'
-                        WHEN COALESCE(SUM(c.valor_realizado),0) / m.meta_2026 >= 0.7    THEN '🟡 EM PROGRESSO'
-                        WHEN COALESCE(SUM(c.valor_realizado),0) > 0                     THEN '🟠 ABAIXO DO ESPERADO'
-                        ELSE '⚪ SEM REGISTRO'
+                        WHEN COALESCE(SUM(c.valor_realizado),0) >= m.meta_2026          THEN 'ATINGIDO'
+                        WHEN COALESCE(SUM(c.valor_realizado),0) / m.meta_2026 >= 0.7    THEN 'EM PROGRESSO'
+                        WHEN COALESCE(SUM(c.valor_realizado),0) > 0                     THEN 'ABAIXO DO ESPERADO'
+                        ELSE 'SEM REGISTRO'
                     END AS status_meta
                 FROM Meta_Fonte_2026 m
                 LEFT JOIN (
@@ -1343,7 +1343,7 @@ if menu == "Painel Geral":
     _tipos_fin = ['Financeira', 'Projetos']
 
     if df_doacoes.empty and df_prog_plano.empty:
-        empty_state("📋", "Nenhum dado cadastrado", "Comece registrando doações, parceiros e eventos.")
+        empty_state("—", "Nenhum dado cadastrado", "Comece registrando doações, parceiros e eventos.")
     else:
         df_doacoes['data_doacao'] = pd.to_datetime(df_doacoes['data_doacao'], errors='coerce')
 
@@ -1536,7 +1536,7 @@ if menu == "Painel Geral":
                 mais  = f" e mais {len(df_fu_venc)-2}" if len(df_fu_venc) > 2 else ""
                 _alertas_priorizados.append({
                     "prioridade": 1,
-                    "icone": "🔴",
+                    "icone": "(!)",
                     "titulo": f"{len(df_fu_venc)} follow-up(s) vencido(s)",
                     "contexto": f"{nomes}{mais} estão aguardando contato.",
                     "acao": "Acesse Relacionamento → Follow-ups para ver a lista completa.",
@@ -1554,7 +1554,7 @@ if menu == "Painel Geral":
                 mais_c  = f" e mais {len(criticos)-2}" if len(criticos) > 2 else ""
                 _alertas_priorizados.append({
                     "prioridade": 2,
-                    "icone": "🟠",
+                    "icone": "(!)",
                     "titulo": f"{len(criticos)} parceiro(s) sem contato há mais de 90 dias",
                     "contexto": f"{nomes_c}{mais_c} estão em risco de abandono.",
                     "acao": "Registre uma interação ou agende uma ligação esta semana.",
@@ -1569,7 +1569,7 @@ if menu == "Painel Geral":
                 mais_b  = f" e mais {len(df_baixo)-2}" if len(df_baixo) > 2 else ""
                 _alertas_priorizados.append({
                     "prioridade": 3,
-                    "icone": "🟡",
+                    "icone": "(!)",
                     "titulo": f"{len(df_baixo)} fonte(s) abaixo de 30% da meta",
                     "contexto": f"{nomes_b}{mais_b} precisam de atenção imediata.",
                     "acao": "Acesse Plano DI 2026 para ver o detalhamento por fonte.",
@@ -1587,7 +1587,7 @@ if menu == "Painel Geral":
             if n_sem_tipo > 0:
                 _alertas_priorizados.append({
                     "prioridade": 4,
-                    "icone": "⚪",
+                    "icone": "(!)",
                     "titulo": f"{n_sem_tipo} doação(ões) sem tipo definido",
                     "contexto": "Registros sem tipo distorcem o cálculo das metas financeiras.",
                     "acao": "Acesse Entrada de Recursos → Histórico e corrija os registros.",
@@ -1602,14 +1602,14 @@ if menu == "Painel Geral":
             st.markdown(
                 '<div style="padding:14px 18px;background:rgba(5,150,105,0.1);border-left:3px solid #059669;'
                 'border-radius:0 8px 8px 0;font-size:14px;">'
-                '✅ <strong>Nenhuma ação crítica pendente.</strong> Sistema em dia.</div>',
+                '<strong>Nenhuma ação crítica pendente.</strong> Sistema em dia.</div>',
                 unsafe_allow_html=True
             )
         else:
             for al in _alertas_priorizados:
                 action_card(
                     titulo=f"{al['icone']} {al['titulo']}",
-                    meta_parts=[al['contexto'], f"👉 {al['acao']}"],
+                    meta_parts=[al['contexto'], f"{al['acao']}"],
                     tom=al['tom'],
                 )
 
@@ -1695,7 +1695,7 @@ if menu == "Painel Geral":
                     unsafe_allow_html=True
                 )
         if n_pend == 0:
-            st.markdown('<div style="font-size:13px;color:#059669;">✅ Banco de dados completo.</div>', unsafe_allow_html=True)
+            st.markdown('<div style="font-size:13px;color:#059669;">Banco de dados completo.</div>', unsafe_allow_html=True)
 
 
 
@@ -1718,7 +1718,7 @@ elif menu == "Calendário":
     # Botão para abrir formulário de novo evento
     _col_btn_ev, _col_sp = st.columns([2, 6])
     with _col_btn_ev:
-        if st.button("＋ Adicionar evento", key="btn_add_evento", use_container_width=True, type="primary"):
+        if st.button("Adicionar evento", key="btn_add_evento", use_container_width=True, type="primary"):
             st.session_state["_cal_add_open"] = not st.session_state.get("_cal_add_open", False)
 
     if st.session_state.get("_cal_add_open", False):
@@ -1726,12 +1726,12 @@ elif menu == "Calendário":
             _ev_c1, _ev_c2 = st.columns(2)
             _ev_titulo   = _ev_c1.text_input("Título do evento *")
             _ev_cor_sel  = _ev_c2.selectbox("Cor", [
-                ("🟣 Roxo",    "#8B5CF6"),
-                ("🔵 Azul",    "#378ADD"),
-                ("🟢 Verde",   "#1D9E75"),
-                ("🟡 Amarelo", "#D97706"),
-                ("🔴 Vermelho","#DC2626"),
-                ("🩷 Rosa",    "#E91E8C"),
+                ("Roxo",    "#8B5CF6"),
+                ("Azul",    "#378ADD"),
+                ("Verde",   "#1D9E75"),
+                ("Amarelo", "#D97706"),
+                ("Vermelho","#DC2626"),
+                ("Rosa",    "#E91E8C"),
             ], format_func=lambda x: x[0])
             _ev_data_ini = _ev_c1.date_input("Data início *")
             _ev_data_fim = _ev_c2.date_input("Data fim (opcional)", value=None)
@@ -1749,7 +1749,7 @@ elif menu == "Calendário":
                          _ev_data_fim if _ev_data_fim else None,
                          _cor_hex, _nome_user)
                     )
-                    st.success("✅ Evento adicionado!")
+                    st.success("Evento adicionado.")
                     st.session_state["_cal_add_open"] = False
                     st.rerun()
 
@@ -1812,7 +1812,7 @@ elif menu == "Calendário":
             titulo = str(row["tarefa"] or "Tarefa")[:45]
             resp = f" ({row['responsavel']})" if row.get("responsavel") else ""
             eventos_cal.append({
-                "title": f"📋 {titulo}{resp}",
+                "title": f"{titulo}{resp}",
                 "start": dt,
                 "color": cor,
                 "textColor": "#fff",
@@ -1827,7 +1827,7 @@ elif menu == "Calendário":
             dt = str(row["proxima_acao_data"])[:10]
             empresa = str(row.get("nome_instituicao","Parceiro"))[:30]
             eventos_cal.append({
-                "title": f"🤝 {empresa}",
+                "title": f"{empresa}",
                 "start": dt,
                 "color": "#378ADD",
                 "textColor": "#fff",
@@ -1847,7 +1847,7 @@ elif menu == "Calendário":
             delta = (5 - primeiro.weekday()) % 7
             sabado = primeiro + timedelta(days=delta)
             eventos_cal.append({
-                "title": "🍽️ Almoço CDP",
+                "title": "️ Almoço CDP",
                 "start": sabado.isoformat(),
                 "color": "#1D9E75",
                 "textColor": "#fff",
@@ -1891,84 +1891,84 @@ elif menu == "Calendário":
     # #FF9800 = CAMPANHA DIAGNÓSTICO PRECOCE        |  #DC2626 = PROJETOS ATIVOS
     _EVENTOS_CDP_2026 = [
         # ── JANEIRO ──
-        {"title":"📋 Campanha: Sinais da Leucemia","start":"2026-01-01","end":"2026-01-31","color":"#E91E8C","textColor":"#fff","display":"background"},
-        {"title":"🏥 Dia do Hemofílico","start":"2026-01-04","color":"#2196F3","textColor":"#fff"},
-        {"title":"🤝 Almoço dos Parceiros","start":"2026-01-28","color":"#4CAF50","textColor":"#fff"},
-        {"title":"📦 Dia do Desapego","start":"2026-01-30","color":"#E91E8C","textColor":"#fff"},
+        {"title":"Campanha: Sinais da Leucemia","start":"2026-01-01","end":"2026-01-31","color":"#E91E8C","textColor":"#fff","display":"background"},
+        {"title":"Dia do Hemofílico","start":"2026-01-04","color":"#2196F3","textColor":"#fff"},
+        {"title":"Almoço dos Parceiros","start":"2026-01-28","color":"#4CAF50","textColor":"#fff"},
+        {"title":"Dia do Desapego","start":"2026-01-30","color":"#E91E8C","textColor":"#fff"},
         # ── FEVEREIRO ──
-        {"title":"📋 Campanha: Tumor SNC","start":"2026-02-01","end":"2026-02-28","color":"#E91E8C","textColor":"#fff","display":"background"},
-        {"title":"🏥 Dia Mundial Combate ao Câncer","start":"2026-02-04","color":"#2196F3","textColor":"#fff"},
-        {"title":"🎉 CarnaCACC","start":"2026-02-11","color":"#E91E8C","textColor":"#fff"},
-        {"title":"🏥 Dia Int. Câncer Infantil","start":"2026-02-15","color":"#2196F3","textColor":"#fff"},
-        {"title":"🤝 Almoço dos Parceiros","start":"2026-02-25","color":"#4CAF50","textColor":"#fff"},
-        {"title":"📦 Dia do Desapego","start":"2026-02-27","color":"#E91E8C","textColor":"#fff"},
+        {"title":"Campanha: Tumor SNC","start":"2026-02-01","end":"2026-02-28","color":"#E91E8C","textColor":"#fff","display":"background"},
+        {"title":"Dia Mundial Combate ao Câncer","start":"2026-02-04","color":"#2196F3","textColor":"#fff"},
+        {"title":"CarnaCACC","start":"2026-02-11","color":"#E91E8C","textColor":"#fff"},
+        {"title":"Dia Int. Câncer Infantil","start":"2026-02-15","color":"#2196F3","textColor":"#fff"},
+        {"title":"Almoço dos Parceiros","start":"2026-02-25","color":"#4CAF50","textColor":"#fff"},
+        {"title":"Dia do Desapego","start":"2026-02-27","color":"#E91E8C","textColor":"#fff"},
         # ── MARÇO ──
-        {"title":"📋 Campanha: Osteossarcoma","start":"2026-03-01","end":"2026-03-31","color":"#E91E8C","textColor":"#fff","display":"background"},
-        {"title":"🏥 Dia Internacional da Mulher","start":"2026-03-08","color":"#2196F3","textColor":"#fff"},
-        {"title":"🏥 Dia Síndrome de Down","start":"2026-03-21","color":"#2196F3","textColor":"#fff"},
-        {"title":"🤝 Almoço dos Parceiros","start":"2026-03-25","color":"#4CAF50","textColor":"#fff"},
-        {"title":"📦 Dia do Desapego","start":"2026-03-31","color":"#E91E8C","textColor":"#fff"},
-        {"title":"💰 Campanha IRPF - PF","start":"2026-03-01","end":"2026-05-31","color":"#4CAF50","textColor":"#fff","display":"background"},
+        {"title":"Campanha: Osteossarcoma","start":"2026-03-01","end":"2026-03-31","color":"#E91E8C","textColor":"#fff","display":"background"},
+        {"title":"Dia Internacional da Mulher","start":"2026-03-08","color":"#2196F3","textColor":"#fff"},
+        {"title":"Dia Síndrome de Down","start":"2026-03-21","color":"#2196F3","textColor":"#fff"},
+        {"title":"Almoço dos Parceiros","start":"2026-03-25","color":"#4CAF50","textColor":"#fff"},
+        {"title":"Dia do Desapego","start":"2026-03-31","color":"#E91E8C","textColor":"#fff"},
+        {"title":"Campanha IRPF - PF","start":"2026-03-01","end":"2026-05-31","color":"#4CAF50","textColor":"#fff","display":"background"},
         # ── ABRIL ──
-        {"title":"📋 Campanha: Linfoma","start":"2026-04-01","end":"2026-04-30","color":"#E91E8C","textColor":"#fff","display":"background"},
-        {"title":"🐣 Páscoa CDP","start":"2026-04-01","color":"#E91E8C","textColor":"#fff"},
-        {"title":"🏥 Dia Mundial Conscientização Autismo","start":"2026-04-02","color":"#2196F3","textColor":"#fff"},
-        {"title":"📰 Dia do Jornalista","start":"2026-04-07","color":"#2196F3","textColor":"#fff"},
-        {"title":"🏥 Dia Mundial Luta Contra o Câncer","start":"2026-04-08","color":"#2196F3","textColor":"#fff"},
-        {"title":"🏥 Dia da Hemofilia","start":"2026-04-17","color":"#2196F3","textColor":"#fff"},
-        {"title":"🤝 Almoço dos Parceiros","start":"2026-04-29","color":"#4CAF50","textColor":"#fff"},
-        {"title":"📦 Dia do Desapego","start":"2026-04-30","color":"#E91E8C","textColor":"#fff"},
+        {"title":"Campanha: Linfoma","start":"2026-04-01","end":"2026-04-30","color":"#E91E8C","textColor":"#fff","display":"background"},
+        {"title":"Páscoa CDP","start":"2026-04-01","color":"#E91E8C","textColor":"#fff"},
+        {"title":"Dia Mundial Conscientização Autismo","start":"2026-04-02","color":"#2196F3","textColor":"#fff"},
+        {"title":"Dia do Jornalista","start":"2026-04-07","color":"#2196F3","textColor":"#fff"},
+        {"title":"Dia Mundial Luta Contra o Câncer","start":"2026-04-08","color":"#2196F3","textColor":"#fff"},
+        {"title":"Dia da Hemofilia","start":"2026-04-17","color":"#2196F3","textColor":"#fff"},
+        {"title":"Almoço dos Parceiros","start":"2026-04-29","color":"#4CAF50","textColor":"#fff"},
+        {"title":"Dia do Desapego","start":"2026-04-30","color":"#E91E8C","textColor":"#fff"},
         # ── MAIO ──
-        {"title":"📋 Campanha: Neuroblastoma","start":"2026-05-01","end":"2026-05-31","color":"#E91E8C","textColor":"#fff","display":"background"},
-        {"title":"💐 Dia das Mães CDP","start":"2026-05-06","color":"#E91E8C","textColor":"#fff"},
-        {"title":"💐 Dia das Mães","start":"2026-05-12","color":"#2196F3","textColor":"#fff"},
-        {"title":"🤝 Almoço dos Parceiros","start":"2026-05-27","color":"#4CAF50","textColor":"#fff"},
-        {"title":"📦 Dia do Desapego","start":"2026-05-29","color":"#E91E8C","textColor":"#fff"},
+        {"title":"Campanha: Neuroblastoma","start":"2026-05-01","end":"2026-05-31","color":"#E91E8C","textColor":"#fff","display":"background"},
+        {"title":"Dia das Mães CDP","start":"2026-05-06","color":"#E91E8C","textColor":"#fff"},
+        {"title":"Dia das Mães","start":"2026-05-12","color":"#2196F3","textColor":"#fff"},
+        {"title":"Almoço dos Parceiros","start":"2026-05-27","color":"#4CAF50","textColor":"#fff"},
+        {"title":"Dia do Desapego","start":"2026-05-29","color":"#E91E8C","textColor":"#fff"},
         # ── JUNHO ──
-        {"title":"📋 Campanha: Câncer de Tecidos Moles","start":"2026-06-01","end":"2026-06-30","color":"#E91E8C","textColor":"#fff","display":"background"},
-        {"title":"🎪 São João CDP","start":"2026-06-17","color":"#E91E8C","textColor":"#fff"},
-        {"title":"🏥 Dia Conscientização Doença Falciforme","start":"2026-06-19","color":"#2196F3","textColor":"#fff"},
-        {"title":"🤝 Almoço dos Parceiros","start":"2026-06-24","color":"#4CAF50","textColor":"#fff"},
-        {"title":"📦 Dia do Desapego","start":"2026-06-30","color":"#E91E8C","textColor":"#fff"},
-        {"title":"🍔 Multirão McDia Feliz","start":"2026-06-01","color":"#4CAF50","textColor":"#fff"},
+        {"title":"Campanha: Câncer de Tecidos Moles","start":"2026-06-01","end":"2026-06-30","color":"#E91E8C","textColor":"#fff","display":"background"},
+        {"title":"São João CDP","start":"2026-06-17","color":"#E91E8C","textColor":"#fff"},
+        {"title":"Dia Conscientização Doença Falciforme","start":"2026-06-19","color":"#2196F3","textColor":"#fff"},
+        {"title":"Almoço dos Parceiros","start":"2026-06-24","color":"#4CAF50","textColor":"#fff"},
+        {"title":"Dia do Desapego","start":"2026-06-30","color":"#E91E8C","textColor":"#fff"},
+        {"title":"Multirão McDia Feliz","start":"2026-06-01","color":"#4CAF50","textColor":"#fff"},
         # ── JULHO ──
-        {"title":"📋 Campanha: Retinoblastoma","start":"2026-07-01","end":"2026-07-31","color":"#E91E8C","textColor":"#fff","display":"background"},
-        {"title":"🎂 Aniversário CDP 31 anos","start":"2026-07-11","color":"#E91E8C","textColor":"#fff"},
-        {"title":"🤝 Almoço dos Parceiros","start":"2026-07-29","color":"#4CAF50","textColor":"#fff"},
-        {"title":"📦 Dia do Desapego","start":"2026-07-31","color":"#E91E8C","textColor":"#fff"},
-        {"title":"🍔 Multirão McDia Feliz","start":"2026-07-31","color":"#4CAF50","textColor":"#fff"},
+        {"title":"Campanha: Retinoblastoma","start":"2026-07-01","end":"2026-07-31","color":"#E91E8C","textColor":"#fff","display":"background"},
+        {"title":"Aniversário CDP 31 anos","start":"2026-07-11","color":"#E91E8C","textColor":"#fff"},
+        {"title":"Almoço dos Parceiros","start":"2026-07-29","color":"#4CAF50","textColor":"#fff"},
+        {"title":"Dia do Desapego","start":"2026-07-31","color":"#E91E8C","textColor":"#fff"},
+        {"title":"Multirão McDia Feliz","start":"2026-07-31","color":"#4CAF50","textColor":"#fff"},
         # ── AGOSTO ──
-        {"title":"📋 Campanha: Tumor de Wilms","start":"2026-08-01","end":"2026-08-31","color":"#E91E8C","textColor":"#fff","display":"background"},
-        {"title":"👨 Dia dos Pais CDP","start":"2026-08-05","color":"#E91E8C","textColor":"#fff"},
-        {"title":"🤝 Almoço dos Parceiros","start":"2026-08-26","color":"#4CAF50","textColor":"#fff"},
-        {"title":"📦 Dia do Desapego","start":"2026-08-31","color":"#E91E8C","textColor":"#fff"},
-        {"title":"🍔 McDia Feliz","start":"2026-08-21","color":"#4CAF50","textColor":"#fff"},
+        {"title":"Campanha: Tumor de Wilms","start":"2026-08-01","end":"2026-08-31","color":"#E91E8C","textColor":"#fff","display":"background"},
+        {"title":"Dia dos Pais CDP","start":"2026-08-05","color":"#E91E8C","textColor":"#fff"},
+        {"title":"Almoço dos Parceiros","start":"2026-08-26","color":"#4CAF50","textColor":"#fff"},
+        {"title":"Dia do Desapego","start":"2026-08-31","color":"#E91E8C","textColor":"#fff"},
+        {"title":"McDia Feliz","start":"2026-08-21","color":"#4CAF50","textColor":"#fff"},
         # ── SETEMBRO ──
-        {"title":"🎗️ Campanha Setembro Dourado","start":"2026-09-01","end":"2026-09-30","color":"#FF9800","textColor":"#fff","display":"background"},
-        {"title":"🏥 Dia Mundial Conscientização Linfomas","start":"2026-09-15","color":"#FF9800","textColor":"#fff"},
-        {"title":"🏥 Dia Diagnóstico Precoce Retinoblastoma","start":"2026-09-18","color":"#FF9800","textColor":"#fff"},
-        {"title":"🏥 Dia Mundial Doador Medula Óssea","start":"2026-09-19","color":"#2196F3","textColor":"#fff"},
-        {"title":"🤝 Almoço dos Parceiros","start":"2026-09-30","color":"#4CAF50","textColor":"#fff"},
-        {"title":"📦 Dia do Desapego","start":"2026-09-30","color":"#E91E8C","textColor":"#fff"},
-        {"title":"🎄 Campanha de Natal - Central de Doações","start":"2026-09-01","end":"2026-12-31","color":"#4CAF50","textColor":"#fff","display":"background"},
+        {"title":"️ Campanha Setembro Dourado","start":"2026-09-01","end":"2026-09-30","color":"#FF9800","textColor":"#fff","display":"background"},
+        {"title":"Dia Mundial Conscientização Linfomas","start":"2026-09-15","color":"#FF9800","textColor":"#fff"},
+        {"title":"Dia Diagnóstico Precoce Retinoblastoma","start":"2026-09-18","color":"#FF9800","textColor":"#fff"},
+        {"title":"Dia Mundial Doador Medula Óssea","start":"2026-09-19","color":"#2196F3","textColor":"#fff"},
+        {"title":"Almoço dos Parceiros","start":"2026-09-30","color":"#4CAF50","textColor":"#fff"},
+        {"title":"Dia do Desapego","start":"2026-09-30","color":"#E91E8C","textColor":"#fff"},
+        {"title":"Campanha de Natal - Central de Doações","start":"2026-09-01","end":"2026-12-31","color":"#4CAF50","textColor":"#fff","display":"background"},
         # ── OUTUBRO ──
-        {"title":"📋 Campanha: Leucemia","start":"2026-10-01","end":"2026-10-31","color":"#E91E8C","textColor":"#fff","display":"background"},
-        {"title":"👶 Semana da Criança CDP","start":"2026-10-06","end":"2026-10-09","color":"#E91E8C","textColor":"#fff"},
-        {"title":"💰 Campanha IRPF - PJ","start":"2026-10-01","end":"2026-11-30","color":"#4CAF50","textColor":"#fff","display":"background"},
-        {"title":"🤝 Almoço dos Parceiros","start":"2026-10-28","color":"#4CAF50","textColor":"#fff"},
-        {"title":"📦 Dia do Desapego","start":"2026-10-30","color":"#E91E8C","textColor":"#fff"},
+        {"title":"Campanha: Leucemia","start":"2026-10-01","end":"2026-10-31","color":"#E91E8C","textColor":"#fff","display":"background"},
+        {"title":"Semana da Criança CDP","start":"2026-10-06","end":"2026-10-09","color":"#E91E8C","textColor":"#fff"},
+        {"title":"Campanha IRPF - PJ","start":"2026-10-01","end":"2026-11-30","color":"#4CAF50","textColor":"#fff","display":"background"},
+        {"title":"Almoço dos Parceiros","start":"2026-10-28","color":"#4CAF50","textColor":"#fff"},
+        {"title":"Dia do Desapego","start":"2026-10-30","color":"#E91E8C","textColor":"#fff"},
         # ── NOVEMBRO ──
-        {"title":"🏥 Feira Empreendedor e Bazar Natalino","start":"2026-11-17","color":"#4CAF50","textColor":"#fff"},
-        {"title":"🏥 Dia Nacional Combate Câncer Inf.","start":"2026-11-23","color":"#2196F3","textColor":"#fff"},
-        {"title":"🤝 Almoço dos Parceiros","start":"2026-11-25","color":"#4CAF50","textColor":"#fff"},
-        {"title":"🏥 Dia Nacional Combate ao Câncer","start":"2026-11-27","color":"#2196F3","textColor":"#fff"},
-        {"title":"📦 Dia do Desapego","start":"2026-11-30","color":"#E91E8C","textColor":"#fff"},
+        {"title":"Feira Empreendedor e Bazar Natalino","start":"2026-11-17","color":"#4CAF50","textColor":"#fff"},
+        {"title":"Dia Nacional Combate Câncer Inf.","start":"2026-11-23","color":"#2196F3","textColor":"#fff"},
+        {"title":"Almoço dos Parceiros","start":"2026-11-25","color":"#4CAF50","textColor":"#fff"},
+        {"title":"Dia Nacional Combate ao Câncer","start":"2026-11-27","color":"#2196F3","textColor":"#fff"},
+        {"title":"Dia do Desapego","start":"2026-11-30","color":"#E91E8C","textColor":"#fff"},
         # ── DEZEMBRO ──
-        {"title":"📋 Campanha: Tumor SNC","start":"2026-12-01","end":"2026-12-31","color":"#E91E8C","textColor":"#fff","display":"background"},
-        {"title":"💝 Dia de Doar","start":"2026-12-02","color":"#4CAF50","textColor":"#fff"},
-        {"title":"🎄 Natal CDP","start":"2026-12-09","color":"#E91E8C","textColor":"#fff"},
-        {"title":"🎉 Confraternização Colaboradores","start":"2026-12-12","color":"#2196F3","textColor":"#fff"},
-        {"title":"📦 Dia do Desapego","start":"2026-12-31","color":"#E91E8C","textColor":"#fff"},
+        {"title":"Campanha: Tumor SNC","start":"2026-12-01","end":"2026-12-31","color":"#E91E8C","textColor":"#fff","display":"background"},
+        {"title":"Dia de Doar","start":"2026-12-02","color":"#4CAF50","textColor":"#fff"},
+        {"title":"Natal CDP","start":"2026-12-09","color":"#E91E8C","textColor":"#fff"},
+        {"title":"Confraternização Colaboradores","start":"2026-12-12","color":"#2196F3","textColor":"#fff"},
+        {"title":"Dia do Desapego","start":"2026-12-31","color":"#E91E8C","textColor":"#fff"},
     ]
     eventos_filtrados = [
         e for e in eventos_cal + _EVENTOS_CDP_2026
@@ -2176,8 +2176,8 @@ elif menu == "Plano DI 2026":
             captado_total = df_prog['captado_2026'].sum()
             saldo_total   = meta_total - captado_total
             pct_geral     = round(captado_total / meta_total * 100, 1) if meta_total > 0 else 0
-            fontes_ok     = int((df_prog['status_meta'].str.contains("🟢", na=False)).sum())
-            fontes_risco  = int((df_prog['status_meta'].str.contains("⚪", na=False)).sum())
+            fontes_ok     = int((df_prog['status_meta'].str.contains("ATINGIDO", na=False)).sum())
+            fontes_risco  = int((df_prog['status_meta'].str.contains("SEM REGISTRO", na=False)).sum())
 
             kpi_row([
                 {"label": "Meta total anual DI",    "value": format_br(meta_total)},
@@ -2207,9 +2207,9 @@ elif menu == "Plano DI 2026":
                 prorate     = round(meta / 12 * mes_atual, 2)
                 pct_prorate = round(captado / prorate * 100, 1) if prorate > 0 else 0
 
-                if "🟢" in status:   cor_bar = "#059669"
-                elif "🟡" in status: cor_bar = "#D97706"
-                elif "🟠" in status: cor_bar = "#EA580C"
+                if "ATINGIDO" in status:       cor_bar = "#059669"
+                elif "EM PROGRESSO" in status: cor_bar = "#D97706"
+                elif "ABAIXO" in status:       cor_bar = "#EA580C"
                 else:                cor_bar = "#94A3B8"
 
                 if captado == 0:
@@ -2246,7 +2246,7 @@ elif menu == "Plano DI 2026":
         else:
             st.info("Nenhuma fonte de captação cadastrada.")
 
-        st.info("Para registrar novos valores realizados, acesse **Entrada de Recursos** no menu lateral.", icon="💡")
+        st.info("Para registrar novos valores realizados, acesse **Entrada de Recursos** no menu lateral.")
 
         if not df_hist.empty:
             section("Histórico de lançamentos")
@@ -2284,13 +2284,6 @@ elif menu == "Plano DI 2026":
     # ABA 2 — COMUNICAÇÃO E IMPRENSA
     # ══════════════════════════════════════════════════════════════════════════
     # ── Setup compartilhado ───────────────────────────────────────────────────
-    _cols_ic = run_query(
-        "SELECT column_name FROM information_schema.columns "
-        "WHERE table_name = 'indicadores_comunicacao_2026'"
-    )
-    _col_names = set(_cols_ic['column_name'].tolist()) if not _cols_ic.empty else set()
-    if _col_names and 'mes_referencia' not in _col_names:
-        run_exec("DROP TABLE Indicadores_Comunicacao_2026")
     run_exec(
         "CREATE TABLE IF NOT EXISTS Indicadores_Comunicacao_2026 ("
         "id SERIAL PRIMARY KEY, indicador TEXT NOT NULL, "
@@ -2483,7 +2476,7 @@ elif menu == "Ações":
         "GERÊNCIA":          ["Manutenção de Parcerias", "Análise de Relatórios", "Planejamento Anual", "Gestão de Equipe"],
     }
 
-    with st.expander("＋ Nova demanda", expanded=False):
+    with st.expander("Nova demanda", expanded=False):
         with st.form("form_nova_demanda", clear_on_submit=True):
             _fc1, _fc2, _fc3 = st.columns(3)
             _setor_opcoes = list(dados_equipe.keys())
@@ -2537,7 +2530,7 @@ elif menu == "Ações":
     _demandas = run_query(_qsql + " ORDER BY status DESC, score_gut DESC", tuple(_qpars))
 
     if _demandas.empty:
-        empty_state("🎉", "Tudo em dia!", "Nenhuma demanda pendente no momento.")
+        empty_state("—", "Tudo em dia!", "Nenhuma demanda pendente no momento.")
     else:
         for _, _row in _demandas.iterrows():
             _is_b = _row["status"] == "BLOQUEADO"
@@ -2552,12 +2545,12 @@ elif menu == "Ações":
                         "UPDATE Demandas_Estrategicas SET status='REALIZADO', data_ultima_conclusao=CURRENT_TIMESTAMP WHERE id=%s",
                         (_row["id"],)
                     )
-                    st.toast("✅ Concluída!")
+                    st.toast("Concluida.")
                     st.rerun()
             with _cc2:
                 _dt_prev = str(_row["data_prevista"])[:10] if _row.get("data_prevista") else "—"
                 _tag_d   = '<span style="background:#378ADD22;color:#378ADD;border:1px solid #378ADD55;border-radius:10px;font-size:9px;padding:1px 6px;margin-left:6px;">DIÁRIA</span>' if _row.get("is_diaria") else ""
-                _prefix  = '🚨 <b style="color:#DC2626;">[BLOQUEADO]</b> ' if _is_b else ""
+                _prefix  = '<b style="color:#DC2626;">[BLOQUEADO]</b> ' if _is_b else ""
                 st.markdown(
                     f'<div style="border-left:3px solid {_cor};padding:6px 10px;border-radius:0 6px 6px 0;'
                     f'background:rgba(255,255,255,0.02);margin:2px 0;">'
@@ -2584,7 +2577,7 @@ elif menu == "Ações":
                     st.rerun()
 
     # ── Realizadas + Métricas ────────────────────────────────────────────────
-    with st.expander("📊 Histórico e métricas"):
+    with st.expander("Historico e metricas"):
         _sql_hist = "SELECT tarefa, TO_CHAR(data_ultima_conclusao,'DD/MM/YYYY HH24:MI') AS concluido_em FROM Demandas_Estrategicas WHERE status='REALIZADO'"
         if not eh_gerente:
             _sql_hist += f" AND setor='{meu_setor}'"
@@ -2613,7 +2606,7 @@ elif menu == "Ações":
                 )
 
     # ── Follow-ups de CRM ────────────────────────────────────────────────────
-    with st.expander("🤝 Follow-ups de relacionamento"):
+    with st.expander("Follow-ups de relacionamento"):
         _df_crm = run_query("SELECT * FROM View_Tarefas_Abertas")
         if _df_crm.empty:
             st.info("Nenhum follow-up pendente.")
@@ -2641,7 +2634,7 @@ elif menu == "Ações":
 
     # ── Admin (gerência) ─────────────────────────────────────────────────────
     if eh_gerente:
-        with st.expander("👥 Gestão de usuários"):
+        with st.expander("Gestao de usuarios"):
             section("Usuários do sistema")
             for _login, _dados in CONTAS.items():
                 _ua1, _ua2, _ua3 = st.columns([3, 2, 1])
@@ -2649,7 +2642,7 @@ elif menu == "Ações":
                 _ua2.markdown(f"`{_login}` · perfil: `{_dados['perfil']}`")
 
     # ── Minha Senha ──────────────────────────────────────────────────────────
-    with st.expander("🔑 Alterar minha senha"):
+    with st.expander("Alterar minha senha"):
         _login_cur = next((k for k, v in CONTAS.items() if v.get("nome") == meu_nome), None)
         run_exec("""CREATE TABLE IF NOT EXISTS Usuario_Senhas (login TEXT PRIMARY KEY, senha TEXT NOT NULL)""")
         with st.form("form_senha_acao", clear_on_submit=True):
@@ -2669,7 +2662,7 @@ elif menu == "Ações":
                     st.error("As senhas não conferem.")
                 else:
                     run_exec("INSERT INTO Usuario_Senhas (login,senha) VALUES (%s,%s) ON CONFLICT (login) DO UPDATE SET senha=EXCLUDED.senha", (_login_cur, _s2))
-                    st.success("✅ Senha alterada com sucesso!")
+                    st.success("Senha alterada com sucesso.")
 
 
 elif menu == "Almoço CDP":
@@ -2761,7 +2754,7 @@ elif menu == "Almoço CDP":
                             <div style="display: flex; justify-content: space-between; align-items: center;">
                                 <div>
                                     <b>{str(row['nome']).title()}</b><br>
-                                    <small style="opacity:0.7;">{str(row['cargo']).title() if pd.notna(row['cargo']) else ''} | {row['empresa'] if pd.notna(row['empresa']) else ''} | 📞 {row['telefone'] if pd.notna(row['telefone']) else 'Sem número'}</small>
+                                    <small style="opacity:0.7;">{str(row['cargo']).title() if pd.notna(row['cargo']) else ''} | {row['empresa'] if pd.notna(row['empresa']) else ''} | Tel: {row['telefone'] if pd.notna(row['telefone']) else 'Sem número'}</small>
                                 </div>
                             </div>
                         </div>
@@ -2783,12 +2776,12 @@ elif menu == "Almoço CDP":
                 
                 html_visual = f"""
                 <div class="glass-card">
-                    <h4 style="color: #00CC96; margin-top: 0; text-align: center; font-size: 1.1rem;">🍽️ LISTA DE PRESENÇA</h4>
+                    <h4 style="color: #00CC96; margin-top: 0; text-align: center; font-size: 1.1rem;">LISTA DE PRESENÇA</h4>
                     <hr style="border-color: rgba(255,255,255,0.05); margin-bottom: 15px;">
                 """
                 
                 for seg, gp in df_p.groupby('segmento'):
-                    msg_whatsapp += f"✅ *{seg.upper()}*\n"
+                    msg_whatsapp += f"*{seg.upper()}*\n"
                     html_visual += f"<h6 style='color: #00FFC2; margin-top: 15px; font-size: 0.9rem; letter-spacing: 1px;'>{seg.upper()}</h6><ul style='list-style-type: none; padding-left: 5px;'>"
                     
                     for _, p in gp.iterrows():
@@ -2799,10 +2792,10 @@ elif menu == "Almoço CDP":
                         if tem_cargo:
                             cargo_fmt = cargo_raw.title()
                             msg_whatsapp += f"• {nome_fmt} ({cargo_fmt})\n"
-                            html_visual += f"<li style='margin-bottom: 10px;'>👤 <b>{nome_fmt}</b><br><span style='opacity: 0.6; font-size: 0.85em; margin-left: 20px;'>— {cargo_fmt}</span></li>"
+                            html_visual += f"<li style='margin-bottom: 10px;'><b>{nome_fmt}</b><br><span style='opacity: 0.6; font-size: 0.85em; margin-left: 20px;'>— {cargo_fmt}</span></li>"
                         else:
                             msg_whatsapp += f"• {nome_fmt}\n"
-                            html_visual += f"<li style='margin-bottom: 10px;'>👤 <b>{nome_fmt}</b></li>"
+                            html_visual += f"<li style='margin-bottom: 10px;'><b>{nome_fmt}</b></li>"
                     
                     msg_whatsapp += "\n"
                     html_visual += "</ul>"
@@ -3006,7 +2999,7 @@ elif menu == "Almoço CDP":
 
             _pdf_bytes = _gerar_pdf_confirmados(df_conf, mes_ref)
             _col_pdf_btn.download_button(
-                label="📄 Baixar PDF",
+                label="Baixar PDF",
                 data=_pdf_bytes,
                 file_name=f"almoco_cdp_{mes_ref.replace('/', '-')}.pdf",
                 mime="application/pdf",
@@ -3014,7 +3007,7 @@ elif menu == "Almoço CDP":
                 use_container_width=True,
             )
         else:
-            _col_pdf_btn.button("📄 Baixar PDF", disabled=True, use_container_width=True,
+            _col_pdf_btn.button("Baixar PDF", disabled=True, use_container_width=True,
                                 help="Nenhum confirmado ainda para este mês.")
 
     # ==========================================
@@ -3118,7 +3111,7 @@ elif menu == "Parcerias":
                 }
             )
         else:
-            empty_state("🔍", "Nada encontrado", "Ajuste a busca ou cadastre um novo parceiro.")
+            empty_state("—", "Nada encontrado", "Ajuste a busca ou cadastre um novo parceiro.")
 
         section("Ficha do parceiro")
 
@@ -3139,14 +3132,14 @@ elif menu == "Parcerias":
                 st.write(f"**Pessoas de contato em {parceiro_selecionado}:**")
                 st.dataframe(df_contatos_parceiro, hide_index=True, use_container_width=True)
             else:
-                empty_state("👤", f"Sem contatos em {parceiro_selecionado}", "Use o botão **➕ NOVO** no topo do menu para cadastrar um contato.")
+                empty_state("—", f"Sem contatos em {parceiro_selecionado}", "Use o botao NOVO no topo do menu para cadastrar um contato.")
 
         # 2. SEÇÃO DE CADASTRO
         # Auto-abre se o usuário veio do botão "+ Novo > Parceiro"
         _abrir_p = (st.session_state.open_form == "parceiro")
         if _abrir_p:
             st.session_state.open_form = None  # consome a flag
-            st.info("✨ Cadastrando novo parceiro — preencha os campos abaixo.", icon="🏢")
+            st.info("Cadastrando novo parceiro — preencha os campos abaixo.")
 
         with st.expander("**CADASTRAR NOVO PARCEIRO**", expanded=_abrir_p):
             # Busca categorias para o menu
@@ -3188,9 +3181,9 @@ elif menu == "Parcerias":
             nome_p = st.session_state.pop("parceiro_cadastrado")
             st.success(f"**{nome_p}** cadastrado com sucesso!")
             cf1, cf2 = st.columns(2)
-            if cf1.button("👤 Adicionar contato deste parceiro", use_container_width=True, key="post_add_contato"):
+            if cf1.button("Adicionar contato deste parceiro", use_container_width=True, key="post_add_contato"):
                 _trigger_quick_add("contato"); st.rerun()
-            if cf2.button("💰 Registrar doação deste parceiro", use_container_width=True, key="post_add_doacao"):
+            if cf2.button("Registrar doação deste parceiro", use_container_width=True, key="post_add_doacao"):
                 _trigger_quick_add("doacao"); st.rerun()
 
 # --- ABA DE PROJETOS ---
@@ -3238,7 +3231,7 @@ elif menu == "Parcerias":
 
             st.dataframe(df_exibir_copy, use_container_width=True, hide_index=True)
         else:
-            empty_state("📊", "Nenhum projeto vinculado", "Doações sem projeto específico aparecem na categoria GERAL.")
+            empty_state("—", "Nenhum projeto vinculado", "Doações sem projeto específico aparecem na categoria GERAL.")
 
     # ============================================================
     # ABA 3 — FUNIL DE CONVERSÃO
@@ -3258,7 +3251,7 @@ elif menu == "Parcerias":
         df_funil_all = run_query("SELECT nome_instituicao, status, data_adesao FROM Parceiro")
 
         if df_funil_all.empty:
-            empty_state("📊", "Sem dados", "Cadastre parceiros para visualizar o funil.")
+            empty_state("—", "Sem dados", "Cadastre parceiros para visualizar o funil.")
         else:
             s = df_funil_all['status'].fillna("").str.upper().str.strip()
             n_prospec  = int(s.str.contains("PROSPEC").sum())
@@ -3278,9 +3271,9 @@ elif menu == "Parcerias":
             # Barra visual do funil
             st.markdown("<br>", unsafe_allow_html=True)
             for label, valor, cor in [
-                ("🔵 Prospecção", n_prospec, "#3B82F6"),
-                ("🟢 Ativo",      n_ativo,   "#059669"),
-                ("⚫ Inativo",    n_inativo,  "#6B7280"),
+                ("Prospecção", n_prospec, "#3B82F6"),
+                ("Ativo",      n_ativo,   "#059669"),
+                ("Inativo",    n_inativo,  "#6B7280"),
             ]:
                 pct = round(valor / total * 100, 1) if total > 0 else 0
                 st.markdown(
@@ -3337,7 +3330,7 @@ elif menu == "Parcerias":
                             f'<div style="display:flex;justify-content:space-between;padding:5px 8px;'
                             f'border-left:3px solid #059669;margin-bottom:3px;border-radius:0 4px 4px 0;'
                             f'background:rgba(5,150,105,0.05);">'
-                            f'  <span style="font-size:13px;">✅ {r["nome_instituicao"]}</span>'
+                            f'  <span style="font-size:13px;">{r["nome_instituicao"]}</span>'
                             f'  <span style="font-size:12px;color:#059669;">{_da_fmt}</span>'
                             f'</div>',
                             unsafe_allow_html=True
@@ -3402,7 +3395,7 @@ elif menu == "Parcerias":
                         use_container_width=True, hide_index=True, height=250
                     )
 
-                    if st.button(f"✅ Confirmar importação de {len(df_import)} parceiros", type="primary", use_container_width=True):
+                    if st.button(f"Confirmar importação de {len(df_import)} parceiros", type="primary", use_container_width=True):
                         # Busca id_categoria padrão (primeira disponível)
                         df_cat_imp = run_query("SELECT id_categoria FROM Categoria_Parceiro LIMIT 1")
                         id_cat_default = int(df_cat_imp['id_categoria'].values[0]) if not df_cat_imp.empty else 1
@@ -3443,8 +3436,8 @@ elif menu == "Entrada de Recursos":
     df_p = _parceiros_lista()
 
     if df_p.empty:
-        empty_state("🏢", "Nenhum parceiro cadastrado", "Cadastre um parceiro antes de registrar doações.")
-        if st.button("🏢 Cadastrar parceiro agora", type="primary", key="doa_go_parc"):
+        empty_state("—", "Nenhum parceiro cadastrado", "Cadastre um parceiro antes de registrar doações.")
+        if st.button("Cadastrar parceiro agora", type="primary", key="doa_go_parc"):
             _trigger_quick_add("parceiro"); st.rerun()
     else:
         # Inicializa estado para edição de registro
@@ -3457,9 +3450,9 @@ elif menu == "Entrada de Recursos":
             _tab_idx = 0
 
         tab_novo, tab_hist, tab_alertas = st.tabs([
-            "➕ Registrar nova",
-            "📋 Histórico",
-            "🔔 Doadores recorrentes",
+            "Registrar nova",
+            "Historico",
+            "Doadores recorrentes",
         ])
 
         # ════════════════════════════════════════════════════════
@@ -3532,7 +3525,7 @@ elif menu == "Entrada de Recursos":
                                 (_id_fonte, mes_lancto, valor_ev,
                                  obs_ev.upper() if obs_ev else None, resp_ev),
                             )
-                            st.success(f"✅ {fonte_ev} — {format_br(valor_ev)} registrado para {mes_lancto}.")
+                            st.success(f"{fonte_ev} — {format_br(valor_ev)} registrado para {mes_lancto}.")
                             st.rerun()
 
             elif tipo_cat == "estimada":
@@ -3541,7 +3534,6 @@ elif menu == "Entrada de Recursos":
                     "Valores declarados pelos parceiros — espaco de midia, materiais, alimentos etc. "
                     "Sao registrados para controle de impacto e relacionamento, mas **nao entram no caixa** "
                     "e **nao contam para as metas financeiras** do Plano DI.",
-                    icon="📌",
                 )
                 _tipos_estimado = ["Midiatica", "Vestuario", "Alimentos", "Servicos", "Outros (estimado)"]
                 with st.form("form_entrada_estimada", clear_on_submit=True):
@@ -3614,7 +3606,7 @@ elif menu == "Entrada de Recursos":
                                  projeto_doa.upper() if projeto_doa else "GERAL",
                                  origem_doa),
                             )
-                            st.success(f"✅ {nome_sel} — {format_br(valor_doa)} registrado com sucesso!")
+                            st.success(f"{nome_sel} — {format_br(valor_doa)} registrado com sucesso.")
                             st.rerun()
 
         # ════════════════════════════════════════════════════════
@@ -3752,21 +3744,21 @@ elif menu == "Entrada de Recursos":
                         nova_desc    = st.text_area("Observações", value=row['descricao'] or "")
 
                         cb1, cb2 = st.columns(2)
-                        if cb1.form_submit_button("💾 Salvar alterações", use_container_width=True, type="primary"):
+                        if cb1.form_submit_button("Salvar alterações", use_container_width=True, type="primary"):
                             run_exec(
                                 "UPDATE Doacao SET valor_estimado=%s, data_doacao=%s, nome_projeto=%s, descricao=%s WHERE id_doacao=%s",
                                 (novo_valor, str(nova_data), novo_projeto.upper(), nova_desc.upper() if nova_desc else "", int(_id_sel)),
                             )
                             st.success("Registro atualizado com sucesso!")
                             st.rerun()
-                        if cb2.form_submit_button("🗑️ Excluir registro", use_container_width=True):
+                        if cb2.form_submit_button("Excluir registro", use_container_width=True):
                             run_exec("DELETE FROM Doacao WHERE id_doacao=%s", (int(_id_sel),))
                             st.warning("Registro excluído.")
                             st.rerun()
                 else:
                     st.caption("ID não encontrado nos registros filtrados.")
             else:
-                empty_state("📋", "Nenhum registro encontrado", "Ajuste os filtros ou registre uma nova entrada na aba ao lado.")
+                empty_state("—", "Nenhum registro encontrado", "Ajuste os filtros ou registre uma nova entrada na aba ao lado.")
 
         # ════════════════════════════════════════════════════════
         # ABA 3 — ALERTAS DE RECORRÊNCIA
@@ -3798,7 +3790,7 @@ elif menu == "Entrada de Recursos":
             """)
 
             if df_inativos.empty:
-                st.success("✅ Todos os doadores recorrentes de 2025 já registraram entrada em 2026!")
+                st.success("Todos os doadores recorrentes de 2025 ja registraram entrada em 2026.")
             else:
                 kpi_row([
                     {"label": "Doadores em alerta",       "value": len(df_inativos)},
@@ -3882,12 +3874,12 @@ elif menu == "Contatos":
     # Se veio do botão "+ Novo > Contato", mostra atalho de cadastro no topo
     if st.session_state.open_form == "contato":
         st.session_state.open_form = None  # consome a flag
-        st.info("✨ Cadastrando novo contato — preencha os campos abaixo.", icon="👤")
+        st.info("Cadastrando novo contato — preencha os campos abaixo.")
         with st.container(border=True):
             df_p_qa = _parceiros_lista()
             if df_p_qa.empty:
                 st.warning("Cadastre um parceiro antes de adicionar contatos.")
-                if st.button("🏢 Cadastrar parceiro agora", type="primary", key="qa_go_parceiro"):
+                if st.button("Cadastrar parceiro agora", type="primary", key="qa_go_parceiro"):
                     _trigger_quick_add("parceiro"); st.rerun()
             else:
                 with st.form("form_qa_contato", clear_on_submit=True):
@@ -3997,7 +3989,7 @@ elif menu == "Contatos":
                     else:
                         st.warning("Nome e WhatsApp são obrigatórios.")
         else:
-            st.warning("Cadastre um parceiro primeiro (use o botão **➕ NOVO** no topo do menu).")
+            st.warning("Cadastre um parceiro primeiro (use o botao NOVO no topo do menu).")
 
     # ==========================================
     # ABA 3: GERENCIAMENTO DE DADOS (Exclusão)
@@ -4015,8 +4007,8 @@ elif menu == "Contatos":
                 # Extrai o ID do texto do selectbox
                 id_para_excluir = int(contato_selecionado.split("ID: ")[-1])
                 
-                st.error("⚠️ Atenção: Esta ação não pode ser desfeita.")
-                if st.button("🗑️ Confirmar Exclusão", use_container_width=True):
+                st.error("Atenção: Esta ação não pode ser desfeita.")
+                if st.button("Confirmar Exclusão", use_container_width=True):
                     run_insert("DELETE FROM Contato_Direto WHERE id_contato = ?", (id_para_excluir,))
                     st.success("Contato excluído com sucesso!")
                     st.rerun()
@@ -4080,7 +4072,7 @@ elif menu == "Relacionamento":
         section("Scorecard de parceiros")
 
         if df_parceiros.empty:
-            empty_state("🤝", "Sem parceiros", "Cadastre parceiros para ativar o scorecard.")
+            empty_state("—", "Sem parceiros", "Cadastre parceiros para ativar o scorecard.")
         else:
             # ── Calcular score por parceiro ──────────────────────────────────
             # Score (0-100): frequência (40pts) + valor doado (40pts) + tempo parceria (20pts)
@@ -4145,7 +4137,7 @@ elif menu == "Relacionamento":
             else:
                 saude_map = {}
 
-            score_df['saude']    = score_df['nome_instituicao'].map(lambda n: saude_map.get(n, {}).get('Status_Relacionamento', '⚫ SEM HISTÓRICO'))
+            score_df['saude']    = score_df['nome_instituicao'].map(lambda n: saude_map.get(n, {}).get('Status_Relacionamento', 'SEM HISTORICO'))
             score_df['dias_pc']  = score_df['nome_instituicao'].map(lambda n: saude_map.get(n, {}).get('Dias_Sem_Contato', None))
             score_df['prox_ac']  = score_df['nome_instituicao'].map(lambda n: saude_map.get(n, {}).get('Proxima_Acao_Planejada', None))
 
@@ -4206,7 +4198,7 @@ elif menu == "Relacionamento":
             top10 = df_show.head(10)
             if not top10.empty:
                 section("Top 10 por score")
-                cores_bar = ['#DC2626' if '🔴' in str(s) else '#D97706' if '🟡' in str(s) else '#059669' if '🟢' in str(s) else '#64748B' for s in top10['saude']]
+                cores_bar = ['#DC2626' if 'CRITICO' in str(s) else '#D97706' if 'ATENCAO' in str(s) else '#059669' if 'EM DIA' in str(s) else '#64748B' for s in top10['saude']]
                 fig_sc = go.Figure(go.Bar(
                     x=top10['score'], y=top10['nome_instituicao'],
                     orientation='h', marker_color=cores_bar,
@@ -4253,7 +4245,7 @@ elif menu == "Relacionamento":
             )
 
             if hist_int.empty and hist_doa.empty:
-                empty_state("📅", "Sem histórico", "Nenhuma interação ou doação registrada para este parceiro.")
+                empty_state("—", "Sem histórico", "Nenhuma interação ou doação registrada para este parceiro.")
             else:
                 # Unifica eventos
                 eventos = []
@@ -4261,10 +4253,10 @@ elif menu == "Relacionamento":
                     for _, r in hist_int.iterrows():
                         eventos.append({
                             'data': pd.to_datetime(r['data'], errors='coerce'),
-                            'tipo_icon': '💬',
+                            'tipo_icon': '>',
                             'tipo_label': 'Interação',
                             'descricao': str(r['descricao']) if pd.notna(r['descricao']) else '—',
-                            'extra': (f"⏭ Próxima ação: {r['proxima_acao_data']}"
+                            'extra': (f"Proxima acao: {r['proxima_acao_data']}"
                                       if pd.notna(r.get('proxima_acao_data')) else None),
                             'cor': '#3B82F6',
                         })
@@ -4274,7 +4266,7 @@ elif menu == "Relacionamento":
                         val_fmt = f"R$ {val:,.2f}".replace(',','X').replace('.',',').replace('X','.')
                         eventos.append({
                             'data': pd.to_datetime(r['data'], errors='coerce'),
-                            'tipo_icon': '💰',
+                            'tipo_icon': 'R$',
                             'tipo_label': str(r['tipo']) if pd.notna(r['tipo']) else 'Doação',
                             'descricao': str(r['descricao']) if pd.notna(r['descricao']) else '—',
                             'extra': f"Valor: {val_fmt}" if val > 0 else None,
@@ -4336,7 +4328,7 @@ elif menu == "Relacionamento":
         )
 
         if df_fu.empty:
-            empty_state("📆", "Nenhum follow-up agendado",
+            empty_state("—", "Nenhum follow-up agendado",
                         "Ao registrar uma interação, preencha 'Próxima ação' para aparecer aqui.")
         else:
             df_fu['_data'] = pd.to_datetime(df_fu['proxima_acao_data'], errors='coerce').dt.date
@@ -4459,10 +4451,10 @@ elif menu == "Relacionamento":
                         texto_extra = ""
                         html_extra  = ""
 
-                    texto_diretoria += f"🔹 *{nome_parceiro}* ({data_reg_fmt})\n{tipo}{texto_extra}\nDetalhe: {descricao}\n\n"
+                    texto_diretoria += f"- *{nome_parceiro}* ({data_reg_fmt})\n{tipo}{texto_extra}\nDetalhe: {descricao}\n\n"
                     html_relatorio  += (
                         f"<li style='margin-bottom:18px;'>"
-                        f"🏢 <b style='font-size:1.05em;'>{nome_parceiro}</b>"
+                        f"<b style='font-size:1.05em;'>{nome_parceiro}</b>"
                         f" <span class='date-badge' style='margin-left:10px;'>{data_reg_fmt}</span><br>"
                         f"<span style='font-size:0.85em;color:#FFB74D;font-weight:600;margin-left:25px;'>{tipo}{html_extra}</span><br>"
                         f"<span style='opacity:0.85;font-size:0.95em;margin-left:25px;'>↳ {descricao}</span></li>"
@@ -4740,7 +4732,7 @@ if _is_gerente():
             _b_data, _b_ext, _b_mime = _backup
             _b_nome = "CDP_backup_" + datetime.now().strftime("%Y%m%d") + "." + _b_ext
             st.sidebar.download_button(
-                "📥 Baixar agora",
+                "Baixar agora",
                 data=_b_data,
                 file_name=_b_nome,
                 mime=_b_mime,
