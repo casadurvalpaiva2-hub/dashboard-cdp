@@ -947,6 +947,7 @@ with st.sidebar:
     if _opcoes_add[_escolha] is not None:
         _trigger_quick_add(_opcoes_add[_escolha])
         st.session_state._qa_nonce += 1
+        st.rerun()
 
     # ── Navegação principal ─────────────────────────────────────
     st.markdown("""<p style="font-size:10px;letter-spacing:1.8px;text-transform:uppercase;
@@ -2294,6 +2295,102 @@ elif menu == "Plano DI 2026":
                         st.rerun()
     else:
         st.info("Nenhum lançamento registrado ainda. Use o formulário acima para registrar os realizados mensais.")
+
+
+    # ── Indicadores de Comunicação e Imprensa ────────────────────────────────
+    st.markdown("<br>", unsafe_allow_html=True)
+    section("Indicadores de Comunicação — Plano 2026")
+
+    _ind_imprensa = [
+        {"indicador": "Envios do boletim semanal via WhatsApp", "ref_2025": 52,        "meta_2026": 52,        "unidade": ""},
+        {"indicador": "Artigos enviados",                        "ref_2025": 50,        "meta_2026": 100,       "unidade": ""},
+        {"indicador": "Artigos publicados",                      "ref_2025": 145,       "meta_2026": 180,       "unidade": ""},
+        {"indicador": "Releases produzidos",                     "ref_2025": 114,       "meta_2026": 142,       "unidade": ""},
+        {"indicador": "Clipping",                                "ref_2025": 2780,      "meta_2026": 3058,      "unidade": ""},
+        {"indicador": "Rádios parceiras",                        "ref_2025": 190,       "meta_2026": 209,       "unidade": ""},
+        {"indicador": "Entrevistas (Rádio, TV e Portais)",       "ref_2025": 869,       "meta_2026": 955,       "unidade": ""},
+        {"indicador": "Inserções médicas em veículos municipais","ref_2025": None,      "meta_2026": 128,       "unidade": ""},
+        {"indicador": "Inscritos na Newsletter",                 "ref_2025": 1874,      "meta_2026": 2061,      "unidade": ""},
+        {"indicador": "Treinamentos",                            "ref_2025": None,      "meta_2026": 10,        "unidade": ""},
+    ]
+
+    _ind_digital = [
+        {"indicador": "Seguidores no Instagram",                 "ref_2025": 93118,     "meta_2026": 116397,    "unidade": ""},
+        {"indicador": "Seguidores no Facebook",                  "ref_2025": 58720,     "meta_2026": 73400,     "unidade": ""},
+        {"indicador": "Seguidores no LinkedIn",                  "ref_2025": 887,       "meta_2026": 1108,      "unidade": ""},
+        {"indicador": "Seguidores no Twitter/X",                 "ref_2025": 1843,      "meta_2026": 2027,      "unidade": ""},
+        {"indicador": "Inscritos no YouTube",                    "ref_2025": 582,       "meta_2026": 670,       "unidade": ""},
+        {"indicador": "Inscritos no TikTok",                     "ref_2025": 28400,     "meta_2026": 31000,     "unidade": ""},
+        {"indicador": "Cliques no Google ADS",                   "ref_2025": 33014,     "meta_2026": 34664,     "unidade": ""},
+        {"indicador": "Conversão de Leads (novos cadastros para doação)", "ref_2025": None, "meta_2026": 100,  "unidade": ""},
+        {"indicador": "Taxa de Engajamento Média",               "ref_2025": 3.3,       "meta_2026": 5.0,       "unidade": "%"},
+        {"indicador": "Alcance total (redes sociais)",           "ref_2025": 1605057,   "meta_2026": 2000300,   "unidade": ""},
+    ]
+
+    def _render_indicadores(lista, chave_prefix):
+        for i, ind in enumerate(lista):
+            meta    = ind["meta_2026"]
+            ref     = ind["ref_2025"]
+            unidade = ind["unidade"]
+            key_inp = f"{chave_prefix}_{i}"
+
+            if key_inp not in st.session_state:
+                st.session_state[key_inp] = 0
+
+            col_ind, col_ref, col_meta, col_atual, col_bar = st.columns([3.5, 1.2, 1.2, 1.4, 2.5])
+
+            col_ind.markdown(
+                f'<div style="font-size:13px;padding:6px 0;color:#E5E7EB;">{ind["indicador"]}</div>',
+                unsafe_allow_html=True
+            )
+            col_ref.markdown(
+                f'<div style="font-size:12px;padding:6px 0;color:#9CA3AF;text-align:right;">'
+                f'{"—" if ref is None else f"{ref:,.0f}{unidade}".replace(",",".")}'
+                f'</div>', unsafe_allow_html=True
+            )
+            col_meta.markdown(
+                f'<div style="font-size:12px;padding:6px 0;color:#F59E0B;font-weight:600;text-align:right;">'
+                f'{f"{meta:,.0f}{unidade}".replace(",",".")}'
+                f'</div>', unsafe_allow_html=True
+            )
+
+            atual = col_atual.number_input(
+                "Atual", value=float(st.session_state[key_inp]),
+                min_value=0.0, step=1.0, key=f"ni_{key_inp}", label_visibility="collapsed"
+            )
+            st.session_state[key_inp] = atual
+
+            pct = min(atual / meta, 1.0) if meta > 0 else 0
+            cor = "#059669" if pct >= 1.0 else "#D97706" if pct >= 0.5 else "#94A3B8"
+            col_bar.markdown(
+                f'<div style="display:flex;align-items:center;gap:8px;padding:6px 0;">'
+                f'<div style="flex:1;background:#2D3748;border-radius:6px;height:10px;">'
+                f'<div style="background:{cor};width:{pct*100:.1f}%;height:10px;border-radius:6px;"></div></div>'
+                f'<span style="font-size:11px;color:{cor};font-weight:600;min-width:36px;text-align:right;">{pct*100:.0f}%</span>'
+                f'</div>', unsafe_allow_html=True
+            )
+            st.markdown("<hr style='margin:0;border-color:rgba(255,255,255,0.05);'>", unsafe_allow_html=True)
+
+    # Cabeçalho das colunas
+    def _cabecalho():
+        c1, c2, c3, c4, c5 = st.columns([3.5, 1.2, 1.2, 1.4, 2.5])
+        for col, txt in zip([c1, c2, c3, c4, c5], ["Indicador", "Ref. 2025", "Meta 2026", "Atual", "Progresso"]):
+            col.markdown(
+                f'<div style="font-size:11px;letter-spacing:1px;text-transform:uppercase;'
+                f'color:rgba(255,255,255,0.35);padding-bottom:4px;">{txt}</div>',
+                unsafe_allow_html=True
+            )
+        st.markdown("<hr style='margin:0 0 4px 0;border-color:rgba(255,255,255,0.12);'>", unsafe_allow_html=True)
+
+    st.markdown("**Imprensa**")
+    _cabecalho()
+    _render_indicadores(_ind_imprensa, "imp")
+
+    st.markdown("<br>**Mídias Digitais**", unsafe_allow_html=True)
+    _cabecalho()
+    _render_indicadores(_ind_digital, "dig")
+
+    st.caption("Os valores de 'Atual' são inseridos manualmente e ficam salvos durante a sessão.")
 
 
 elif menu == "Ações":
