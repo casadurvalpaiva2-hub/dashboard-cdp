@@ -2283,183 +2283,161 @@ elif menu == "Plano DI 2026":
     # ══════════════════════════════════════════════════════════════════════════
     # ABA 2 — COMUNICAÇÃO E IMPRENSA
     # ══════════════════════════════════════════════════════════════════════════
-    with tab_imp:
-        # Criar tabela com histórico mensal (snapshot por mês)
-        # Migração: recriar tabela se schema antigo (sem mes_referencia)
-        _cols_ic = run_query("""
-            SELECT column_name FROM information_schema.columns
-            WHERE table_name = 'indicadores_comunicacao_2026'
-        """)
-        _col_names = set(_cols_ic['column_name'].tolist()) if not _cols_ic.empty else set()
-        if _col_names and 'mes_referencia' not in _col_names:
-            run_exec("DROP TABLE Indicadores_Comunicacao_2026")
-        run_exec("""
-            CREATE TABLE IF NOT EXISTS Indicadores_Comunicacao_2026 (
-                id             SERIAL PRIMARY KEY,
-                indicador      TEXT NOT NULL,
-                mes_referencia TEXT NOT NULL,
-                valor          FLOAT NOT NULL DEFAULT 0,
-                registrado_em  TIMESTAMP DEFAULT NOW(),
-                UNIQUE (indicador, mes_referencia)
-            )
-        """)
+    # ── Setup compartilhado ───────────────────────────────────────────────────
+    _cols_ic = run_query(
+        "SELECT column_name FROM information_schema.columns "
+        "WHERE table_name = 'indicadores_comunicacao_2026'"
+    )
+    _col_names = set(_cols_ic['column_name'].tolist()) if not _cols_ic.empty else set()
+    if _col_names and 'mes_referencia' not in _col_names:
+        run_exec("DROP TABLE Indicadores_Comunicacao_2026")
+    run_exec(
+        "CREATE TABLE IF NOT EXISTS Indicadores_Comunicacao_2026 ("
+        "id SERIAL PRIMARY KEY, indicador TEXT NOT NULL, "
+        "mes_referencia TEXT NOT NULL, valor FLOAT NOT NULL DEFAULT 0, "
+        "registrado_em TIMESTAMP DEFAULT NOW(), "
+        "UNIQUE (indicador, mes_referencia))"
+    )
 
-        _ind_imprensa = [
-            {"indicador": "Envios do boletim semanal via WhatsApp", "meta": 52,      "unidade": ""},
-            {"indicador": "Artigos enviados",                        "meta": 100,     "unidade": ""},
-            {"indicador": "Artigos publicados",                      "meta": 180,     "unidade": ""},
-            {"indicador": "Releases produzidos",                     "meta": 142,     "unidade": ""},
-            {"indicador": "Clipping",                                "meta": 3058,    "unidade": ""},
-            {"indicador": "Rádios parceiras",                        "meta": 209,     "unidade": ""},
-            {"indicador": "Entrevistas (Rádio, TV e Portais)",       "meta": 955,     "unidade": ""},
-            {"indicador": "Inserções médicas em veículos municipais","meta": 128,     "unidade": ""},
-            {"indicador": "Inscritos na Newsletter",                 "meta": 2061,    "unidade": ""},
-            {"indicador": "Treinamentos",                            "meta": 10,      "unidade": ""},
-        ]
-        _ind_digital = [
-            {"indicador": "Seguidores no Instagram",                        "meta": 116397,  "unidade": ""},
-            {"indicador": "Seguidores no Facebook",                         "meta": 73400,   "unidade": ""},
-            {"indicador": "Seguidores no LinkedIn",                         "meta": 1108,    "unidade": ""},
-            {"indicador": "Seguidores no Twitter/X",                        "meta": 2027,    "unidade": ""},
-            {"indicador": "Inscritos no YouTube",                           "meta": 670,     "unidade": ""},
-            {"indicador": "Inscritos no TikTok",                            "meta": 31000,   "unidade": ""},
-            {"indicador": "Cliques no Google ADS",                          "meta": 34664,   "unidade": ""},
-            {"indicador": "Conversão de Leads (novos cadastros p/ doação)", "meta": 100,     "unidade": ""},
-            {"indicador": "Taxa de Engajamento Média",                      "meta": 5.0,     "unidade": "%"},
-            {"indicador": "Alcance total (redes sociais)",                  "meta": 2000300, "unidade": ""},
-        ]
-        todos_ind = _ind_imprensa + _ind_digital
-        mes_atual_c = datetime.now().month
+    _ind_imprensa = [
+        {"indicador": "Envios do boletim semanal via WhatsApp", "meta": 52,      "unidade": ""},
+        {"indicador": "Artigos enviados",                        "meta": 100,     "unidade": ""},
+        {"indicador": "Artigos publicados",                      "meta": 180,     "unidade": ""},
+        {"indicador": "Releases produzidos",                     "meta": 142,     "unidade": ""},
+        {"indicador": "Clipping",                                "meta": 3058,    "unidade": ""},
+        {"indicador": "Radios parceiras",                        "meta": 209,     "unidade": ""},
+        {"indicador": "Entrevistas (Radio, TV e Portais)",       "meta": 955,     "unidade": ""},
+        {"indicador": "Insercoes medicas em veiculos municipais","meta": 128,     "unidade": ""},
+        {"indicador": "Inscritos na Newsletter",                 "meta": 2061,    "unidade": ""},
+        {"indicador": "Treinamentos",                            "meta": 10,      "unidade": ""},
+    ]
+    _ind_digital = [
+        {"indicador": "Seguidores no Instagram",                        "meta": 116397,  "unidade": ""},
+        {"indicador": "Seguidores no Facebook",                         "meta": 73400,   "unidade": ""},
+        {"indicador": "Seguidores no LinkedIn",                         "meta": 1108,    "unidade": ""},
+        {"indicador": "Seguidores no Twitter/X",                        "meta": 2027,    "unidade": ""},
+        {"indicador": "Inscritos no YouTube",                           "meta": 670,     "unidade": ""},
+        {"indicador": "Inscritos no TikTok",                            "meta": 31000,   "unidade": ""},
+        {"indicador": "Cliques no Google ADS",                          "meta": 34664,   "unidade": ""},
+        {"indicador": "Conversao de Leads (novos cadastros p/ doacao)", "meta": 100,     "unidade": ""},
+        {"indicador": "Taxa de Engajamento Media",                      "meta": 5.0,     "unidade": "%"},
+        {"indicador": "Alcance total (redes sociais)",                  "meta": 2000300, "unidade": ""},
+    ]
 
-        # Carregar último valor registrado por indicador
-        df_ultimos = run_query("""
-            SELECT DISTINCT ON (indicador) indicador, valor, mes_referencia
-            FROM Indicadores_Comunicacao_2026
-            ORDER BY indicador, mes_referencia DESC
-        """)
-        _vals_atual = dict(zip(df_ultimos['indicador'], df_ultimos['valor'])) if not df_ultimos.empty else {}
-        _mes_atual_str  = datetime.now().strftime("%Y-%m")
-        _meses_opcoes   = [f"2026-{m:02d}" for m in range(1, 13)]
-        _idx_mes_padrao = _meses_opcoes.index(_mes_atual_str) if _mes_atual_str in _meses_opcoes else 0
+    _mes_atual_c   = datetime.now().month
+    _mes_atual_str = datetime.now().strftime("%Y-%m")
+    _meses_opcoes  = [f"2026-{m:02d}" for m in range(1, 13)]
+    _idx_mes_pad   = _meses_opcoes.index(_mes_atual_str) if _mes_atual_str in _meses_opcoes else 0
 
-        # ── Formulário de registro mensal ─────────────────────────────────────
-        with st.expander("Registrar valores do mês", expanded=False):
-            mes_sel = st.selectbox("Mês de referência", _meses_opcoes,
-                                   index=_idx_mes_padrao, key="com_mes_sel",
-                                   format_func=lambda m: datetime.strptime(m, "%Y-%m").strftime("%B/%Y").capitalize())
+    df_ultimos_com = run_query(
+        "SELECT DISTINCT ON (indicador) indicador, valor, mes_referencia "
+        "FROM Indicadores_Comunicacao_2026 ORDER BY indicador, mes_referencia DESC"
+    )
+    _vals_atual_com = dict(zip(df_ultimos_com['indicador'], df_ultimos_com['valor'])) if not df_ultimos_com.empty else {}
 
-            # Pré-carregar valores já registrados para o mês selecionado
-            df_mes = run_query(
-                "SELECT indicador, valor FROM Indicadores_Comunicacao_2026 WHERE mes_referencia = %s",
-                (mes_sel,)
-            )
-            _vals_mes = dict(zip(df_mes['indicador'], df_mes['valor'])) if not df_mes.empty else {}
+    def _barra_com(ind, atual, mes_c):
+        meta    = ind["meta"]
+        unidade = ind["unidade"]
+        pct     = min(atual / meta, 1.0) if meta > 0 else 0.0
+        prorata = meta / 12 * mes_c
+        pct_vs  = atual / prorata if prorata > 0 else 0.0
+        prorata_pct = min(prorata / meta, 1.0) if meta > 0 else 0.0
+        if atual == 0:
+            badge, badge_cor = "Sem registro", "#94A3B8"
+        elif pct_vs >= 1.0:
+            badge, badge_cor = "No prazo", "#059669"
+        elif pct_vs >= 0.7:
+            badge, badge_cor = "Em risco", "#D97706"
+        else:
+            badge, badge_cor = "Atrasado", "#DC2626"
+        cor_bar = badge_cor
+        def _fmt(v):
+            return f"{v:.1f}{unidade}" if unidade == "%" else f"{v:,.0f}".replace(",", ".")
+        st.markdown(
+            f'<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:1px;">'
+            f'  <span style="font-size:13px;font-weight:600;">{ind["indicador"]}</span>'
+            f'  <span style="font-size:11px;font-weight:700;color:{badge_cor};">{badge}</span>'
+            f'</div>'
+            f'<div style="position:relative;background:#2D3748;border-radius:6px;height:10px;margin-bottom:3px;">'
+            f'  <div style="background:{cor_bar};width:{pct*100:.1f}%;height:10px;border-radius:6px;"></div>'
+            f'  <div style="position:absolute;top:0;left:{prorata_pct*100:.1f}%;width:2px;height:10px;background:#F59E0B;opacity:.8;"></div>'
+            f'  <span style="position:absolute;right:5px;top:0;font-size:9px;line-height:10px;color:#fff;font-weight:700;">{pct*100:.0f}%</span>'
+            f'</div>'
+            f'<div style="display:flex;gap:12px;font-size:11px;color:#888;margin-bottom:6px;">'
+            f'  <span>Meta: <b style="color:#ccc;">{_fmt(meta)}</b></span>'
+            f'  <span>Realizado: <b style="color:{cor_bar};">{_fmt(atual)}</b></span>'
+            f'  <span>Pro-rata ({mes_c}m): <b style="color:#F59E0B;">{_fmt(prorata)}</b></span>'
+            f'</div>'
+            f'<hr style="margin:2px 0 6px 0;border-color:rgba(255,255,255,0.06);">',
+            unsafe_allow_html=True
+        )
 
-            with st.form("form_ind_com_mensal", clear_on_submit=False):
-                st.markdown("**Imprensa**")
-                vals_imp = {}
-                cols_imp = st.columns(2)
-                for i, ind in enumerate(_ind_imprensa):
-                    key = ind["indicador"]
-                    vals_imp[key] = cols_imp[i % 2].number_input(
-                        ind["indicador"], value=int(_vals_mes.get(key, _vals_atual.get(key, 0))),
-                        min_value=0, step=1, key=f"fi_{i}"
-                    )
+    def _render_aba_com(lista, prefix, form_key):
+        mes_sel = st.selectbox("Mes de referencia", _meses_opcoes,
+                               index=_idx_mes_pad, key=f"mes_sel_{prefix}",
+                               format_func=lambda m: datetime.strptime(m, "%Y-%m").strftime("%B/%Y").capitalize())
+        df_mes_com = run_query(
+            "SELECT indicador, valor FROM Indicadores_Comunicacao_2026 WHERE mes_referencia = %s",
+            (mes_sel,)
+        )
+        _vals_mes_com = dict(zip(df_mes_com['indicador'], df_mes_com['valor'])) if not df_mes_com.empty else {}
 
-                st.markdown("**Mídias Digitais**")
-                vals_dig = {}
-                cols_dig = st.columns(2)
-                for i, ind in enumerate(_ind_digital):
+        with st.expander("Registrar valores do mes", expanded=False):
+            with st.form(form_key, clear_on_submit=False):
+                cols = st.columns(2)
+                vals = {}
+                for i, ind in enumerate(lista):
                     key = ind["indicador"]
                     _eh_pct = ind["unidade"] == "%"
-                    _val_db = float(_vals_mes.get(key, _vals_atual.get(key, 0)))
+                    _val_db = float(_vals_mes_com.get(key, _vals_atual_com.get(key, 0)))
                     if _eh_pct:
-                        vals_dig[key] = cols_dig[i % 2].number_input(
+                        vals[key] = cols[i % 2].number_input(
                             ind["indicador"], value=_val_db,
-                            min_value=0.0, step=0.1, format="%.1f", key=f"fd_{i}"
+                            min_value=0.0, step=0.1, format="%.1f", key=f"{prefix}_pct_{i}"
                         )
                     else:
-                        vals_dig[key] = cols_dig[i % 2].number_input(
+                        vals[key] = cols[i % 2].number_input(
                             ind["indicador"], value=int(_val_db),
-                            min_value=0, step=1, key=f"fd_{i}"
+                            min_value=0, step=1, key=f"{prefix}_int_{i}"
                         )
-
-                if st.form_submit_button("Salvar mês", type="primary", use_container_width=True):
-                    for nome_ind, valor in {**vals_imp, **vals_dig}.items():
-                        run_exec("""
-                            INSERT INTO Indicadores_Comunicacao_2026 (indicador, mes_referencia, valor)
-                            VALUES (%s, %s, %s)
-                            ON CONFLICT (indicador, mes_referencia) DO UPDATE
-                            SET valor = EXCLUDED.valor, registrado_em = NOW()
-                        """, (nome_ind, mes_sel, valor))
+                if st.form_submit_button("Salvar mes", type="primary", use_container_width=True):
+                    for nome_ind, valor in vals.items():
+                        run_exec(
+                            "INSERT INTO Indicadores_Comunicacao_2026 (indicador, mes_referencia, valor) "
+                            "VALUES (%s, %s, %s) ON CONFLICT (indicador, mes_referencia) DO UPDATE "
+                            "SET valor = EXCLUDED.valor, registrado_em = NOW()",
+                            (nome_ind, mes_sel, valor)
+                        )
                     st.success(f"Valores de {mes_sel} salvos.")
                     st.rerun()
 
-        # ── Histórico: variação mês a mês ─────────────────────────────────────
-        df_hist_com = run_query("""
-            SELECT indicador, mes_referencia, valor
-            FROM Indicadores_Comunicacao_2026
-            ORDER BY indicador, mes_referencia
-        """)
-        if not df_hist_com.empty:
-            with st.expander("Ver evolução mês a mês", expanded=False):
-                df_pivot = df_hist_com.pivot(index='indicador', columns='mes_referencia', values='valor')
-                df_pivot.columns.name = None
-                df_pivot.index.name = "Indicador"
-                # Formatar colunas como mês abreviado
-                df_pivot.columns = [datetime.strptime(c, "%Y-%m").strftime("%b/%y") if len(str(c)) == 7 else c
-                                    for c in df_pivot.columns]
-                st.dataframe(df_pivot.fillna("—"), use_container_width=True)
+        nomes_lista = [ind["indicador"] for ind in lista]
+        df_hist_c = run_query(
+            "SELECT indicador, mes_referencia, valor FROM Indicadores_Comunicacao_2026 "
+            "ORDER BY indicador, mes_referencia"
+        )
+        if not df_hist_c.empty:
+            df_hist_f = df_hist_c[df_hist_c['indicador'].isin(nomes_lista)]
+            if not df_hist_f.empty:
+                with st.expander("Ver evolucao mes a mes", expanded=False):
+                    df_piv = df_hist_f.pivot(index='indicador', columns='mes_referencia', values='valor')
+                    df_piv.columns.name = None
+                    df_piv.index.name = "Indicador"
+                    df_piv.columns = [
+                        datetime.strptime(c, "%Y-%m").strftime("%b/%y") if len(str(c)) == 7 else c
+                        for c in df_piv.columns
+                    ]
+                    st.dataframe(df_piv.fillna("—"), use_container_width=True)
 
-        # ── Barras de progresso usando último valor ────────────────────────────
-        def _barra_ind(ind, atual):
-            meta    = ind["meta"]
-            unidade = ind["unidade"]
-            pct     = min(atual / meta, 1.0) if meta > 0 else 0.0
-            prorata = meta / 12 * mes_atual_c
-            pct_vs  = atual / prorata if prorata > 0 else 0.0
-            prorata_pct = min(prorata / meta, 1.0) if meta > 0 else 0.0
-
-            if atual == 0:
-                badge, badge_cor = "Sem registro", "#94A3B8"
-            elif pct_vs >= 1.0:
-                badge, badge_cor = "No prazo", "#059669"
-            elif pct_vs >= 0.7:
-                badge, badge_cor = "Em risco", "#D97706"
-            else:
-                badge, badge_cor = "Atrasado", "#DC2626"
-            cor_bar = badge_cor
-
-            def _fmt(v):
-                return f"{v:.1f}{unidade}" if unidade == "%" else f"{v:,.0f}".replace(",", ".")
-
-            st.markdown(
-                f'<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:1px;">'
-                f'  <span style="font-size:13px;font-weight:600;">{ind["indicador"]}</span>'
-                f'  <span style="font-size:11px;font-weight:700;color:{badge_cor};">{badge}</span>'
-                f'</div>'
-                f'<div style="position:relative;background:#2D3748;border-radius:6px;height:10px;margin-bottom:3px;">'
-                f'  <div style="background:{cor_bar};width:{pct*100:.1f}%;height:10px;border-radius:6px;"></div>'
-                f'  <div style="position:absolute;top:0;left:{prorata_pct*100:.1f}%;width:2px;height:10px;background:#F59E0B;opacity:.8;"></div>'
-                f'  <span style="position:absolute;right:5px;top:0;font-size:9px;line-height:10px;color:#fff;font-weight:700;">{pct*100:.0f}%</span>'
-                f'</div>'
-                f'<div style="display:flex;gap:12px;font-size:11px;color:#888;margin-bottom:6px;">'
-                f'  <span>Meta: <b style="color:#ccc;">{_fmt(meta)}</b></span>'
-                f'  <span>Realizado: <b style="color:{cor_bar};">{_fmt(atual)}</b></span>'
-                f'  <span>Pró-rata ({mes_atual_c}m): <b style="color:#F59E0B;">{_fmt(prorata)}</b></span>'
-                f'</div>'
-                f'<hr style="margin:2px 0 6px 0;border-color:rgba(255,255,255,0.06);">',
-                unsafe_allow_html=True
-            )
+        st.markdown("<br>", unsafe_allow_html=True)
+        for ind in lista:
+            _barra_com(ind, float(_vals_atual_com.get(ind["indicador"], 0)), _mes_atual_c)
 
     with tab_imp:
-        for ind in _ind_imprensa:
-            _barra_ind(ind, float(_vals_atual.get(ind["indicador"], 0)))
+        _render_aba_com(_ind_imprensa, "imp", "form_imp_mensal")
 
     with tab_dig:
-        for ind in _ind_digital:
-            _barra_ind(ind, float(_vals_atual.get(ind["indicador"], 0)))
-
+        _render_aba_com(_ind_digital, "dig", "form_dig_mensal")
 
 
 elif menu == "Ações":
