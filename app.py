@@ -2362,8 +2362,8 @@ elif menu == "Plano DI 2026":
                 for i, ind in enumerate(_ind_imprensa):
                     key = ind["indicador"]
                     vals_imp[key] = cols_imp[i % 2].number_input(
-                        ind["indicador"], value=float(_vals_mes.get(key, _vals_atual.get(key, 0))),
-                        min_value=0.0, step=1.0, key=f"fi_{i}"
+                        ind["indicador"], value=int(_vals_mes.get(key, _vals_atual.get(key, 0))),
+                        min_value=0, step=1, key=f"fi_{i}"
                     )
 
                 st.markdown("**Mídias Digitais**")
@@ -2371,10 +2371,18 @@ elif menu == "Plano DI 2026":
                 cols_dig = st.columns(2)
                 for i, ind in enumerate(_ind_digital):
                     key = ind["indicador"]
-                    vals_dig[key] = cols_dig[i % 2].number_input(
-                        ind["indicador"], value=float(_vals_mes.get(key, _vals_atual.get(key, 0))),
-                        min_value=0.0, step=1.0, key=f"fd_{i}"
-                    )
+                    _eh_pct = ind["unidade"] == "%"
+                    _val_db = float(_vals_mes.get(key, _vals_atual.get(key, 0)))
+                    if _eh_pct:
+                        vals_dig[key] = cols_dig[i % 2].number_input(
+                            ind["indicador"], value=_val_db,
+                            min_value=0.0, step=0.1, format="%.1f", key=f"fd_{i}"
+                        )
+                    else:
+                        vals_dig[key] = cols_dig[i % 2].number_input(
+                            ind["indicador"], value=int(_val_db),
+                            min_value=0, step=1, key=f"fd_{i}"
+                        )
 
                 if st.form_submit_button("Salvar mês", type="primary", use_container_width=True):
                     for nome_ind, valor in {**vals_imp, **vals_dig}.items():
