@@ -4027,9 +4027,17 @@ elif menu == "Relacionamento":
 
     df_rel = run_query_cached("SELECT * FROM View_Relacionamento_Critico")
 
+    # ── Migração: adicionar colunas se não existirem ─────────────────────
+    for _col, _tipo in [("tipo_interacao","TEXT"), ("canal","TEXT"), ("responsavel","TEXT")]:
+        try:
+            run_exec(f"ALTER TABLE Registro_Relacionamento ADD COLUMN IF NOT EXISTS {_col} {_tipo}")
+        except Exception:
+            pass
+
     df_interacoes = run_query_cached(
-        "SELECT id_parceiro, data_interacao, descricao_do_que_foi_feito, "
-        "proxima_acao_data "
+        "SELECT id_registro, id_parceiro, id_contato, data_interacao, "
+        "descricao_do_que_foi_feito, proxima_acao_data, "
+        "tipo_interacao, canal, responsavel "
         "FROM Registro_Relacionamento ORDER BY data_interacao DESC"
     )
 
@@ -4061,9 +4069,150 @@ elif menu == "Relacionamento":
     ])
 
     # ── Abas ─────────────────────────────────────────────────────────────────
-    tab_vis, tab_timeline, tab_followup, tab_diretoria = st.tabs([
-        "Visão consolidada", "Linha do tempo", "Follow-ups", "Relatório diretoria"
+    tab_reg, tab_vis, tab_timeline, tab_followup, tab_diretoria = st.tabs([
+        "Registrar interacao", "Visão consolidada", "Linha do tempo", "Follow-ups", "Relatório diretoria"
     ])
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # ABA 0 — REGISTRAR INTERAÇÃO
+    # ══════════════════════════════════════════════════════════════════════════
+    with tab_reg:
+        _rc1, _rc2 = st.columns([3, 2], gap="large")
+
+        # ── Formulário de registro ────────────────────────────────────────────
+        with _rc1:
+            section("Nova interacao")
+
+            _TIPOS_INTERACAO = [
+                "Almoco CDP",
+                "Reuniao presencial",
+                "Ligacao telefonica",
+                "WhatsApp",
+                "E-mail",
+                "Visita ao parceiro",
+                "Evento externo",
+                "Envio de material",
+                "Agradecimento",
+                "Outro",
+            ]
+            _CANAIS = ["Presencial", "WhatsApp", "E-mail", "Telefone", "Plataforma"]
+
+            with st.form("form_nova_interacao", clear_on_submit=True):
+                _nomes_parc = sorted(df_parceiros["nome_instituicao"].dropna().tolist())
+                _fi1, _fi2 = st.columns(2)
+                _parc_sel  = _fi1.selectbox("Parceiro *", ["-- selecione --"] + _nomes_parc, key="ni_parc")
+                _tipo_sel  = _fi2.selectbox("Tipo de interacao *", _TIPOS_INTERACAO, key="ni_tipo")
+
+                _fi3, _fi4 = st.columns(2)
+                _canal_sel = _fi3.selectbox("Canal", _CANAIS, key="ni_canal")
+                _data_int  = _fi4.date_input("Data *", datetime.now().date(), key="ni_data")
+
+                # Contatos do parceiro selecionado
+                _contatos_disp = [("Nenhum", None)]
+                if _parc_sel != "-- selecione --":
+                    _id_p_form = df_parceiros[df_parceiros["nome_instituicao"] == _parc_sel]["id_parceiro"]
+                    if not _id_p_form.empty:
+                        _ct = run_query(
+                            "SELECT id_contato, nome_pessoa FROM Contato_Direto WHERE id_parceiro = %s ORDER BY nome_pessoa",
+                            (int(_id_p_form.values[0]),)
+                        )
+                        if not _ct.empty:
+                            _contatos_disp += [(r["nome_pessoa"], r["id_contato"]) for _, r in _ct.iterrows()]
+                _contato_sel = st.selectbox(
+                    "Contato envolvido (opcional)",
+                    options=[c[0] for c in _contatos_disp],
+                    key="ni_contato"
+                )
+                _id_contato_form = dict(_contatos_disp).get(_contato_sel)
+
+                _descricao = st.text_area(
+                    "O que foi feito / conversado *",
+                    placeholder="Descreva o que aconteceu, o que foi tratado, decisoes tomadas...",
+                    height=110, key="ni_desc"
+                )
+
+                _fi5, _fi6 = st.columns(2)
+                _prox_acao = _fi5.text_input("Proxima acao (opcional)", placeholder="ex: Enviar proposta, Ligar na sexta", key="ni_prox")
+                _prox_data = _fi6.date_input("Data da proxima acao", value=None, key="ni_prox_data")
+                _resp      = st.text_input("Responsavel", placeholder="Quem fez o contato?", key="ni_resp")
+
+                _submitted = st.form_submit_button("Registrar interacao", type="primary", use_container_width=True)
+                if _submitted:
+                    if _parc_sel == "-- selecione --":
+                        st.warning("Selecione o parceiro.")
+                    elif not _descricao.strip():
+                        st.warning("Descreva o que foi feito.")
+                    else:
+                        _id_p_reg = int(df_parceiros[df_parceiros["nome_instituicao"] == _parc_sel]["id_parceiro"].values[0])
+                        _desc_final = f"[{_tipo_sel}] {_descricao.strip()}"
+                        if _prox_acao.strip():
+                            _desc_final += f" | Proxima acao: {_prox_acao.strip()}"
+                        run_exec(
+                            "INSERT INTO Registro_Relacionamento "
+                            "(id_parceiro, id_contato, data_interacao, descricao_do_que_foi_feito, "
+                            " proxima_acao_data, tipo_interacao, canal, responsavel) "
+                            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
+                            (
+                                _id_p_reg,
+                                _id_contato_form,
+                                _data_int,
+                                _desc_final,
+                                _prox_data if _prox_data else None,
+                                _tipo_sel,
+                                _canal_sel,
+                                _resp.strip() if _resp.strip() else None,
+                            )
+                        )
+                        run_exec(
+                            "INSERT INTO Logs (acao) VALUES (%s)",
+                            (f"Interacao registrada: {_parc_sel} — {_tipo_sel}",)
+                        )
+                        st.success(f"Interacao com {_parc_sel} registrada.")
+                        st.rerun()
+
+        # ── Régua de relacionamento (referência rápida) ───────────────────────
+        with _rc2:
+            section("Regua de relacionamento")
+            _REGUA = [
+                ("Parceiros Importantes", ["Agradecimento personalizado", "Destaque em redes + Selo Amigo", "Mensagens mensais", "Boletim semanal", "Brindes e datas", "Cartao de boas festas", "Balanco social"]),
+                ("Financiador",           ["Agradecimento personalizado", "Destaque em redes + Selo Amigo", "Mensagens mensais", "Mensagens de campanhas", "Boletim semanal", "Brindes e datas", "Cartao de boas festas", "Balanco social"]),
+                ("Imprensa",              ["Agradecimento padrao", "Mensagens mensais", "Mensagens de campanhas", "Boletim semanal", "Cartao de boas festas", "Balanco social"]),
+                ("Doadores Especiais",    ["Agradecimento personalizado", "Mensagens mensais", "Mensagens de campanhas", "Boletim semanal", "Brindes e datas", "Cartao de boas festas"]),
+                ("Doador Pontual",        ["Boas-vindas", "Agradecimento padrao", "Boletim semanal", "Cartao de boas festas"]),
+                ("Doador via Site",       ["Agradecimento automatico"]),
+                ("Voluntario",            ["Cartao de aniversario", "Boas-vindas", "Mensagens mensais", "Mensagens de campanhas", "Boletim semanal", "Cartao de boas festas"]),
+                ("Apoiadores de Eventos", ["Agradecimento padrao", "Mensagens mensais", "Cartao de boas festas"]),
+                ("Conselho e Diretoria",  ["Cartao de aniversario", "Mensagens mensais", "Mensagens de campanhas", "Boletim semanal", "Cartao de boas festas", "Balanco social"]),
+            ]
+            st.markdown("<div style='font-size:0.82rem;color:#94A3B8;margin-bottom:6px;'>Acoes previstas por tipo de publico</div>", unsafe_allow_html=True)
+            for _pub, _acoes in _REGUA:
+                with st.expander(_pub, expanded=False):
+                    for _a in _acoes:
+                        st.markdown(f"- {_a}")
+
+        # ── Ultimas interacoes registradas ────────────────────────────────────
+        section("Ultimas interacoes")
+        _df_ult = df_interacoes.head(10) if not df_interacoes.empty else pd.DataFrame()
+        if _df_ult.empty:
+            st.info("Nenhuma interacao registrada ainda.")
+        else:
+            _nomes_map = df_parceiros.set_index("id_parceiro")["nome_instituicao"].to_dict()
+            for _, _r in _df_ult.iterrows():
+                _nome_p = _nomes_map.get(_r["id_parceiro"], "—")
+                _data_r = str(_r["data_interacao"])[:10] if pd.notna(_r["data_interacao"]) else "—"
+                _tipo_r = str(_r.get("tipo_interacao","")) if pd.notna(_r.get("tipo_interacao")) else ""
+                _tipo_tag = f"<span style='background:rgba(59,130,246,0.18);color:#93C5FD;padding:1px 8px;border-radius:10px;font-size:0.78rem;margin-right:6px;'>{_tipo_r}</span>" if _tipo_r else ""
+                _desc_r = str(_r["descricao_do_que_foi_feito"])[:120] if pd.notna(_r["descricao_do_que_foi_feito"]) else "—"
+                st.markdown(
+                    f"<div style='padding:8px 14px;margin-bottom:8px;background:rgba(255,255,255,0.04);"
+                    f"border-radius:8px;border-left:3px solid #3B82F6;'>"
+                    f"<span style='font-weight:600;color:#E5E7EB;'>{_nome_p}</span>"
+                    f"<span style='font-size:0.78rem;color:#94A3B8;margin-left:10px;'>{_data_r}</span>"
+                    f"<br>{_tipo_tag}<span style='font-size:0.88rem;color:#CBD5E1;'>{_desc_r}</span>"
+                    f"</div>",
+                    unsafe_allow_html=True
+                )
+
 
     # ══════════════════════════════════════════════════════════════════════════
     # ABA 1 — VISÃO CONSOLIDADA COM SCORE
@@ -4375,11 +4524,27 @@ elif menu == "Relacionamento":
 
                     acao = "Fazer follow-up"
                     data_fmt = row['_data'].strftime('%d/%m/%Y') if row['_data'] else '—'
-                    action_card(
-                        titulo=str(row['nome_instituicao']),
-                        meta_parts=[acao, f"Prazo: {data_fmt} ({badge})"],
-                        tom=tom,
-                    )
+                    _fu_c1, _fu_c2 = st.columns([5, 1])
+                    with _fu_c1:
+                        action_card(
+                            titulo=str(row['nome_instituicao']),
+                            meta_parts=[acao, f"Prazo: {data_fmt} ({badge})"],
+                            tom=tom,
+                        )
+                    with _fu_c2:
+                        _fu_key = f"fu_done_{row.get('id_parceiro','')}_{row.get('proxima_acao_data','')}"  
+                        if st.button("Feito", key=_fu_key, use_container_width=True):
+                            _id_fu = int(row["id_parceiro"]) if pd.notna(row.get("id_parceiro")) else None
+                            if _id_fu:
+                                run_exec(
+                                    "INSERT INTO Registro_Relacionamento "
+                                    "(id_parceiro, data_interacao, descricao_do_que_foi_feito, tipo_interacao) "
+                                    "VALUES (%s, %s, %s, %s)",
+                                    (_id_fu, hoje, f"Follow-up concluido (prazo: {data_fmt})", "Follow-up")
+                                )
+                                st.success(f"Follow-up de {row['nome_instituicao']} marcado como feito.")
+                                st.rerun()
+
 
     # ══════════════════════════════════════════════════════════════════════════
     # ABA 4 — RELATÓRIO PARA A DIRETORIA
