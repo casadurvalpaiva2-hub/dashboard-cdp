@@ -2150,7 +2150,7 @@ elif menu == "Plano DI 2026":
 
     eh_gerente_plano = st.session_state.user_data["perfil"] == "gerencia"
 
-    tab_cap, tab_com = st.tabs(["Captação financeira", "Comunicação e Imprensa"])
+    tab_cap, tab_imp, tab_dig = st.tabs(["Captação financeira", "Imprensa", "Mídias Digitais"])
 
     # ══════════════════════════════════════════════════════════════════════════
     # ABA 1 — CAPTAÇÃO FINANCEIRA
@@ -2283,7 +2283,7 @@ elif menu == "Plano DI 2026":
     # ══════════════════════════════════════════════════════════════════════════
     # ABA 2 — COMUNICAÇÃO E IMPRENSA
     # ══════════════════════════════════════════════════════════════════════════
-    with tab_com:
+    with tab_imp:
         # Criar tabela com histórico mensal (snapshot por mês)
         # Migração: recriar tabela se schema antigo (sem mes_referencia)
         _cols_ic = run_query("""
@@ -2452,11 +2452,11 @@ elif menu == "Plano DI 2026":
                 unsafe_allow_html=True
             )
 
-        section("Imprensa")
+    with tab_imp:
         for ind in _ind_imprensa:
             _barra_ind(ind, float(_vals_atual.get(ind["indicador"], 0)))
 
-        section("Mídias Digitais")
+    with tab_dig:
         for ind in _ind_digital:
             _barra_ind(ind, float(_vals_atual.get(ind["indicador"], 0)))
 
