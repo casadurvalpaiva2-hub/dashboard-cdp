@@ -2302,96 +2302,102 @@ elif menu == "Plano DI 2026":
     section("Indicadores de Comunicação — Plano 2026")
 
     _ind_imprensa = [
-        {"indicador": "Envios do boletim semanal via WhatsApp", "ref_2025": 52,        "meta_2026": 52,        "unidade": ""},
-        {"indicador": "Artigos enviados",                        "ref_2025": 50,        "meta_2026": 100,       "unidade": ""},
-        {"indicador": "Artigos publicados",                      "ref_2025": 145,       "meta_2026": 180,       "unidade": ""},
-        {"indicador": "Releases produzidos",                     "ref_2025": 114,       "meta_2026": 142,       "unidade": ""},
-        {"indicador": "Clipping",                                "ref_2025": 2780,      "meta_2026": 3058,      "unidade": ""},
-        {"indicador": "Rádios parceiras",                        "ref_2025": 190,       "meta_2026": 209,       "unidade": ""},
-        {"indicador": "Entrevistas (Rádio, TV e Portais)",       "ref_2025": 869,       "meta_2026": 955,       "unidade": ""},
-        {"indicador": "Inserções médicas em veículos municipais","ref_2025": None,      "meta_2026": 128,       "unidade": ""},
-        {"indicador": "Inscritos na Newsletter",                 "ref_2025": 1874,      "meta_2026": 2061,      "unidade": ""},
-        {"indicador": "Treinamentos",                            "ref_2025": None,      "meta_2026": 10,        "unidade": ""},
+        {"indicador": "Envios do boletim semanal via WhatsApp", "meta": 52,      "unidade": ""},
+        {"indicador": "Artigos enviados",                        "meta": 100,     "unidade": ""},
+        {"indicador": "Artigos publicados",                      "meta": 180,     "unidade": ""},
+        {"indicador": "Releases produzidos",                     "meta": 142,     "unidade": ""},
+        {"indicador": "Clipping",                                "meta": 3058,    "unidade": ""},
+        {"indicador": "Rádios parceiras",                        "meta": 209,     "unidade": ""},
+        {"indicador": "Entrevistas (Rádio, TV e Portais)",       "meta": 955,     "unidade": ""},
+        {"indicador": "Inserções médicas em veículos municipais","meta": 128,     "unidade": ""},
+        {"indicador": "Inscritos na Newsletter",                 "meta": 2061,    "unidade": ""},
+        {"indicador": "Treinamentos",                            "meta": 10,      "unidade": ""},
     ]
 
     _ind_digital = [
-        {"indicador": "Seguidores no Instagram",                 "ref_2025": 93118,     "meta_2026": 116397,    "unidade": ""},
-        {"indicador": "Seguidores no Facebook",                  "ref_2025": 58720,     "meta_2026": 73400,     "unidade": ""},
-        {"indicador": "Seguidores no LinkedIn",                  "ref_2025": 887,       "meta_2026": 1108,      "unidade": ""},
-        {"indicador": "Seguidores no Twitter/X",                 "ref_2025": 1843,      "meta_2026": 2027,      "unidade": ""},
-        {"indicador": "Inscritos no YouTube",                    "ref_2025": 582,       "meta_2026": 670,       "unidade": ""},
-        {"indicador": "Inscritos no TikTok",                     "ref_2025": 28400,     "meta_2026": 31000,     "unidade": ""},
-        {"indicador": "Cliques no Google ADS",                   "ref_2025": 33014,     "meta_2026": 34664,     "unidade": ""},
-        {"indicador": "Conversão de Leads (novos cadastros para doação)", "ref_2025": None, "meta_2026": 100,  "unidade": ""},
-        {"indicador": "Taxa de Engajamento Média",               "ref_2025": 3.3,       "meta_2026": 5.0,       "unidade": "%"},
-        {"indicador": "Alcance total (redes sociais)",           "ref_2025": 1605057,   "meta_2026": 2000300,   "unidade": ""},
+        {"indicador": "Seguidores no Instagram",                          "meta": 116397,  "unidade": ""},
+        {"indicador": "Seguidores no Facebook",                           "meta": 73400,   "unidade": ""},
+        {"indicador": "Seguidores no LinkedIn",                           "meta": 1108,    "unidade": ""},
+        {"indicador": "Seguidores no Twitter/X",                          "meta": 2027,    "unidade": ""},
+        {"indicador": "Inscritos no YouTube",                             "meta": 670,     "unidade": ""},
+        {"indicador": "Inscritos no TikTok",                              "meta": 31000,   "unidade": ""},
+        {"indicador": "Cliques no Google ADS",                            "meta": 34664,   "unidade": ""},
+        {"indicador": "Conversão de Leads (novos cadastros para doação)", "meta": 100,     "unidade": ""},
+        {"indicador": "Taxa de Engajamento Média",                        "meta": 5.0,     "unidade": "%"},
+        {"indicador": "Alcance total (redes sociais)",                    "meta": 2000300, "unidade": ""},
     ]
 
-    def _render_indicadores(lista, chave_prefix):
+    def _render_ind(lista, prefix):
+        mes_atual_com = datetime.now().month
         for i, ind in enumerate(lista):
-            meta    = ind["meta_2026"]
-            ref     = ind["ref_2025"]
+            meta    = ind["meta"]
             unidade = ind["unidade"]
-            key_inp = f"{chave_prefix}_{i}"
+            key_v   = f"com_{prefix}_{i}"
+            if key_v not in st.session_state:
+                st.session_state[key_v] = 0.0
 
-            if key_inp not in st.session_state:
-                st.session_state[key_inp] = 0
+            atual = float(st.session_state[key_v])
+            pct   = min(atual / meta, 1.0) if meta > 0 else 0.0
 
-            col_ind, col_ref, col_meta, col_atual, col_bar = st.columns([3.5, 1.2, 1.2, 1.4, 2.5])
+            # Pró-rata mensal
+            prorata     = meta / 12 * mes_atual_com
+            pct_prorata = min(prorata / meta, 1.0) if meta > 0 else 0.0
+            pct_vs_pror = atual / prorata if prorata > 0 else 0.0
 
-            col_ind.markdown(
-                f'<div style="font-size:13px;padding:6px 0;color:#E5E7EB;">{ind["indicador"]}</div>',
+            if atual == 0:
+                badge_txt, badge_cor = "Sem registro", "#94A3B8"
+            elif pct_vs_pror >= 1.0:
+                badge_txt, badge_cor = "No prazo", "#059669"
+            elif pct_vs_pror >= 0.7:
+                badge_txt, badge_cor = "Em risco", "#D97706"
+            else:
+                badge_txt, badge_cor = "Atrasado", "#DC2626"
+
+            cor_bar = "#059669" if badge_cor == "#059669" else "#D97706" if badge_cor == "#D97706" else "#DC2626" if badge_cor == "#DC2626" else "#94A3B8"
+
+            def _fmt_num(v, u):
+                if u == "%":
+                    return f"{v:.1f}%"
+                return f"{v:,.0f}".replace(",", ".")
+
+            st.markdown(
+                f'<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:2px;">'
+                f'  <span style="font-size:14px;font-weight:600;">{ind["indicador"]}</span>'
+                f'  <span style="font-size:12px;font-weight:700;color:{badge_cor};">{badge_txt}</span>'
+                f'</div>'
+                f'<div style="position:relative;background:#2D3748;border-radius:8px;height:14px;margin-bottom:4px;">'
+                f'  <div style="background:{cor_bar};width:{pct*100:.1f}%;height:14px;border-radius:8px;transition:width .4s;"></div>'
+                f'  <div style="position:absolute;top:0;left:{pct_prorata*100:.1f}%;width:2px;height:14px;background:#F59E0B;opacity:.8;" title="Pró-rata"></div>'
+                f'  <span style="position:absolute;right:6px;top:0;font-size:10px;line-height:14px;color:#fff;font-weight:700;">{pct*100:.0f}%</span>'
+                f'</div>',
                 unsafe_allow_html=True
             )
-            col_ref.markdown(
-                f'<div style="font-size:12px;padding:6px 0;color:#9CA3AF;text-align:right;">'
-                f'{"—" if ref is None else f"{ref:,.0f}{unidade}".replace(",",".")}'
-                f'</div>', unsafe_allow_html=True
-            )
-            col_meta.markdown(
-                f'<div style="font-size:12px;padding:6px 0;color:#F59E0B;font-weight:600;text-align:right;">'
-                f'{f"{meta:,.0f}{unidade}".replace(",",".")}'
-                f'</div>', unsafe_allow_html=True
-            )
 
-            atual = col_atual.number_input(
-                "Atual", value=float(st.session_state[key_inp]),
-                min_value=0.0, step=1.0, key=f"ni_{key_inp}", label_visibility="collapsed"
-            )
-            st.session_state[key_inp] = atual
-
-            pct = min(atual / meta, 1.0) if meta > 0 else 0
-            cor = "#059669" if pct >= 1.0 else "#D97706" if pct >= 0.5 else "#94A3B8"
-            col_bar.markdown(
-                f'<div style="display:flex;align-items:center;gap:8px;padding:6px 0;">'
-                f'<div style="flex:1;background:#2D3748;border-radius:6px;height:10px;">'
-                f'<div style="background:{cor};width:{pct*100:.1f}%;height:10px;border-radius:6px;"></div></div>'
-                f'<span style="font-size:11px;color:{cor};font-weight:600;min-width:36px;text-align:right;">{pct*100:.0f}%</span>'
-                f'</div>', unsafe_allow_html=True
-            )
-            st.markdown("<hr style='margin:0;border-color:rgba(255,255,255,0.05);'>", unsafe_allow_html=True)
-
-    # Cabeçalho das colunas
-    def _cabecalho():
-        c1, c2, c3, c4, c5 = st.columns([3.5, 1.2, 1.2, 1.4, 2.5])
-        for col, txt in zip([c1, c2, c3, c4, c5], ["Indicador", "Ref. 2025", "Meta 2026", "Atual", "Progresso"]):
-            col.markdown(
-                f'<div style="font-size:11px;letter-spacing:1px;text-transform:uppercase;'
-                f'color:rgba(255,255,255,0.35);padding-bottom:4px;">{txt}</div>',
+            _c1, _c2, _c3 = st.columns([3, 2, 1])
+            _c1.markdown(
+                f'<div style="display:flex;gap:16px;font-size:12px;color:#888;margin-bottom:8px;">'
+                f'<span>Meta: <b style="color:#ccc;">{_fmt_num(meta, unidade)}</b></span>'
+                f'<span>Realizado: <b style="color:{cor_bar};">{_fmt_num(atual, unidade)}</b></span>'
+                f'<span>Pró-rata ({mes_atual_com}m): <b style="color:#F59E0B;">{_fmt_num(prorata, unidade)}</b></span>'
+                f'</div>',
                 unsafe_allow_html=True
             )
-        st.markdown("<hr style='margin:0 0 4px 0;border-color:rgba(255,255,255,0.12);'>", unsafe_allow_html=True)
+            novo = _c2.number_input(
+                "Atualizar valor realizado", value=atual,
+                min_value=0.0, step=1.0,
+                key=f"ni_com_{prefix}_{i}", label_visibility="collapsed"
+            )
+            st.session_state[key_v] = novo
 
-    st.markdown("**Imprensa**")
-    _cabecalho()
-    _render_indicadores(_ind_imprensa, "imp")
+            st.markdown("<hr style='margin:4px 0;border-color:rgba(255,255,255,0.06);'>", unsafe_allow_html=True)
 
-    st.markdown("<br>**Mídias Digitais**", unsafe_allow_html=True)
-    _cabecalho()
-    _render_indicadores(_ind_digital, "dig")
+    section("Imprensa")
+    _render_ind(_ind_imprensa, "imp")
 
-    st.caption("Os valores de 'Atual' são inseridos manualmente e ficam salvos durante a sessão.")
+    section("Mídias Digitais")
+    _render_ind(_ind_digital, "dig")
 
+    st.caption("Valores atualizados manualmente — ficam salvos durante a sessão.")
 
 elif menu == "Ações":
     user      = st.session_state.user_data
