@@ -2285,13 +2285,21 @@ elif menu == "Plano DI 2026":
     # ══════════════════════════════════════════════════════════════════════════
     with tab_com:
         # Criar tabela com histórico mensal (snapshot por mês)
+        # Migração: recriar tabela se schema antigo (sem mes_referencia)
+        _cols_ic = run_query("""
+            SELECT column_name FROM information_schema.columns
+            WHERE table_name = 'indicadores_comunicacao_2026'
+        """)
+        _col_names = set(_cols_ic['column_name'].tolist()) if not _cols_ic.empty else set()
+        if _col_names and 'mes_referencia' not in _col_names:
+            run_exec("DROP TABLE Indicadores_Comunicacao_2026")
         run_exec("""
             CREATE TABLE IF NOT EXISTS Indicadores_Comunicacao_2026 (
-                id            SERIAL PRIMARY KEY,
-                indicador     TEXT NOT NULL,
+                id             SERIAL PRIMARY KEY,
+                indicador      TEXT NOT NULL,
                 mes_referencia TEXT NOT NULL,
-                valor         FLOAT NOT NULL DEFAULT 0,
-                registrado_em TIMESTAMP DEFAULT NOW(),
+                valor          FLOAT NOT NULL DEFAULT 0,
+                registrado_em  TIMESTAMP DEFAULT NOW(),
                 UNIQUE (indicador, mes_referencia)
             )
         """)
