@@ -2284,18 +2284,17 @@ elif menu == "Plano DI 2026":
     # ABA 2 — COMUNICAÇÃO E IMPRENSA
     # ══════════════════════════════════════════════════════════════════════════
     with tab_com:
-        # Criar tabela se não existir
+        # Criar tabela com histórico mensal (snapshot por mês)
         run_exec("""
             CREATE TABLE IF NOT EXISTS Indicadores_Comunicacao_2026 (
-                indicador   TEXT PRIMARY KEY,
-                valor_atual FLOAT NOT NULL DEFAULT 0,
-                atualizado_em TIMESTAMP DEFAULT NOW()
+                id            SERIAL PRIMARY KEY,
+                indicador     TEXT NOT NULL,
+                mes_referencia TEXT NOT NULL,
+                valor         FLOAT NOT NULL DEFAULT 0,
+                registrado_em TIMESTAMP DEFAULT NOW(),
+                UNIQUE (indicador, mes_referencia)
             )
         """)
-
-        # Carregar valores salvos
-        df_ind_salvo = run_query("SELECT indicador, valor_atual FROM Indicadores_Comunicacao_2026")
-        _vals_db = dict(zip(df_ind_salvo['indicador'], df_ind_salvo['valor_atual'])) if not df_ind_salvo.empty else {}
 
         _ind_imprensa = [
             {"indicador": "Envios do boletim semanal via WhatsApp", "meta": 52,      "unidade": ""},
@@ -2310,21 +2309,93 @@ elif menu == "Plano DI 2026":
             {"indicador": "Treinamentos",                            "meta": 10,      "unidade": ""},
         ]
         _ind_digital = [
-            {"indicador": "Seguidores no Instagram",                          "meta": 116397,  "unidade": ""},
-            {"indicador": "Seguidores no Facebook",                           "meta": 73400,   "unidade": ""},
-            {"indicador": "Seguidores no LinkedIn",                           "meta": 1108,    "unidade": ""},
-            {"indicador": "Seguidores no Twitter/X",                          "meta": 2027,    "unidade": ""},
-            {"indicador": "Inscritos no YouTube",                             "meta": 670,     "unidade": ""},
-            {"indicador": "Inscritos no TikTok",                              "meta": 31000,   "unidade": ""},
-            {"indicador": "Cliques no Google ADS",                            "meta": 34664,   "unidade": ""},
-            {"indicador": "Conversão de Leads (novos cadastros p/ doação)",   "meta": 100,     "unidade": ""},
-            {"indicador": "Taxa de Engajamento Média",                        "meta": 5.0,     "unidade": "%"},
-            {"indicador": "Alcance total (redes sociais)",                    "meta": 2000300, "unidade": ""},
+            {"indicador": "Seguidores no Instagram",                        "meta": 116397,  "unidade": ""},
+            {"indicador": "Seguidores no Facebook",                         "meta": 73400,   "unidade": ""},
+            {"indicador": "Seguidores no LinkedIn",                         "meta": 1108,    "unidade": ""},
+            {"indicador": "Seguidores no Twitter/X",                        "meta": 2027,    "unidade": ""},
+            {"indicador": "Inscritos no YouTube",                           "meta": 670,     "unidade": ""},
+            {"indicador": "Inscritos no TikTok",                            "meta": 31000,   "unidade": ""},
+            {"indicador": "Cliques no Google ADS",                          "meta": 34664,   "unidade": ""},
+            {"indicador": "Conversão de Leads (novos cadastros p/ doação)", "meta": 100,     "unidade": ""},
+            {"indicador": "Taxa de Engajamento Média",                      "meta": 5.0,     "unidade": "%"},
+            {"indicador": "Alcance total (redes sociais)",                  "meta": 2000300, "unidade": ""},
         ]
-
         todos_ind = _ind_imprensa + _ind_digital
         mes_atual_c = datetime.now().month
 
+        # Carregar último valor registrado por indicador
+        df_ultimos = run_query("""
+            SELECT DISTINCT ON (indicador) indicador, valor, mes_referencia
+            FROM Indicadores_Comunicacao_2026
+            ORDER BY indicador, mes_referencia DESC
+        """)
+        _vals_atual = dict(zip(df_ultimos['indicador'], df_ultimos['valor'])) if not df_ultimos.empty else {}
+        _mes_atual_str  = datetime.now().strftime("%Y-%m")
+        _meses_opcoes   = [f"2026-{m:02d}" for m in range(1, 13)]
+        _idx_mes_padrao = _meses_opcoes.index(_mes_atual_str) if _mes_atual_str in _meses_opcoes else 0
+
+        # ── Formulário de registro mensal ─────────────────────────────────────
+        with st.expander("Registrar valores do mês", expanded=False):
+            mes_sel = st.selectbox("Mês de referência", _meses_opcoes,
+                                   index=_idx_mes_padrao, key="com_mes_sel",
+                                   format_func=lambda m: datetime.strptime(m, "%Y-%m").strftime("%B/%Y").capitalize())
+
+            # Pré-carregar valores já registrados para o mês selecionado
+            df_mes = run_query(
+                "SELECT indicador, valor FROM Indicadores_Comunicacao_2026 WHERE mes_referencia = %s",
+                (mes_sel,)
+            )
+            _vals_mes = dict(zip(df_mes['indicador'], df_mes['valor'])) if not df_mes.empty else {}
+
+            with st.form("form_ind_com_mensal", clear_on_submit=False):
+                st.markdown("**Imprensa**")
+                vals_imp = {}
+                cols_imp = st.columns(2)
+                for i, ind in enumerate(_ind_imprensa):
+                    key = ind["indicador"]
+                    vals_imp[key] = cols_imp[i % 2].number_input(
+                        ind["indicador"], value=float(_vals_mes.get(key, _vals_atual.get(key, 0))),
+                        min_value=0.0, step=1.0, key=f"fi_{i}"
+                    )
+
+                st.markdown("**Mídias Digitais**")
+                vals_dig = {}
+                cols_dig = st.columns(2)
+                for i, ind in enumerate(_ind_digital):
+                    key = ind["indicador"]
+                    vals_dig[key] = cols_dig[i % 2].number_input(
+                        ind["indicador"], value=float(_vals_mes.get(key, _vals_atual.get(key, 0))),
+                        min_value=0.0, step=1.0, key=f"fd_{i}"
+                    )
+
+                if st.form_submit_button("Salvar mês", type="primary", use_container_width=True):
+                    for nome_ind, valor in {**vals_imp, **vals_dig}.items():
+                        run_exec("""
+                            INSERT INTO Indicadores_Comunicacao_2026 (indicador, mes_referencia, valor)
+                            VALUES (%s, %s, %s)
+                            ON CONFLICT (indicador, mes_referencia) DO UPDATE
+                            SET valor = EXCLUDED.valor, registrado_em = NOW()
+                        """, (nome_ind, mes_sel, valor))
+                    st.success(f"Valores de {mes_sel} salvos.")
+                    st.rerun()
+
+        # ── Histórico: variação mês a mês ─────────────────────────────────────
+        df_hist_com = run_query("""
+            SELECT indicador, mes_referencia, valor
+            FROM Indicadores_Comunicacao_2026
+            ORDER BY indicador, mes_referencia
+        """)
+        if not df_hist_com.empty:
+            with st.expander("Ver evolução mês a mês", expanded=False):
+                df_pivot = df_hist_com.pivot(index='indicador', columns='mes_referencia', values='valor')
+                df_pivot.columns.name = None
+                df_pivot.index.name = "Indicador"
+                # Formatar colunas como mês abreviado
+                df_pivot.columns = [datetime.strptime(c, "%Y-%m").strftime("%b/%y") if len(str(c)) == 7 else c
+                                    for c in df_pivot.columns]
+                st.dataframe(df_pivot.fillna("—"), use_container_width=True)
+
+        # ── Barras de progresso usando último valor ────────────────────────────
         def _barra_ind(ind, atual):
             meta    = ind["meta"]
             unidade = ind["unidade"]
@@ -2334,13 +2405,14 @@ elif menu == "Plano DI 2026":
             prorata_pct = min(prorata / meta, 1.0) if meta > 0 else 0.0
 
             if atual == 0:
-                badge, badge_cor, cor_bar = "Sem registro", "#94A3B8", "#94A3B8"
+                badge, badge_cor = "Sem registro", "#94A3B8"
             elif pct_vs >= 1.0:
-                badge, badge_cor, cor_bar = "No prazo", "#059669", "#059669"
+                badge, badge_cor = "No prazo", "#059669"
             elif pct_vs >= 0.7:
-                badge, badge_cor, cor_bar = "Em risco", "#D97706", "#D97706"
+                badge, badge_cor = "Em risco", "#D97706"
             else:
-                badge, badge_cor, cor_bar = "Atrasado", "#DC2626", "#DC2626"
+                badge, badge_cor = "Atrasado", "#DC2626"
+            cor_bar = badge_cor
 
             def _fmt(v):
                 return f"{v:.1f}{unidade}" if unidade == "%" else f"{v:,.0f}".replace(",", ".")
@@ -2364,53 +2436,14 @@ elif menu == "Plano DI 2026":
                 unsafe_allow_html=True
             )
 
-        # ── Formulário de atualização ─────────────────────────────────────────
-        with st.expander("Registrar / atualizar valores realizados", expanded=False):
-            with st.form("form_ind_com"):
-                st.markdown("**Imprensa**")
-                vals_imp = {}
-                cols_imp = st.columns(2)
-                for i, ind in enumerate(_ind_imprensa):
-                    key = ind["indicador"]
-                    vals_imp[key] = cols_imp[i % 2].number_input(
-                        ind["indicador"],
-                        value=float(_vals_db.get(key, 0)),
-                        min_value=0.0, step=1.0,
-                        key=f"fi_{i}"
-                    )
-
-                st.markdown("**Mídias Digitais**")
-                vals_dig = {}
-                cols_dig = st.columns(2)
-                for i, ind in enumerate(_ind_digital):
-                    key = ind["indicador"]
-                    vals_dig[key] = cols_dig[i % 2].number_input(
-                        ind["indicador"],
-                        value=float(_vals_db.get(key, 0)),
-                        min_value=0.0, step=1.0,
-                        key=f"fd_{i}"
-                    )
-
-                if st.form_submit_button("Salvar", type="primary", use_container_width=True):
-                    todos_vals = {**vals_imp, **vals_dig}
-                    for nome_ind, valor in todos_vals.items():
-                        run_exec("""
-                            INSERT INTO Indicadores_Comunicacao_2026 (indicador, valor_atual, atualizado_em)
-                            VALUES (%s, %s, NOW())
-                            ON CONFLICT (indicador) DO UPDATE
-                            SET valor_atual = EXCLUDED.valor_atual, atualizado_em = NOW()
-                        """, (nome_ind, valor))
-                    st.success("Valores salvos.")
-                    st.rerun()
-
-        # ── Barras de progresso ───────────────────────────────────────────────
         section("Imprensa")
         for ind in _ind_imprensa:
-            _barra_ind(ind, float(_vals_db.get(ind["indicador"], 0)))
+            _barra_ind(ind, float(_vals_atual.get(ind["indicador"], 0)))
 
         section("Mídias Digitais")
         for ind in _ind_digital:
-            _barra_ind(ind, float(_vals_db.get(ind["indicador"], 0)))
+            _barra_ind(ind, float(_vals_atual.get(ind["indicador"], 0)))
+
 
 
 elif menu == "Ações":
