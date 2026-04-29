@@ -2787,7 +2787,7 @@ elif menu == "Almoço CDP":
                 _data = [["NOME", "CARGO / FUNÇÃO", "EMPRESA"]]
 
                 for _, _row in df_c.assign(
-                        _emp_sort=df_c["empresa"].fillna("").str.upper().str.strip(),
+                        _emp_sort=df_c["empresa"].fillna("").str.upper().str.strip().apply(lambda v: ("Z_" + v) if v in ("", "-", "NAN", "NONE") else v),
                         _nom_sort=df_c["nome"].fillna("").str.upper().str.strip()
                     ).sort_values(["_emp_sort", "_nom_sort"]).iterrows():
                     _nome = str(_row.get("nome", "")).upper()
