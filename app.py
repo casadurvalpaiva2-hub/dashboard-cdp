@@ -2146,258 +2146,272 @@ elif menu == "Calendário":
 
 
 elif menu == "Plano DI 2026":
-    page_header("Plano de Ação DI 2026", "Metas × Realizado por fonte de captação — monitoramento financeiro.")
+    page_header("Plano de Ação DI 2026", "Monitoramento de metas financeiras e indicadores de comunicação.")
 
     eh_gerente_plano = st.session_state.user_data["perfil"] == "gerencia"
 
-    # ── Dados base ──────────────────────────────────────────────────────────
-    df_prog = run_query_slow("SELECT * FROM View_Progresso_PlanoAnual ORDER BY meta_2026 DESC")
-    df_hist = run_query("""
-        SELECT
-            CASE
-                WHEN LENGTH(rc.mes_referencia) = 10
-                THEN TO_CHAR(rc.mes_referencia::date, 'DD/MM/YYYY')
-                ELSE rc.mes_referencia
-            END AS mes_referencia,
-            mf.nome_fonte, rc.valor_realizado,
-            rc.observacao, rc.registrado_por, rc.data_registro
-        FROM Registro_Captacao_DI rc
-        JOIN Meta_Fonte_2026 mf ON rc.id_fonte = mf.id_fonte
-        ORDER BY rc.mes_referencia DESC, mf.nome_fonte
-    """)
+    tab_cap, tab_com = st.tabs(["Captação financeira", "Comunicação e Imprensa"])
 
-    # ── KPIs globais ────────────────────────────────────────────────────────
-    if not df_prog.empty:
-        meta_total     = df_prog['meta_2026'].sum()
-        captado_total  = df_prog['captado_2026'].sum()
-        saldo_total    = meta_total - captado_total
-        pct_geral      = round(captado_total / meta_total * 100, 1) if meta_total > 0 else 0
-        fontes_ok      = int((df_prog['status_meta'].str.contains("🟢", na=False)).sum())
-        fontes_risco   = int((df_prog['status_meta'].str.contains("⚪", na=False)).sum())
+    # ══════════════════════════════════════════════════════════════════════════
+    # ABA 1 — CAPTAÇÃO FINANCEIRA
+    # ══════════════════════════════════════════════════════════════════════════
+    with tab_cap:
+        df_prog = run_query_slow("SELECT * FROM View_Progresso_PlanoAnual ORDER BY meta_2026 DESC")
+        df_hist = run_query("""
+            SELECT
+                CASE
+                    WHEN LENGTH(rc.mes_referencia) = 10
+                    THEN TO_CHAR(rc.mes_referencia::date, 'DD/MM/YYYY')
+                    ELSE rc.mes_referencia
+                END AS mes_referencia,
+                mf.nome_fonte, rc.valor_realizado,
+                rc.observacao, rc.registrado_por, rc.data_registro
+            FROM Registro_Captacao_DI rc
+            JOIN Meta_Fonte_2026 mf ON rc.id_fonte = mf.id_fonte
+            ORDER BY rc.mes_referencia DESC, mf.nome_fonte
+        """)
 
-        kpi_row([
-            {"label": "Meta total anual DI",    "value": format_br(meta_total)},
-            {"label": "Captado em 2026",         "value": format_br(captado_total), "accent": captado_total > 0},
-            {"label": "% da meta",               "value": f"{pct_geral}%"},
-            {"label": "Saldo a captar",          "value": format_br(saldo_total)},
-            {"label": "Fontes sem registro",     "value": fontes_risco, "hint": "Precisam de lançamento"},
-        ])
+        if not df_prog.empty:
+            meta_total    = df_prog['meta_2026'].sum()
+            captado_total = df_prog['captado_2026'].sum()
+            saldo_total   = meta_total - captado_total
+            pct_geral     = round(captado_total / meta_total * 100, 1) if meta_total > 0 else 0
+            fontes_ok     = int((df_prog['status_meta'].str.contains("🟢", na=False)).sum())
+            fontes_risco  = int((df_prog['status_meta'].str.contains("⚪", na=False)).sum())
 
-        st.markdown("<br>", unsafe_allow_html=True)
+            kpi_row([
+                {"label": "Meta total anual DI",    "value": format_br(meta_total)},
+                {"label": "Captado em 2026",         "value": format_br(captado_total), "accent": captado_total > 0},
+                {"label": "% da meta",               "value": f"{pct_geral}%"},
+                {"label": "Saldo a captar",          "value": format_br(saldo_total)},
+                {"label": "Fontes sem registro",     "value": fontes_risco, "hint": "Precisam de lançamento"},
+            ])
 
-        # ── Barra de progresso global ────────────────────────────────────
-        st.markdown(
-            f'<div style="font-size:13px;color:#555;margin-bottom:4px;">Progresso geral: <b>{pct_geral}%</b> da meta anual</div>',
-            unsafe_allow_html=True
-        )
-        st.progress(min(pct_geral / 100, 1.0))
-
-        # ── Progresso por fonte ─────────────────────────────────────────
-        section("Progresso por fonte de captação")
-
-        # Mês atual para calcular pró-rata
-        mes_atual = datetime.now().month
-        for _, row in df_prog.iterrows():
-            nome        = row['nome_fonte']
-            meta        = float(row['meta_2026'])
-            captado     = float(row['captado_2026'])
-            pct         = float(row['pct_meta']) if row['pct_meta'] else 0.0
-            saldo       = float(row['saldo_pendente'])
-            status      = str(row['status_meta'])
-            prorate     = round(meta / 12 * mes_atual, 2)
-            pct_prorate = round(captado / prorate * 100, 1) if prorate > 0 else 0
-
-            # Cor da barra por status
-            if "🟢" in status:
-                cor_bar = "#059669"
-            elif "🟡" in status:
-                cor_bar = "#D97706"
-            elif "🟠" in status:
-                cor_bar = "#EA580C"
-            else:
-                cor_bar = "#94A3B8"
-
-            # Badge pró-rata: no prazo / em risco / atrasado
-            if captado == 0:
-                badge_txt, badge_cor = "⚪ Sem registro", "#94A3B8"
-            elif pct_prorate >= 100:
-                badge_txt, badge_cor = "✅ No prazo", "#059669"
-            elif pct_prorate >= 70:
-                badge_txt, badge_cor = "⚠️ Em risco", "#D97706"
-            else:
-                badge_txt, badge_cor = "🔴 Atrasado", "#DC2626"
-
-            barra_val   = min(pct / 100, 1.0)
-            prorata_pct = min(prorate / meta, 1.0) if meta > 0 else 0
-
+            st.markdown("<br>", unsafe_allow_html=True)
             st.markdown(
-                f'<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:2px;">'
-                f'  <span style="font-size:14px;font-weight:600;">{nome}</span>'
-                f'  <span style="font-size:12px;font-weight:700;color:{badge_cor};">{badge_txt}</span>'
-                f'</div>'
-                # Barra de progresso com marcador pró-rata
-                f'<div style="position:relative;background:#2D3748;border-radius:8px;height:14px;margin-bottom:4px;">'
-                f'  <div style="background:{cor_bar};width:{barra_val*100:.1f}%;height:14px;border-radius:8px;transition:width .4s;"></div>'
-                f'  <div style="position:absolute;top:0;left:{prorata_pct*100:.1f}%;width:2px;height:14px;background:#F59E0B;opacity:.8;" title="Pró-rata"></div>'
-                f'  <span style="position:absolute;right:6px;top:0;font-size:10px;line-height:14px;color:#fff;font-weight:700;">{pct:.0f}%</span>'
-                f'</div>'
-                f'<div style="display:flex;gap:16px;font-size:12px;color:#888;margin-bottom:8px;">'
-                f'  <span>Meta: <b style="color:#ccc;">{format_br(meta)}</b></span>'
-                f'  <span>Captado: <b style="color:{cor_bar};">{format_br(captado)}</b></span>'
-                f'  <span>Pró-rata ({mes_atual}m): <b style="color:#F59E0B;">{format_br(prorate)}</b></span>'
-                f'  <span>Saldo: <b style="color:#ccc;">{format_br(saldo)}</b></span>'
-                f'</div>',
+                f'<div style="font-size:13px;color:#555;margin-bottom:4px;">Progresso geral: <b>{pct_geral}%</b> da meta anual</div>',
                 unsafe_allow_html=True
             )
-            st.markdown("<hr style='margin:4px 0;border-color:rgba(255,255,255,0.06);'>", unsafe_allow_html=True)
+            st.progress(min(pct_geral / 100, 1.0))
 
-    else:
-        st.info("Nenhuma fonte de captação cadastrada. Execute o setup do banco para popular Meta_Fonte_2026.")
+            section("Progresso por fonte de captação")
 
-    # ── Histórico de lançamentos ─────────────────────────────────────────────
-    st.info(
-        "Para registrar novos valores realizados, acesse **Entrada de Recursos** no menu lateral.",
-        icon="💡",
-    )
-    if not df_hist.empty:
-        section("Histórico de lançamentos")
+            mes_atual = datetime.now().month
+            for _, row in df_prog.iterrows():
+                nome        = row['nome_fonte']
+                meta        = float(row['meta_2026'])
+                captado     = float(row['captado_2026'])
+                pct         = float(row['pct_meta']) if row['pct_meta'] else 0.0
+                saldo       = float(row['saldo_pendente'])
+                status      = str(row['status_meta'])
+                prorate     = round(meta / 12 * mes_atual, 2)
+                pct_prorate = round(captado / prorate * 100, 1) if prorate > 0 else 0
 
-        # Totais por fonte
-        df_resumo = df_hist.groupby('nome_fonte')['valor_realizado'].sum().reset_index()
-        df_resumo.columns = ['Fonte', 'Total Registrado']
-        df_resumo['Total Registrado'] = df_resumo['Total Registrado'].apply(format_br)
-        st.dataframe(df_resumo, use_container_width=True, hide_index=True)
+                if "🟢" in status:   cor_bar = "#059669"
+                elif "🟡" in status: cor_bar = "#D97706"
+                elif "🟠" in status: cor_bar = "#EA580C"
+                else:                cor_bar = "#94A3B8"
 
-        with st.expander("Ver todos os lançamentos"):
-            df_hist_exib = df_hist.copy()
-            df_hist_exib['valor_realizado'] = df_hist_exib['valor_realizado'].apply(format_br)
-            df_hist_exib.columns = ['Mês', 'Fonte', 'Valor', 'Observação', 'Registrado por', 'Data registro']
-            st.dataframe(df_hist_exib, use_container_width=True, hide_index=True)
+                if captado == 0:
+                    badge_txt, badge_cor = "Sem registro", "#94A3B8"
+                elif pct_prorate >= 100:
+                    badge_txt, badge_cor = "No prazo", "#059669"
+                elif pct_prorate >= 70:
+                    badge_txt, badge_cor = "Em risco", "#D97706"
+                else:
+                    badge_txt, badge_cor = "Atrasado", "#DC2626"
 
-        # Permite exclusão (apenas gerência)
-        if eh_gerente_plano:
-            df_hist_del = run_query("""
-                SELECT rc.id, mf.nome_fonte, rc.mes_referencia, rc.valor_realizado
-                FROM Registro_Captacao_DI rc
-                JOIN Meta_Fonte_2026 mf ON rc.id_fonte = mf.id_fonte
-                ORDER BY rc.id DESC LIMIT 20
-            """)
-            if not df_hist_del.empty:
-                with st.expander("🗑 Excluir lançamento incorreto (gerência)"):
-                    opcoes_del = {
-                        f"#{r['id']} — {r['nome_fonte']} / {r['mes_referencia']} — {format_br(r['valor_realizado'])}": r['id']
-                        for _, r in df_hist_del.iterrows()
-                    }
-                    sel_del = st.selectbox("Selecione o lançamento para excluir:", list(opcoes_del.keys()))
-                    if st.button("Confirmar exclusão", type="secondary"):
-                        run_exec("DELETE FROM Registro_Captacao_DI WHERE id = ?", (opcoes_del[sel_del],))
-                        st.success("Lançamento excluído.")
-                        st.rerun()
-    else:
-        st.info("Nenhum lançamento registrado ainda. Use o formulário acima para registrar os realizados mensais.")
+                barra_val   = min(pct / 100, 1.0)
+                prorata_pct = min(prorate / meta, 1.0) if meta > 0 else 0
 
+                st.markdown(
+                    f'<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:2px;">'
+                    f'  <span style="font-size:14px;font-weight:600;">{nome}</span>'
+                    f'  <span style="font-size:12px;font-weight:700;color:{badge_cor};">{badge_txt}</span>'
+                    f'</div>'
+                    f'<div style="position:relative;background:#2D3748;border-radius:8px;height:14px;margin-bottom:4px;">'
+                    f'  <div style="background:{cor_bar};width:{barra_val*100:.1f}%;height:14px;border-radius:8px;transition:width .4s;"></div>'
+                    f'  <div style="position:absolute;top:0;left:{prorata_pct*100:.1f}%;width:2px;height:14px;background:#F59E0B;opacity:.8;" title="Pró-rata"></div>'
+                    f'  <span style="position:absolute;right:6px;top:0;font-size:10px;line-height:14px;color:#fff;font-weight:700;">{pct:.0f}%</span>'
+                    f'</div>'
+                    f'<div style="display:flex;gap:16px;font-size:12px;color:#888;margin-bottom:8px;">'
+                    f'  <span>Meta: <b style="color:#ccc;">{format_br(meta)}</b></span>'
+                    f'  <span>Captado: <b style="color:{cor_bar};">{format_br(captado)}</b></span>'
+                    f'  <span>Pró-rata ({mes_atual}m): <b style="color:#F59E0B;">{format_br(prorate)}</b></span>'
+                    f'  <span>Saldo: <b style="color:#ccc;">{format_br(saldo)}</b></span>'
+                    f'</div>',
+                    unsafe_allow_html=True
+                )
+                st.markdown("<hr style='margin:4px 0;border-color:rgba(255,255,255,0.06);'>", unsafe_allow_html=True)
+        else:
+            st.info("Nenhuma fonte de captação cadastrada.")
 
-    # ── Indicadores de Comunicação e Imprensa ────────────────────────────────
-    st.markdown("<br>", unsafe_allow_html=True)
-    section("Indicadores de Comunicação — Plano 2026")
+        st.info("Para registrar novos valores realizados, acesse **Entrada de Recursos** no menu lateral.", icon="💡")
 
-    _ind_imprensa = [
-        {"indicador": "Envios do boletim semanal via WhatsApp", "meta": 52,      "unidade": ""},
-        {"indicador": "Artigos enviados",                        "meta": 100,     "unidade": ""},
-        {"indicador": "Artigos publicados",                      "meta": 180,     "unidade": ""},
-        {"indicador": "Releases produzidos",                     "meta": 142,     "unidade": ""},
-        {"indicador": "Clipping",                                "meta": 3058,    "unidade": ""},
-        {"indicador": "Rádios parceiras",                        "meta": 209,     "unidade": ""},
-        {"indicador": "Entrevistas (Rádio, TV e Portais)",       "meta": 955,     "unidade": ""},
-        {"indicador": "Inserções médicas em veículos municipais","meta": 128,     "unidade": ""},
-        {"indicador": "Inscritos na Newsletter",                 "meta": 2061,    "unidade": ""},
-        {"indicador": "Treinamentos",                            "meta": 10,      "unidade": ""},
-    ]
+        if not df_hist.empty:
+            section("Histórico de lançamentos")
+            df_resumo = df_hist.groupby('nome_fonte')['valor_realizado'].sum().reset_index()
+            df_resumo.columns = ['Fonte', 'Total Registrado']
+            df_resumo['Total Registrado'] = df_resumo['Total Registrado'].apply(format_br)
+            st.dataframe(df_resumo, use_container_width=True, hide_index=True)
 
-    _ind_digital = [
-        {"indicador": "Seguidores no Instagram",                          "meta": 116397,  "unidade": ""},
-        {"indicador": "Seguidores no Facebook",                           "meta": 73400,   "unidade": ""},
-        {"indicador": "Seguidores no LinkedIn",                           "meta": 1108,    "unidade": ""},
-        {"indicador": "Seguidores no Twitter/X",                          "meta": 2027,    "unidade": ""},
-        {"indicador": "Inscritos no YouTube",                             "meta": 670,     "unidade": ""},
-        {"indicador": "Inscritos no TikTok",                              "meta": 31000,   "unidade": ""},
-        {"indicador": "Cliques no Google ADS",                            "meta": 34664,   "unidade": ""},
-        {"indicador": "Conversão de Leads (novos cadastros para doação)", "meta": 100,     "unidade": ""},
-        {"indicador": "Taxa de Engajamento Média",                        "meta": 5.0,     "unidade": "%"},
-        {"indicador": "Alcance total (redes sociais)",                    "meta": 2000300, "unidade": ""},
-    ]
+            with st.expander("Ver todos os lançamentos"):
+                df_hist_exib = df_hist.copy()
+                df_hist_exib['valor_realizado'] = df_hist_exib['valor_realizado'].apply(format_br)
+                df_hist_exib.columns = ['Mês', 'Fonte', 'Valor', 'Observação', 'Registrado por', 'Data registro']
+                st.dataframe(df_hist_exib, use_container_width=True, hide_index=True)
 
-    def _render_ind(lista, prefix):
-        mes_atual_com = datetime.now().month
-        for i, ind in enumerate(lista):
+            if eh_gerente_plano:
+                df_hist_del = run_query("""
+                    SELECT rc.id, mf.nome_fonte, rc.mes_referencia, rc.valor_realizado
+                    FROM Registro_Captacao_DI rc
+                    JOIN Meta_Fonte_2026 mf ON rc.id_fonte = mf.id_fonte
+                    ORDER BY rc.id DESC LIMIT 20
+                """)
+                if not df_hist_del.empty:
+                    with st.expander("Excluir lançamento incorreto (gerência)"):
+                        opcoes_del = {
+                            f"#{r['id']} — {r['nome_fonte']} / {r['mes_referencia']} — {format_br(r['valor_realizado'])}": r['id']
+                            for _, r in df_hist_del.iterrows()
+                        }
+                        sel_del = st.selectbox("Selecione o lançamento:", list(opcoes_del.keys()))
+                        if st.button("Confirmar exclusão", type="secondary"):
+                            run_exec("DELETE FROM Registro_Captacao_DI WHERE id = %s", (opcoes_del[sel_del],))
+                            st.success("Lançamento excluído.")
+                            st.rerun()
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # ABA 2 — COMUNICAÇÃO E IMPRENSA
+    # ══════════════════════════════════════════════════════════════════════════
+    with tab_com:
+        # Criar tabela se não existir
+        run_exec("""
+            CREATE TABLE IF NOT EXISTS Indicadores_Comunicacao_2026 (
+                indicador   TEXT PRIMARY KEY,
+                valor_atual FLOAT NOT NULL DEFAULT 0,
+                atualizado_em TIMESTAMP DEFAULT NOW()
+            )
+        """)
+
+        # Carregar valores salvos
+        df_ind_salvo = run_query("SELECT indicador, valor_atual FROM Indicadores_Comunicacao_2026")
+        _vals_db = dict(zip(df_ind_salvo['indicador'], df_ind_salvo['valor_atual'])) if not df_ind_salvo.empty else {}
+
+        _ind_imprensa = [
+            {"indicador": "Envios do boletim semanal via WhatsApp", "meta": 52,      "unidade": ""},
+            {"indicador": "Artigos enviados",                        "meta": 100,     "unidade": ""},
+            {"indicador": "Artigos publicados",                      "meta": 180,     "unidade": ""},
+            {"indicador": "Releases produzidos",                     "meta": 142,     "unidade": ""},
+            {"indicador": "Clipping",                                "meta": 3058,    "unidade": ""},
+            {"indicador": "Rádios parceiras",                        "meta": 209,     "unidade": ""},
+            {"indicador": "Entrevistas (Rádio, TV e Portais)",       "meta": 955,     "unidade": ""},
+            {"indicador": "Inserções médicas em veículos municipais","meta": 128,     "unidade": ""},
+            {"indicador": "Inscritos na Newsletter",                 "meta": 2061,    "unidade": ""},
+            {"indicador": "Treinamentos",                            "meta": 10,      "unidade": ""},
+        ]
+        _ind_digital = [
+            {"indicador": "Seguidores no Instagram",                          "meta": 116397,  "unidade": ""},
+            {"indicador": "Seguidores no Facebook",                           "meta": 73400,   "unidade": ""},
+            {"indicador": "Seguidores no LinkedIn",                           "meta": 1108,    "unidade": ""},
+            {"indicador": "Seguidores no Twitter/X",                          "meta": 2027,    "unidade": ""},
+            {"indicador": "Inscritos no YouTube",                             "meta": 670,     "unidade": ""},
+            {"indicador": "Inscritos no TikTok",                              "meta": 31000,   "unidade": ""},
+            {"indicador": "Cliques no Google ADS",                            "meta": 34664,   "unidade": ""},
+            {"indicador": "Conversão de Leads (novos cadastros p/ doação)",   "meta": 100,     "unidade": ""},
+            {"indicador": "Taxa de Engajamento Média",                        "meta": 5.0,     "unidade": "%"},
+            {"indicador": "Alcance total (redes sociais)",                    "meta": 2000300, "unidade": ""},
+        ]
+
+        todos_ind = _ind_imprensa + _ind_digital
+        mes_atual_c = datetime.now().month
+
+        def _barra_ind(ind, atual):
             meta    = ind["meta"]
             unidade = ind["unidade"]
-            key_v   = f"com_{prefix}_{i}"
-            if key_v not in st.session_state:
-                st.session_state[key_v] = 0.0
-
-            atual = float(st.session_state[key_v])
-            pct   = min(atual / meta, 1.0) if meta > 0 else 0.0
-
-            # Pró-rata mensal
-            prorata     = meta / 12 * mes_atual_com
-            pct_prorata = min(prorata / meta, 1.0) if meta > 0 else 0.0
-            pct_vs_pror = atual / prorata if prorata > 0 else 0.0
+            pct     = min(atual / meta, 1.0) if meta > 0 else 0.0
+            prorata = meta / 12 * mes_atual_c
+            pct_vs  = atual / prorata if prorata > 0 else 0.0
+            prorata_pct = min(prorata / meta, 1.0) if meta > 0 else 0.0
 
             if atual == 0:
-                badge_txt, badge_cor = "Sem registro", "#94A3B8"
-            elif pct_vs_pror >= 1.0:
-                badge_txt, badge_cor = "No prazo", "#059669"
-            elif pct_vs_pror >= 0.7:
-                badge_txt, badge_cor = "Em risco", "#D97706"
+                badge, badge_cor, cor_bar = "Sem registro", "#94A3B8", "#94A3B8"
+            elif pct_vs >= 1.0:
+                badge, badge_cor, cor_bar = "No prazo", "#059669", "#059669"
+            elif pct_vs >= 0.7:
+                badge, badge_cor, cor_bar = "Em risco", "#D97706", "#D97706"
             else:
-                badge_txt, badge_cor = "Atrasado", "#DC2626"
+                badge, badge_cor, cor_bar = "Atrasado", "#DC2626", "#DC2626"
 
-            cor_bar = "#059669" if badge_cor == "#059669" else "#D97706" if badge_cor == "#D97706" else "#DC2626" if badge_cor == "#DC2626" else "#94A3B8"
-
-            def _fmt_num(v, u):
-                if u == "%":
-                    return f"{v:.1f}%"
-                return f"{v:,.0f}".replace(",", ".")
+            def _fmt(v):
+                return f"{v:.1f}{unidade}" if unidade == "%" else f"{v:,.0f}".replace(",", ".")
 
             st.markdown(
-                f'<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:2px;">'
-                f'  <span style="font-size:14px;font-weight:600;">{ind["indicador"]}</span>'
-                f'  <span style="font-size:12px;font-weight:700;color:{badge_cor};">{badge_txt}</span>'
+                f'<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:1px;">'
+                f'  <span style="font-size:13px;font-weight:600;">{ind["indicador"]}</span>'
+                f'  <span style="font-size:11px;font-weight:700;color:{badge_cor};">{badge}</span>'
                 f'</div>'
-                f'<div style="position:relative;background:#2D3748;border-radius:8px;height:14px;margin-bottom:4px;">'
-                f'  <div style="background:{cor_bar};width:{pct*100:.1f}%;height:14px;border-radius:8px;transition:width .4s;"></div>'
-                f'  <div style="position:absolute;top:0;left:{pct_prorata*100:.1f}%;width:2px;height:14px;background:#F59E0B;opacity:.8;" title="Pró-rata"></div>'
-                f'  <span style="position:absolute;right:6px;top:0;font-size:10px;line-height:14px;color:#fff;font-weight:700;">{pct*100:.0f}%</span>'
-                f'</div>',
+                f'<div style="position:relative;background:#2D3748;border-radius:6px;height:10px;margin-bottom:3px;">'
+                f'  <div style="background:{cor_bar};width:{pct*100:.1f}%;height:10px;border-radius:6px;"></div>'
+                f'  <div style="position:absolute;top:0;left:{prorata_pct*100:.1f}%;width:2px;height:10px;background:#F59E0B;opacity:.8;"></div>'
+                f'  <span style="position:absolute;right:5px;top:0;font-size:9px;line-height:10px;color:#fff;font-weight:700;">{pct*100:.0f}%</span>'
+                f'</div>'
+                f'<div style="display:flex;gap:12px;font-size:11px;color:#888;margin-bottom:6px;">'
+                f'  <span>Meta: <b style="color:#ccc;">{_fmt(meta)}</b></span>'
+                f'  <span>Realizado: <b style="color:{cor_bar};">{_fmt(atual)}</b></span>'
+                f'  <span>Pró-rata ({mes_atual_c}m): <b style="color:#F59E0B;">{_fmt(prorata)}</b></span>'
+                f'</div>'
+                f'<hr style="margin:2px 0 6px 0;border-color:rgba(255,255,255,0.06);">',
                 unsafe_allow_html=True
             )
 
-            _c1, _c2, _c3 = st.columns([3, 2, 1])
-            _c1.markdown(
-                f'<div style="display:flex;gap:16px;font-size:12px;color:#888;margin-bottom:8px;">'
-                f'<span>Meta: <b style="color:#ccc;">{_fmt_num(meta, unidade)}</b></span>'
-                f'<span>Realizado: <b style="color:{cor_bar};">{_fmt_num(atual, unidade)}</b></span>'
-                f'<span>Pró-rata ({mes_atual_com}m): <b style="color:#F59E0B;">{_fmt_num(prorata, unidade)}</b></span>'
-                f'</div>',
-                unsafe_allow_html=True
-            )
-            novo = _c2.number_input(
-                "Atualizar valor realizado", value=atual,
-                min_value=0.0, step=1.0,
-                key=f"ni_com_{prefix}_{i}", label_visibility="collapsed"
-            )
-            st.session_state[key_v] = novo
+        # ── Formulário de atualização ─────────────────────────────────────────
+        with st.expander("Registrar / atualizar valores realizados", expanded=False):
+            with st.form("form_ind_com"):
+                st.markdown("**Imprensa**")
+                vals_imp = {}
+                cols_imp = st.columns(2)
+                for i, ind in enumerate(_ind_imprensa):
+                    key = ind["indicador"]
+                    vals_imp[key] = cols_imp[i % 2].number_input(
+                        ind["indicador"],
+                        value=float(_vals_db.get(key, 0)),
+                        min_value=0.0, step=1.0,
+                        key=f"fi_{i}"
+                    )
 
-            st.markdown("<hr style='margin:4px 0;border-color:rgba(255,255,255,0.06);'>", unsafe_allow_html=True)
+                st.markdown("**Mídias Digitais**")
+                vals_dig = {}
+                cols_dig = st.columns(2)
+                for i, ind in enumerate(_ind_digital):
+                    key = ind["indicador"]
+                    vals_dig[key] = cols_dig[i % 2].number_input(
+                        ind["indicador"],
+                        value=float(_vals_db.get(key, 0)),
+                        min_value=0.0, step=1.0,
+                        key=f"fd_{i}"
+                    )
 
-    section("Imprensa")
-    _render_ind(_ind_imprensa, "imp")
+                if st.form_submit_button("Salvar", type="primary", use_container_width=True):
+                    todos_vals = {**vals_imp, **vals_dig}
+                    for nome_ind, valor in todos_vals.items():
+                        run_exec("""
+                            INSERT INTO Indicadores_Comunicacao_2026 (indicador, valor_atual, atualizado_em)
+                            VALUES (%s, %s, NOW())
+                            ON CONFLICT (indicador) DO UPDATE
+                            SET valor_atual = EXCLUDED.valor_atual, atualizado_em = NOW()
+                        """, (nome_ind, valor))
+                    st.success("Valores salvos.")
+                    st.rerun()
 
-    section("Mídias Digitais")
-    _render_ind(_ind_digital, "dig")
+        # ── Barras de progresso ───────────────────────────────────────────────
+        section("Imprensa")
+        for ind in _ind_imprensa:
+            _barra_ind(ind, float(_vals_db.get(ind["indicador"], 0)))
 
-    st.caption("Valores atualizados manualmente — ficam salvos durante a sessão.")
+        section("Mídias Digitais")
+        for ind in _ind_digital:
+            _barra_ind(ind, float(_vals_db.get(ind["indicador"], 0)))
+
 
 elif menu == "Ações":
     user      = st.session_state.user_data
