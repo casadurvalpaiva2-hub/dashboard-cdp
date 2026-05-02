@@ -4390,6 +4390,69 @@ elif menu == "Relacionamento":
     # ABA 2 — LINHA DO TEMPO POR PARCEIRO
     # ══════════════════════════════════════════════════════════════════════════
     with tab_timeline:
+
+        # ── Parceiros sem toque ───────────────────────────────────────────────
+        section("Parceiros sem toque")
+
+        _st_col1, _st_col2 = st.columns([3, 1])
+        _limiar_dias = _st_col2.selectbox(
+            "Sem contato ha mais de:", [30, 60, 90, 180],
+            index=1, key="st_limiar", format_func=lambda x: f"{x} dias"
+        )
+
+        df_sem_toque = run_query_slow(
+            "SELECT p.id_parceiro, p.nome_instituicao, p.status, "
+            "MAX(r.data_interacao) AS ultimo_contato "
+            "FROM Parceiro p "
+            "LEFT JOIN Registro_Relacionamento r ON p.id_parceiro = r.id_parceiro "
+            "WHERE UPPER(TRIM(p.status)) IN ('ATIVO', 'PROSPECCAO', 'PROSPECÇÃO') "
+            "GROUP BY p.id_parceiro, p.nome_instituicao, p.status "
+            "ORDER BY ultimo_contato ASC NULLS FIRST"
+        )
+
+        if not df_sem_toque.empty:
+            df_sem_toque["_ultimo"] = pd.to_datetime(df_sem_toque["ultimo_contato"], errors="coerce").dt.date
+            df_sem_toque["_dias_sem"] = df_sem_toque["_ultimo"].apply(
+                lambda d: (hoje - d).days if pd.notna(d) else 9999
+            )
+            df_st_show = df_sem_toque[df_sem_toque["_dias_sem"] >= _limiar_dias].copy()
+
+            with _st_col1:
+                _st_busca = st.text_input("Filtrar por nome:", key="st_busca")
+            if _st_busca:
+                df_st_show = df_st_show[df_st_show["nome_instituicao"].str.contains(_st_busca, case=False, na=False)]
+
+            _total_st = len(df_st_show)
+            if _total_st == 0:
+                st.success(f"Todos os parceiros ativos foram contatados nos ultimos {_limiar_dias} dias.")
+            else:
+                st.markdown(
+                    f"<div style='font-size:0.85rem;color:#F59E0B;margin-bottom:12px;'>"
+                    f"<b>{_total_st}</b> parceiro(s) sem contato ha mais de <b>{_limiar_dias} dias</b>"
+                    f"</div>",
+                    unsafe_allow_html=True
+                )
+                for _, _sr in df_st_show.iterrows():
+                    _dias_label = "Nunca contatado" if _sr["_dias_sem"] >= 9999 else f"Ultimo contato ha {_sr['_dias_sem']}d"
+                    if _sr["_dias_sem"] >= 9999 or _sr["_dias_sem"] >= 180:
+                        _tom_st = "danger"
+                    else:
+                        _tom_st = "warning"
+                    _data_label = (
+                        f"Ultimo: {_sr['_ultimo'].strftime('%d/%m/%Y')}"
+                        if pd.notna(_sr["_ultimo"]) else "Sem historico"
+                    )
+                    action_card(
+                        titulo=str(_sr["nome_instituicao"]),
+                        meta_parts=[str(_sr.get("status", "")), _data_label, _dias_label],
+                        tom=_tom_st,
+                    )
+        else:
+            st.info("Nenhum parceiro ativo encontrado.")
+
+        st.divider()
+
+        # ── Historico por parceiro ────────────────────────────────────────────
         section("Historico por parceiro")
 
         _tl1, _tl2 = st.columns([2, 1])
@@ -4500,12 +4563,15 @@ elif menu == "Relacionamento":
         with _fu_sub1:
             section("Agenda de follow-ups")
             df_fu = run_query_cached(
-                "SELECT r.id_registro, r.proxima_acao_data, p.nome_instituicao, "
-                "r.id_parceiro, r.data_interacao, r.tipo_interacao "
-                "FROM Registro_Relacionamento r "
-                "JOIN Parceiro p ON r.id_parceiro = p.id_parceiro "
-                "WHERE r.proxima_acao_data IS NOT NULL "
-                "ORDER BY r.proxima_acao_data ASC"
+                "SELECT * FROM ("
+                "  SELECT DISTINCT ON (r.id_parceiro) "
+                "    r.id_registro, r.proxima_acao_data, p.nome_instituicao, "
+                "    r.id_parceiro, r.data_interacao, r.tipo_interacao "
+                "  FROM Registro_Relacionamento r "
+                "  JOIN Parceiro p ON r.id_parceiro = p.id_parceiro "
+                "  WHERE r.proxima_acao_data IS NOT NULL "
+                "  ORDER BY r.id_parceiro, r.proxima_acao_data DESC"
+                ") sub ORDER BY proxima_acao_data ASC"
             )
 
             if df_fu.empty:
@@ -4557,6 +4623,14 @@ elif menu == "Relacionamento":
                                         "(id_parceiro, data_interacao, descricao_do_que_foi_feito, tipo_interacao) "
                                         "VALUES (%s, %s, %s, %s)",
                                         (_id_p_fu, hoje, f"Follow-up concluido (prazo: {data_fmt})", "Follow-up")
+                                    )
+                                    run_exec(
+                                        "UPDATE Registro_Relacionamento "
+                                        "SET proxima_acao_data = NULL "
+                                        "WHERE id_parceiro = %s "
+                                        "AND proxima_acao_data IS NOT NULL "
+                                        "AND proxima_acao_data::date < CURRENT_DATE",
+                                        (_id_p_fu,)
                                     )
                                     st.success(f"Follow-up de {row['nome_instituicao']} concluido.")
                                     st.rerun()
