@@ -4276,8 +4276,8 @@ elif menu == "Relacionamento":
     ])
 
     # ── Abas ──────────────────────────────────────────────────────────────────
-    tab_reg, tab_timeline, tab_followup, tab_diretoria = st.tabs([
-        "Registrar interacao", "Linha do tempo", "Follow-ups e Regua", "Relatorio diretoria"
+    tab_reg, tab_parceiros, tab_followups, tab_regua, tab_relatorio = st.tabs([
+        "Registrar", "Parceiros", "Follow-ups", "Regua", "Relatorio"
     ])
 
     # ══════════════════════════════════════════════════════════════════════════
@@ -4468,9 +4468,9 @@ elif menu == "Relacionamento":
                 )
 
     # ══════════════════════════════════════════════════════════════════════════
-    # ABA 2 — LINHA DO TEMPO POR PARCEIRO
+    # ABA 2 — PARCEIROS
     # ══════════════════════════════════════════════════════════════════════════
-    with tab_timeline:
+    with tab_parceiros:
 
         # ── Parceiros sem toque ───────────────────────────────────────────────
         section("Parceiros sem toque")
@@ -4635,10 +4635,10 @@ elif menu == "Relacionamento":
                     )
 
     # ══════════════════════════════════════════════════════════════════════════
-    # ABA 3 — FOLLOW-UPS E RÉGUA
+    # ABA 3 — FOLLOW-UPS
     # ══════════════════════════════════════════════════════════════════════════
-    with tab_followup:
-        _fu_sub1, _fu_sub2, _fu_sub3 = st.tabs(["Follow-ups manuais", "Pendencias da regua", "Compliance da regua"])
+    with tab_followups:
+        _fu_sub1, _fu_sub2 = st.tabs(["Follow-ups manuais", "Pendencias da regua"])
 
         # ── Sub-aba: Follow-ups manuais ───────────────────────────────────────
         with _fu_sub1:
@@ -4766,192 +4766,290 @@ elif menu == "Relacionamento":
                                 st.success(f"{_rp['tipo_acao']} marcado como feito.")
                                 st.rerun()
 
-        # ── Sub-aba: Compliance da Régua ──────────────────────────────────────
-        with _fu_sub3:
-            section("Compliance da regua de relacionamento")
+    # ══════════════════════════════════════════════════════════════════════════
+    # ABA 4 — RÉGUA DE RELACIONAMENTO
+    # ══════════════════════════════════════════════════════════════════════════
+    with tab_regua:
+        section("Matriz da regua de relacionamento")
 
-            # ── Botão de sincronização em massa ──────────────────────────────
-            _sc1, _sc2 = st.columns([3, 1])
-            with _sc2:
-                if st.button("Sincronizar pendencias", use_container_width=True, type="primary"):
-                    _parceiros_para_sync = run_query(
-                        "SELECT id_parceiro, tipo_publico_regua FROM Parceiro "
-                        "WHERE tipo_publico_regua IS NOT NULL AND tipo_publico_regua != '' "
-                        "AND UPPER(TRIM(status)) IN ('ATIVO', 'PROSPECCAO', 'PROSPECÇÃO')"
+        # ── Matriz visual fiel à planilha ─────────────────────────────────────
+        _CORES_EQUIPE = {
+            "DI":           "#DC2626",
+            "Telemarketing":"#3B82F6",
+            "Eq. Tecnica":  "#EA580C",
+            "Plataforma":   "#16A34A",
+            "RH":           "#CA8A04",
+        }
+        _ACOES_HEADER = [
+            "Aniversario", "Boas-vindas", "Agradec. padrao", "Agradec. person.",
+            "Agradec. auto", "Destaque redes", "Msg. mensais", "Msg. esporadicas",
+            "Boletim", "Brindes", "Boas Festas", "Balanco Social",
+        ]
+        _ACOES_FULL = [
+            "Cartao de aniversario digital", "Boas-vindas", "Agradecimento padrao",
+            "Agradecimento personalizado", "Agradecimento automatico",
+            "Destaque de reconhecimento nas redes sociais",
+            "Mensagens mensais: Noticias, datas comemorativas",
+            "Mensagens esporadicas de campanhas via WhatsApp ou e-mail",
+            "Boletim Semanal via e-mail e WhatsApp",
+            "Brindes em datas comemorativas (Midia Kit)",
+            "Cartao de Boas Festas Digital", "Balanco Social fisico ou digital",
+        ]
+        _MATRIZ_DADOS = [
+            ("Acolhidos",                    ["RH","RH",None,None,None,None,None,"RH",None,None,"RH",None]),
+            ("Doador via site",              [None,None,None,None,"Plataforma",None,None,None,"DI",None,"DI",None]),
+            ("Doador pontual",               [None,"Telemarketing",None,"Telemarketing",None,None,None,None,"DI",None,"Telemarketing",None]),
+            ("Doadores em geral",            [None,"Telemarketing","Telemarketing",None,None,None,"DI","Telemarketing","DI",None,"Telemarketing",None]),
+            ("Doadores especiais: nao mon.", [None,"Eq. Tecnica",None,"Eq. Tecnica",None,None,"DI","Eq. Tecnica","DI",None,"Eq. Tecnica",None]),
+            ("Parceiros importantes",        [None,"DI",None,"DI",None,"DI","DI","DI","DI","DI","DI","DI"]),
+            ("Financiador",                  [None,"DI",None,"DI",None,"DI","DI","DI","DI","DI","DI","DI"]),
+            ("Imprensa",                     [None,"DI",None,"DI",None,"DI","DI","DI","DI","DI","DI",None]),
+            ("Voluntario",                   ["RH","RH",None,None,None,None,"DI","DI","DI",None,"RH",None]),
+            ("Visitantes",                   [None,None,"Telemarketing",None,None,None,None,None,"DI",None,"Telemarketing",None]),
+            ("Apoiadores de eventos",        [None,"Eq. Tecnica",None,"Eq. Tecnica",None,"DI","DI",None,"DI",None,"DI",None]),
+            ("Conselho e diretoria",         ["DI",None,None,None,None,None,"DI","DI","DI",None,"DI","DI"]),
+            ("Funcionario",                  ["RH","RH",None,None,None,None,"RH",None,"DI",None,"RH",None]),
+            ("Fornecedores",                 [None,None,"RH",None,None,None,None,None,"DI",None,"RH",None]),
+        ]
+
+        _th_style = "background:#1e293b;color:#94a3b8;font-size:10px;font-weight:700;text-align:center;padding:6px 4px;border:1px solid #334155;white-space:nowrap;"
+        _td_pub_style = "background:#1e293b;color:#e2e8f0;font-size:11px;font-weight:600;padding:6px 10px;border:1px solid #334155;white-space:nowrap;"
+
+        _html_rows = ""
+        for pub, acoes in _MATRIZ_DADOS:
+            _cells = f"<td style='{_td_pub_style}'>{pub}</td>"
+            for equipe in acoes:
+                if equipe:
+                    _cor = _CORES_EQUIPE.get(equipe, "#64748b")
+                    _abrev = equipe[:2].upper()
+                    _cells += (
+                        f"<td style='background:{_cor}22;border:1px solid #334155;"
+                        f"text-align:center;padding:4px 2px;' title='{equipe}'>"
+                        f"<span style='display:inline-block;width:22px;height:22px;border-radius:50%;"
+                        f"background:{_cor};color:#fff;font-size:9px;font-weight:700;"
+                        f"line-height:22px;text-align:center;'>{_abrev}</span></td>"
                     )
-                    _gerados = 0
-                    for _, _pr in _parceiros_para_sync.iterrows():
-                        before = run_query(
-                            "SELECT COUNT(*) AS n FROM Regua_Pendencias WHERE id_parceiro=%s AND status='PENDENTE'",
-                            (int(_pr["id_parceiro"]),)
-                        )["n"].values[0]
-                        _gerar_regua_pendencias(int(_pr["id_parceiro"]), _pr["tipo_publico_regua"])
-                        after = run_query(
-                            "SELECT COUNT(*) AS n FROM Regua_Pendencias WHERE id_parceiro=%s AND status='PENDENTE'",
-                            (int(_pr["id_parceiro"]),)
-                        )["n"].values[0]
-                        _gerados += max(0, int(after) - int(before))
-                    st.success(f"{_gerados} nova(s) pendencia(s) gerada(s) para {len(_parceiros_para_sync)} parceiro(s).")
-                    st.rerun()
+                else:
+                    _cells += "<td style='background:#0f172a;border:1px solid #1e293b;'></td>"
+            _html_rows += f"<tr>{_cells}</tr>"
 
-            with _sc1:
+        _header_cells = f"<th style='{_th_style}'>Publico</th>"
+        for h in _ACOES_HEADER:
+            _header_cells += f"<th style='{_th_style}' title='{_ACOES_FULL[_ACOES_HEADER.index(h)]}'>{h}</th>"
+
+        _legend_html = "".join([
+            f"<span style='display:inline-flex;align-items:center;gap:5px;margin-right:14px;font-size:11px;color:#94a3b8;'>"
+            f"<span style='width:14px;height:14px;border-radius:50%;background:{cor};display:inline-block;'></span>{eq}</span>"
+            for eq, cor in _CORES_EQUIPE.items()
+        ])
+
+        st.markdown(
+            f"<div style='overflow-x:auto;'>"
+            f"<table style='border-collapse:collapse;width:100%;'>"
+            f"<thead><tr>{_header_cells}</tr></thead>"
+            f"<tbody>{_html_rows}</tbody>"
+            f"</table></div>"
+            f"<div style='margin-top:10px;display:flex;flex-wrap:wrap;'>{_legend_html}</div>",
+            unsafe_allow_html=True
+        )
+
+        st.divider()
+
+        section("Compliance da regua de relacionamento")
+
+        # ── Botão de sincronização em massa ──────────────────────────────
+        _sc1, _sc2 = st.columns([3, 1])
+        with _sc2:
+            if st.button("Sincronizar pendencias", use_container_width=True, type="primary"):
+                _parceiros_para_sync = run_query(
+                    "SELECT id_parceiro, tipo_publico_regua FROM Parceiro "
+                    "WHERE tipo_publico_regua IS NOT NULL AND tipo_publico_regua != '' "
+                    "AND UPPER(TRIM(status)) IN ('ATIVO', 'PROSPECCAO', 'PROSPECÇÃO')"
+                )
+                _gerados = 0
+                for _, _pr in _parceiros_para_sync.iterrows():
+                    before = run_query(
+                        "SELECT COUNT(*) AS n FROM Regua_Pendencias WHERE id_parceiro=%s AND status='PENDENTE'",
+                        (int(_pr["id_parceiro"]),)
+                    )["n"].values[0]
+                    _gerar_regua_pendencias(int(_pr["id_parceiro"]), _pr["tipo_publico_regua"])
+                    after = run_query(
+                        "SELECT COUNT(*) AS n FROM Regua_Pendencias WHERE id_parceiro=%s AND status='PENDENTE'",
+                        (int(_pr["id_parceiro"]),)
+                    )["n"].values[0]
+                    _gerados += max(0, int(after) - int(before))
+                st.success(f"{_gerados} nova(s) pendencia(s) gerada(s) para {len(_parceiros_para_sync)} parceiro(s).")
+                st.rerun()
+    
+        with _sc1:
+            st.markdown(
+                "<div style='font-size:0.82rem;color:#94A3B8;padding-top:10px;'>"
+                "Gera automaticamente as pendencias previstas pela regua para todos os parceiros ativos "
+                "que ainda nao as possuem, respeitando a periodicidade de cada acao."
+                "</div>",
+                unsafe_allow_html=True
+            )
+    
+        st.divider()
+    
+        # ── Painel de cobertura por tipo de público ───────────────────────
+        df_compliance = run_query_slow(
+            "SELECT p.tipo_publico_regua, "
+            "COUNT(DISTINCT p.id_parceiro) AS total_parceiros, "
+            "COUNT(DISTINCT CASE WHEN rp.status IS NOT NULL THEN p.id_parceiro END) AS com_pendencias, "
+            "COUNT(DISTINCT CASE WHEN rp.status='PENDENTE' THEN rp.id END) AS pendentes, "
+            "COUNT(DISTINCT CASE WHEN rp.status='FEITO' THEN rp.id END) AS concluidas "
+            "FROM Parceiro p "
+            "LEFT JOIN Regua_Pendencias rp ON p.id_parceiro = rp.id_parceiro "
+            "WHERE p.tipo_publico_regua IS NOT NULL AND p.tipo_publico_regua != '' "
+            "GROUP BY p.tipo_publico_regua "
+            "ORDER BY total_parceiros DESC"
+        )
+    
+        if df_compliance.empty:
+            st.info("Nenhum parceiro com tipo de publico da regua cadastrado.")
+        else:
+            # KPIs gerais
+            _ck1, _ck2, _ck3 = st.columns(3)
+            _total_parc_regua = int(df_compliance["total_parceiros"].sum())
+            _total_com_pend   = int(df_compliance["com_pendencias"].sum())
+            _total_pendentes  = int(df_compliance["pendentes"].sum())
+            _total_concluidas = int(df_compliance["concluidas"].sum())
+            _cobertura_pct    = round(_total_com_pend / _total_parc_regua * 100) if _total_parc_regua else 0
+    
+            _ck1.metric("Parceiros na regua", _total_parc_regua)
+            _ck2.metric("Com pendencias ativas", f"{_total_com_pend} ({_cobertura_pct}%)")
+            _ck3.metric("Acoes concluidas (total)", _total_concluidas)
+    
+            st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
+    
+            # Detalhe por tipo de público
+            for _, _cr in df_compliance.iterrows():
+                _tipo     = _cr["tipo_publico_regua"]
+                _total    = int(_cr["total_parceiros"])
+                _com_p    = int(_cr["com_pendencias"])
+                _pend     = int(_cr["pendentes"])
+                _conc     = int(_cr["concluidas"])
+                _acoes_previstas = len(_get_regua_config_db().get(_tipo, []))
+                _cobert   = round(_com_p / _total * 100) if _total else 0
+    
+                if _cobert >= 80:   _cor_cob = "#34d399"
+                elif _cobert >= 50: _cor_cob = "#fbbf24"
+                else:               _cor_cob = "#f87171"
+    
                 st.markdown(
-                    "<div style='font-size:0.82rem;color:#94A3B8;padding-top:10px;'>"
-                    "Gera automaticamente as pendencias previstas pela regua para todos os parceiros ativos "
-                    "que ainda nao as possuem, respeitando a periodicidade de cada acao."
-                    "</div>",
+                    f"<div style='background:#1e293b;border:1px solid #334155;border-radius:8px;"
+                    f"padding:12px 16px;margin-bottom:8px;'>"
+                    f"<div style='display:flex;justify-content:space-between;align-items:center;'>"
+                    f"<div>"
+                    f"<span style='font-size:0.9rem;font-weight:700;color:#e2e8f0;'>{_tipo}</span>"
+                    f"<span style='font-size:0.78rem;color:#94a3b8;margin-left:10px;'>"
+                    f"{_total} parceiro(s) · {_acoes_previstas} acao(oes) prevista(s) na regua</span>"
+                    f"</div>"
+                    f"<div style='text-align:right;'>"
+                    f"<span style='font-size:0.85rem;color:{_cor_cob};font-weight:700;'>{_cobert}% cobertura</span>"
+                    f"<span style='font-size:0.75rem;color:#64748b;margin-left:12px;'>"
+                    f"{_pend} pendentes · {_conc} concluidas</span>"
+                    f"</div>"
+                    f"</div>"
+                    f"<div style='margin-top:8px;height:4px;background:#0f172a;border-radius:2px;'>"
+                    f"<div style='height:4px;width:{_cobert}%;background:{_cor_cob};border-radius:2px;'></div>"
+                    f"</div>"
+                    f"</div>",
                     unsafe_allow_html=True
                 )
-
-            st.divider()
-
-            # ── Painel de cobertura por tipo de público ───────────────────────
-            df_compliance = run_query_slow(
-                "SELECT p.tipo_publico_regua, "
-                "COUNT(DISTINCT p.id_parceiro) AS total_parceiros, "
-                "COUNT(DISTINCT CASE WHEN rp.status IS NOT NULL THEN p.id_parceiro END) AS com_pendencias, "
-                "COUNT(DISTINCT CASE WHEN rp.status='PENDENTE' THEN rp.id END) AS pendentes, "
-                "COUNT(DISTINCT CASE WHEN rp.status='FEITO' THEN rp.id END) AS concluidas "
-                "FROM Parceiro p "
-                "LEFT JOIN Regua_Pendencias rp ON p.id_parceiro = rp.id_parceiro "
-                "WHERE p.tipo_publico_regua IS NOT NULL AND p.tipo_publico_regua != '' "
-                "GROUP BY p.tipo_publico_regua "
-                "ORDER BY total_parceiros DESC"
+    
+        st.divider()
+    
+        # ── Editor da Régua Matriz ────────────────────────────────────────
+        with st.expander("Editar regua de relacionamento", expanded=False):
+            df_matriz = run_query(
+                "SELECT id, tipo_publico, acao, periodo_dias, canal, responsavel, ativo "
+                "FROM Regua_Matriz ORDER BY tipo_publico, id"
             )
-
-            if df_compliance.empty:
-                st.info("Nenhum parceiro com tipo de publico da regua cadastrado.")
-            else:
-                # KPIs gerais
-                _ck1, _ck2, _ck3 = st.columns(3)
-                _total_parc_regua = int(df_compliance["total_parceiros"].sum())
-                _total_com_pend   = int(df_compliance["com_pendencias"].sum())
-                _total_pendentes  = int(df_compliance["pendentes"].sum())
-                _total_concluidas = int(df_compliance["concluidas"].sum())
-                _cobertura_pct    = round(_total_com_pend / _total_parc_regua * 100) if _total_parc_regua else 0
-
-                _ck1.metric("Parceiros na regua", _total_parc_regua)
-                _ck2.metric("Com pendencias ativas", f"{_total_com_pend} ({_cobertura_pct}%)")
-                _ck3.metric("Acoes concluidas (total)", _total_concluidas)
-
-                st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
-
-                # Detalhe por tipo de público
-                for _, _cr in df_compliance.iterrows():
-                    _tipo     = _cr["tipo_publico_regua"]
-                    _total    = int(_cr["total_parceiros"])
-                    _com_p    = int(_cr["com_pendencias"])
-                    _pend     = int(_cr["pendentes"])
-                    _conc     = int(_cr["concluidas"])
-                    _acoes_previstas = len(_get_regua_config_db().get(_tipo, []))
-                    _cobert   = round(_com_p / _total * 100) if _total else 0
-
-                    if _cobert >= 80:   _cor_cob = "#34d399"
-                    elif _cobert >= 50: _cor_cob = "#fbbf24"
-                    else:               _cor_cob = "#f87171"
-
-                    st.markdown(
-                        f"<div style='background:#1e293b;border:1px solid #334155;border-radius:8px;"
-                        f"padding:12px 16px;margin-bottom:8px;'>"
-                        f"<div style='display:flex;justify-content:space-between;align-items:center;'>"
-                        f"<div>"
-                        f"<span style='font-size:0.9rem;font-weight:700;color:#e2e8f0;'>{_tipo}</span>"
-                        f"<span style='font-size:0.78rem;color:#94a3b8;margin-left:10px;'>"
-                        f"{_total} parceiro(s) · {_acoes_previstas} acao(oes) prevista(s) na regua</span>"
-                        f"</div>"
-                        f"<div style='text-align:right;'>"
-                        f"<span style='font-size:0.85rem;color:{_cor_cob};font-weight:700;'>{_cobert}% cobertura</span>"
-                        f"<span style='font-size:0.75rem;color:#64748b;margin-left:12px;'>"
-                        f"{_pend} pendentes · {_conc} concluidas</span>"
-                        f"</div>"
-                        f"</div>"
-                        f"<div style='margin-top:8px;height:4px;background:#0f172a;border-radius:2px;'>"
-                        f"<div style='height:4px;width:{_cobert}%;background:{_cor_cob};border-radius:2px;'></div>"
-                        f"</div>"
+    
+            if not df_matriz.empty:
+                _tipos_disponiveis = sorted(df_matriz["tipo_publico"].unique().tolist())
+                _ed_tipo = st.selectbox(
+                    "Tipo de publico:", _tipos_disponiveis, key="rm_tipo_sel"
+                )
+                df_ed = df_matriz[df_matriz["tipo_publico"] == _ed_tipo].copy()
+    
+                st.markdown(
+                    f"<div style='font-size:0.82rem;color:#94a3b8;margin-bottom:8px;'>"
+                    f"{len(df_ed)} acao(oes) configurada(s) para <b>{_ed_tipo}</b></div>",
+                    unsafe_allow_html=True
+                )
+    
+                for _, _rm in df_ed.iterrows():
+                    _rm_c1, _rm_c2, _rm_c3, _rm_c4, _rm_c5 = st.columns([3, 1, 2, 1, 1])
+                    _rm_c1.markdown(
+                        f"<div style='font-size:0.85rem;color:#e2e8f0;padding-top:8px;'>{_rm['acao']}</div>",
+                        unsafe_allow_html=True
+                    )
+                    _rm_c2.markdown(
+                        f"<div style='font-size:0.8rem;color:#94a3b8;padding-top:8px;'>"
+                        f"{'A cada ' + str(int(_rm['periodo_dias'])) + 'd' if pd.notna(_rm['periodo_dias']) else 'Unica'}"
                         f"</div>",
                         unsafe_allow_html=True
                     )
+                    _rm_c3.markdown(
+                        f"<div style='font-size:0.8rem;color:#94a3b8;padding-top:8px;'>{_rm['canal'] or '—'}</div>",
+                        unsafe_allow_html=True
+                    )
+                    _new_ativo = _rm_c4.toggle(
+                        "Ativo", value=bool(_rm["ativo"]), key=f"rm_ativo_{_rm['id']}"
+                    )
+                    if bool(_new_ativo) != bool(_rm["ativo"]):
+                        run_exec(
+                            "UPDATE Regua_Matriz SET ativo = %s WHERE id = %s",
+                            (bool(_new_ativo), int(_rm["id"]))
+                        )
+                        st.rerun()
+                    if _rm_c5.button("Remover", key=f"rm_del_{_rm['id']}", type="secondary"):
+                        run_exec(
+                            "DELETE FROM Regua_Matriz WHERE id = %s",
+                            (int(_rm["id"]),)
+                        )
+                        st.rerun()
 
-            st.divider()
-
-            # ── Editor da Régua Matriz ────────────────────────────────────────
-            with st.expander("Editar regua de relacionamento", expanded=False):
-                df_matriz = run_query(
-                    "SELECT id, tipo_publico, acao, periodo_dias, canal, responsavel, ativo "
-                    "FROM Regua_Matriz ORDER BY tipo_publico, id"
+                st.divider()
+                st.markdown(
+                    "<div style='font-size:0.82rem;color:#94a3b8;margin-bottom:8px;"
+                    "font-weight:600;'>Adicionar nova acao:</div>",
+                    unsafe_allow_html=True
                 )
-
-                if not df_matriz.empty:
-                    _tipos_disponiveis = sorted(df_matriz["tipo_publico"].unique().tolist())
-                    _ed_tipo = st.selectbox(
-                        "Tipo de publico:", _tipos_disponiveis, key="rm_tipo_sel"
-                    )
-                    df_ed = df_matriz[df_matriz["tipo_publico"] == _ed_tipo].copy()
-
-                    st.markdown(
-                        f"<div style='font-size:0.82rem;color:#94a3b8;margin-bottom:8px;'>"
-                        f"{len(df_ed)} acao(oes) configurada(s) para <b>{_ed_tipo}</b></div>",
-                        unsafe_allow_html=True
-                    )
-
-                    for _, _rm in df_ed.iterrows():
-                        _rm_c1, _rm_c2, _rm_c3, _rm_c4, _rm_c5 = st.columns([3, 1, 2, 1, 1])
-                        _rm_c1.markdown(
-                            f"<div style='font-size:0.85rem;color:#e2e8f0;padding-top:8px;'>{_rm['acao']}</div>",
-                            unsafe_allow_html=True
-                        )
-                        _rm_c2.markdown(
-                            f"<div style='font-size:0.8rem;color:#94a3b8;padding-top:8px;'>"
-                            f"{'A cada ' + str(int(_rm['periodo_dias'])) + 'd' if pd.notna(_rm['periodo_dias']) else 'Unica'}"
-                            f"</div>",
-                            unsafe_allow_html=True
-                        )
-                        _rm_c3.markdown(
-                            f"<div style='font-size:0.8rem;color:#94a3b8;padding-top:8px;'>{_rm['canal'] or '—'}</div>",
-                            unsafe_allow_html=True
-                        )
-                        _rm_ativo = bool(_rm["ativo"])
-                        _rm_key   = f"rm_tog_{_rm['id']}"
-                        _novo_ativo = _rm_c4.toggle("Ativo", value=_rm_ativo, key=_rm_key)
-                        if _novo_ativo != _rm_ativo:
-                            run_exec(
-                                "UPDATE Regua_Matriz SET ativo=%s WHERE id=%s",
-                                (_novo_ativo, int(_rm["id"]))
+                _add_c1, _add_c2, _add_c3, _add_c4 = st.columns([3, 2, 2, 1])
+                _add_tipo    = _add_c1.selectbox(
+                    "Tipo de publico", _tipos_disponiveis, key="rm_add_tipo"
+                )
+                _add_acao    = _add_c2.text_input("Nome da acao", key="rm_add_acao")
+                _add_canal   = _add_c3.text_input("Canal sugerido", key="rm_add_canal")
+                _add_periodo = _add_c4.number_input(
+                    "Periodo (dias, 0=unico)", min_value=0, step=1, key="rm_add_periodo"
+                )
+                if st.button("Adicionar acao", key="rm_add_btn", use_container_width=True):
+                    if _add_acao.strip():
+                        run_exec(
+                            "INSERT INTO Regua_Matriz "
+                            "(tipo_publico, acao, canal, periodo_dias, ativo) "
+                            "VALUES (%s, %s, %s, %s, TRUE) "
+                            "ON CONFLICT (tipo_publico, acao) DO NOTHING",
+                            (
+                                _add_tipo,
+                                _add_acao.strip(),
+                                _add_canal.strip() or None,
+                                int(_add_periodo) if _add_periodo else None,
                             )
-                            st.rerun()
-                        if _rm_c5.button("Remover", key=f"rm_del_{_rm['id']}"):
-                            run_exec("DELETE FROM Regua_Matriz WHERE id=%s", (int(_rm["id"]),))
-                            st.rerun()
+                        )
+                        st.success("Acao adicionada.")
+                        st.rerun()
+                    else:
+                        st.warning("Informe o nome da acao.")
 
-                    st.markdown("---")
-                    st.markdown(
-                        "<div style='font-size:0.82rem;color:#94a3b8;margin-bottom:6px;'>Adicionar nova acao:</div>",
-                        unsafe_allow_html=True
-                    )
-                    _na1, _na2, _na3, _na4 = st.columns([3, 1, 2, 1])
-                    _nova_acao   = _na1.text_input("Acao", key="rm_nova_acao", placeholder="Ex: Visita presencial")
-                    _novo_per    = _na2.number_input("Periodo (dias)", min_value=0, value=30, step=1, key="rm_novo_per",
-                                                     help="0 = acao unica, sem recorrencia")
-                    _novo_canal  = _na3.text_input("Canal", key="rm_novo_canal", placeholder="Ex: WhatsApp/E-mail")
-                    _novo_resp   = _na4.text_input("Responsavel", key="rm_novo_resp", value="DI")
-                    if st.button("Adicionar acao", key="rm_add_btn"):
-                        if _nova_acao.strip():
-                            run_exec(
-                                "INSERT INTO Regua_Matriz (tipo_publico, acao, periodo_dias, canal, responsavel) "
-                                "VALUES (%s, %s, %s, %s, %s) ON CONFLICT (tipo_publico, acao) DO NOTHING",
-                                (_ed_tipo, _nova_acao.strip(),
-                                 int(_novo_per) if _novo_per > 0 else None,
-                                 _novo_canal.strip() or None, _novo_resp.strip() or "DI")
-                            )
-                            st.success(f"Acao '{_nova_acao}' adicionada para {_ed_tipo}.")
-                            st.rerun()
-                        else:
-                            st.warning("Preencha o nome da acao.")
-
+    # ABA 5 — RELATÓRIO PARA A DIRETORIA
     # ══════════════════════════════════════════════════════════════════════════
-    # ABA 4 — RELATÓRIO PARA A DIRETORIA
-    # ══════════════════════════════════════════════════════════════════════════
-    with tab_diretoria:
+    with tab_relatorio:
         st.markdown("### Extrair atualizações de parcerias")
         st.write("Gerar um resumo estratégico (ações manuais e doações recebidas) para reportar à direção.")
 
@@ -5018,10 +5116,10 @@ elif menu == "Relacionamento":
                         texto_extra = ""
                         html_extra  = ""
 
-                    texto_diretoria += f"- *{nome_parceiro}* ({data_reg_fmt})\n{tipo}{texto_extra}\nDetalhe: {descricao}\n\n"
+                    texto_diretoria += f"🔹 *{nome_parceiro}* ({data_reg_fmt})\n{tipo}{texto_extra}\nDetalhe: {descricao}\n\n"
                     html_relatorio  += (
                         f"<li style='margin-bottom:18px;'>"
-                        f"<b style='font-size:1.05em;'>{nome_parceiro}</b>"
+                        f"🏢 <b style='font-size:1.05em;'>{nome_parceiro}</b>"
                         f" <span class='date-badge' style='margin-left:10px;'>{data_reg_fmt}</span><br>"
                         f"<span style='font-size:0.85em;color:#FFB74D;font-weight:600;margin-left:25px;'>{tipo}{html_extra}</span><br>"
                         f"<span style='opacity:0.85;font-size:0.95em;margin-left:25px;'>↳ {descricao}</span></li>"
@@ -5035,208 +5133,79 @@ elif menu == "Relacionamento":
 
                 # ── PDF ─────────────────────────────────────────────────────
                 def _gerar_pdf_diretoria(df_rel, d_ini_fmt, d_fim_fmt):
-                    import os as _os
                     from io import BytesIO
                     from reportlab.lib.pagesizes import A4
-                    from reportlab.lib import colors as _rl_colors
-                    from reportlab.lib.units import cm as _rl_cm
-                    from reportlab.lib.styles import ParagraphStyle as _RLParStyle
-                    from reportlab.lib.enums import TA_LEFT as _TA_LEFT, TA_CENTER as _TA_CENTER, TA_RIGHT as _TA_RIGHT
-                    from reportlab.platypus import (BaseDocTemplate as _RLBase, Frame as _RLFrame,
-                                                    PageTemplate as _RLPageTpl, Paragraph, Spacer,
-                                                    Table, TableStyle, HRFlowable)
-                    _buf = BytesIO()
-                    _PW, _PH = A4
-
-                    _assets      = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "assets")
-                    _img_lateral = _os.path.join(_assets, "timbrado_lateral.jpeg")
-                    _img_logo    = _os.path.join(_assets, "timbrado_logo.png")
-                    _img_rodape  = _os.path.join(_assets, "timbrado_rodape.png")
-
-                    _LM = 2.9 * _rl_cm
-                    _RM = 1.6 * _rl_cm
-                    _TM = 4.0 * _rl_cm
-                    _BM = 3.4 * _rl_cm
-                    _CW = _PW - _LM - _RM
-
-                    def _draw_timbrado(canvas, doc):
-                        canvas.saveState()
-                        if _os.path.exists(_img_lateral):
-                            canvas.drawImage(_img_lateral, 0, 0,
-                                             width=1.6*_rl_cm, height=_PH,
-                                             preserveAspectRatio=False)
-                        if _os.path.exists(_img_logo):
-                            _lh = 2.8 * _rl_cm
-                            _lw = _lh * (645 / 595)
-                            canvas.drawImage(_img_logo,
-                                             1.8*_rl_cm, _PH - _lh - 0.55*_rl_cm,
-                                             width=_lw, height=_lh, mask="auto")
-                        if _os.path.exists(_img_rodape):
-                            _fh = 2.8 * _rl_cm
-                            _fw = _PW - 1.7*_rl_cm
-                            canvas.drawImage(_img_rodape,
-                                             1.7*_rl_cm, 0.2*_rl_cm,
-                                             width=_fw, height=_fh,
-                                             preserveAspectRatio=True, anchor="sw", mask="auto")
-                        from reportlab.lib import colors as _c
-                        canvas.setStrokeColor(_c.HexColor("#C0392B"))
-                        canvas.setLineWidth(1.2)
-                        canvas.line(_LM, _PH - _TM + 0.3*_rl_cm,
-                                    _PW - _RM, _PH - _TM + 0.3*_rl_cm)
-                        canvas.line(_LM, _BM - 0.3*_rl_cm,
-                                    _PW - _RM, _BM - 0.3*_rl_cm)
-                        canvas.restoreState()
-
-                    _frame = _RLFrame(_LM, _BM, _CW, _PH - _TM - _BM,
-                                      leftPadding=0, rightPadding=0,
-                                      topPadding=0, bottomPadding=0)
-                    _tpl  = _RLPageTpl(id="timbrado", frames=[_frame], onPage=_draw_timbrado)
-                    _doc  = _RLBase(_buf, pagesize=A4, pageTemplates=[_tpl])
-
-                    # ── Paleta ────────────────────────────────────────────────
-                    _RED      = _rl_colors.HexColor("#C0392B")
-                    _CINZA    = _rl_colors.HexColor("#555555")
-                    _CINZA_LT = _rl_colors.HexColor("#F7F7F7")
-                    _AZUL     = _rl_colors.HexColor("#1A5FA8")
-                    _AZUL_LT  = _rl_colors.HexColor("#EBF3FC")
-                    _VERDE    = _rl_colors.HexColor("#1B7A4A")
-                    _VERDE_LT = _rl_colors.HexColor("#EAF5EE")
-                    _PRETO    = _rl_colors.HexColor("#1A1A1A")
-                    _BORDA    = _rl_colors.HexColor("#DDDDDD")
-
-                    # ── Estilos ───────────────────────────────────────────────
-                    st_subtitulo = _RLParStyle("sub",    fontSize=11, textColor=_CINZA,
-                                               spaceAfter=10, alignment=_TA_LEFT,
-                                               fontName="Helvetica")
-                    st_secao     = _RLParStyle("secao",  fontSize=12, textColor=_RED,
-                                               spaceBefore=14, spaceAfter=6,
-                                               fontName="Helvetica-Bold")
-                    st_secao_fin = _RLParStyle("s_fin",  fontSize=12, textColor=_AZUL,
-                                               spaceBefore=14, spaceAfter=6,
-                                               fontName="Helvetica-Bold")
-                    st_secao_est = _RLParStyle("s_est",  fontSize=12, textColor=_VERDE,
-                                               spaceBefore=14, spaceAfter=6,
-                                               fontName="Helvetica-Bold")
-                    st_item      = _RLParStyle("item",   fontSize=10, textColor=_PRETO,
-                                               spaceAfter=2, leading=14,
-                                               fontName="Helvetica-Bold")
-                    st_detalhe   = _RLParStyle("det",    fontSize=9,  textColor=_CINZA,
-                                               leftIndent=12, spaceAfter=8, leading=13,
-                                               fontName="Helvetica")
-                    st_nota      = _RLParStyle("nota",   fontSize=8,  textColor=_CINZA,
-                                               spaceAfter=4, leading=12, alignment=_TA_RIGHT,
-                                               fontName="Helvetica-Oblique")
-
-                    # ── Separar doações ───────────────────────────────────────
-                    _TIPOS_FIN = ('Financeira', 'Projetos')
-                    doacoes_all  = df_rel[df_rel['tipo'].str.contains("DOA", na=False, case=False)].copy()
-                    relac_period = df_rel[~df_rel['tipo'].str.contains("DOA", na=False, case=False)].copy()
-
-                    def _eh_financeira(tipo_str):
-                        return any(t in str(tipo_str) for t in _TIPOS_FIN)
-
-                    doacoes_fin  = doacoes_all[doacoes_all['tipo'].apply(_eh_financeira)]
-                    doacoes_est  = doacoes_all[~doacoes_all['tipo'].apply(_eh_financeira)]
-
-                    total_fin   = doacoes_fin['valor_estimado'].sum() if not doacoes_fin.empty else 0
-                    total_est   = doacoes_est['valor_estimado'].sum() if not doacoes_est.empty else 0
-                    n_parcerias = df_rel['nome_instituicao'].nunique()
-                    n_interacoes= len(relac_period)
-
-                    def _fmt_brl(v):
-                        return f"R$ {v:,.2f}".replace(',','X').replace('.',',').replace('X','.')
-
-                    # ── Story ─────────────────────────────────────────────────
+                    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+                    from reportlab.lib import colors
+                    from reportlab.lib.units import cm
+                    from reportlab.platypus import (
+                        SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable
+                    )
+                    buf = BytesIO()
+                    doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=2*cm, rightMargin=2*cm, topMargin=2*cm, bottomMargin=2*cm)
+                    estilos        = getSampleStyleSheet()
+                    cor_principal  = colors.HexColor("#C0392B")
+                    cor_cinza      = colors.HexColor("#555555")
+                    cor_fundo      = colors.HexColor("#F7F7F7")
+                    st_titulo      = ParagraphStyle("titulo",    parent=estilos["Title"],   fontSize=20, textColor=cor_principal, spaceAfter=4)
+                    st_subtitulo   = ParagraphStyle("sub",       parent=estilos["Normal"],  fontSize=11, textColor=cor_cinza, spaceAfter=12)
+                    st_secao       = ParagraphStyle("secao",     parent=estilos["Heading2"],fontSize=13, textColor=cor_principal, spaceBefore=14, spaceAfter=6)
+                    st_item        = ParagraphStyle("item",      parent=estilos["Normal"],  fontSize=10, textColor=colors.HexColor("#222222"), spaceAfter=2, leading=14)
+                    st_detalhe     = ParagraphStyle("detalhe",   parent=estilos["Normal"],  fontSize=9,  textColor=cor_cinza, leftIndent=12, spaceAfter=8, leading=13)
                     story = []
-                    story.append(Paragraph(
-                        f"Relat&oacute;rio Estrat&eacute;gico de Parcerias  &mdash;  {d_ini_fmt} a {d_fim_fmt}",
-                        st_subtitulo))
-                    story.append(HRFlowable(width="100%", thickness=1, color=_BORDA, spaceAfter=10))
+                    story.append(Paragraph("Casa Durval Paiva", st_titulo))
+                    story.append(Paragraph(f"Relatório Estratégico de Parcerias — {d_ini_fmt} a {d_fim_fmt}", st_subtitulo))
+                    story.append(HRFlowable(width="100%", thickness=1.5, color=cor_principal, spaceAfter=10))
 
-                    # ── KPIs ──────────────────────────────────────────────────
-                    _cw4 = _CW / 4
+                    doacoes_period = df_rel[df_rel['tipo'].str.contains("DOA", na=False, case=False)]
+                    relac_period   = df_rel[df_rel['tipo'] == 'RELACIONAMENTO']
+                    total_fin      = doacoes_period['valor_estimado'].sum()
+                    n_parcerias    = df_rel['nome_instituicao'].nunique()
+
                     dados_kpi = [
-                        ["Parceiros movimentados", "Intera\u00e7\u00f5es", "Doa\u00e7\u00f5es financeiras", "Doa\u00e7\u00f5es em bens"],
-                        [str(n_parcerias), str(n_interacoes), _fmt_brl(total_fin), _fmt_brl(total_est)],
+                        ["Parceiros movimentados", "Interações registradas", "Doações no período"],
+                        [str(n_parcerias), str(len(relac_period)), f"R$ {total_fin:,.2f}".replace(',','X').replace('.',',').replace('X','.')]
                     ]
-                    t_kpi = Table(dados_kpi, colWidths=[_cw4]*4)
+                    t_kpi = Table(dados_kpi, colWidths=[5.5*cm, 5.5*cm, 5.5*cm])
                     t_kpi.setStyle(TableStyle([
-                        ("BACKGROUND",    (0,0),(-1,0), _CINZA_LT),
-                        ("TEXTCOLOR",     (0,0),(-1,0), _CINZA),
-                        ("FONTNAME",      (0,0),(-1,0), "Helvetica"),
-                        ("FONTSIZE",      (0,0),(-1,0), 8),
-                        ("FONTSIZE",      (0,1),(-1,1), 13),
-                        ("FONTNAME",      (0,1),(1,1), "Helvetica-Bold"),
-                        ("FONTNAME",      (2,1),(2,1), "Helvetica-Bold"),
-                        ("FONTNAME",      (3,1),(3,1), "Helvetica-Bold"),
-                        ("TEXTCOLOR",     (0,1),(1,1), _RED),
-                        ("TEXTCOLOR",     (2,1),(2,1), _AZUL),
-                        ("TEXTCOLOR",     (3,1),(3,1), _VERDE),
+                        ("BACKGROUND",    (0,0),(-1,0), cor_fundo),
+                        ("TEXTCOLOR",     (0,0),(-1,0), cor_cinza),
+                        ("FONTSIZE",      (0,0),(-1,0), 9),
+                        ("FONTSIZE",      (0,1),(-1,1), 14),
+                        ("FONTNAME",      (0,1),(-1,1), "Helvetica-Bold"),
+                        ("TEXTCOLOR",     (0,1),(-1,1), cor_principal),
                         ("ALIGN",         (0,0),(-1,-1), "CENTER"),
                         ("VALIGN",        (0,0),(-1,-1), "MIDDLE"),
-                        ("BOX",           (0,0),(-1,-1), 0.5, _BORDA),
-                        ("INNERGRID",     (0,0),(-1,-1), 0.3, _BORDA),
+                        ("BOX",           (0,0),(-1,-1), 0.5, cor_cinza),
+                        ("INNERGRID",     (0,0),(-1,-1), 0.3, colors.HexColor("#DDDDDD")),
                         ("TOPPADDING",    (0,0),(-1,-1), 8),
                         ("BOTTOMPADDING", (0,0),(-1,-1), 8),
                     ]))
                     story.append(t_kpi)
-                    story.append(Spacer(1, 0.3*_rl_cm))
+                    story.append(Spacer(1, 0.4*cm))
 
-                    # ── Interações ────────────────────────────────────────────
                     if not relac_period.empty:
-                        story.append(Paragraph("INTERA&Ccedil;&Otilde;ES COM PARCEIROS", st_secao))
+                        story.append(Paragraph("Interações com parceiros", st_secao))
                         for _, row in relac_period.iterrows():
                             _dr  = row['data_registro']
                             drf  = (_dr if hasattr(_dr,'strftime') else datetime.strptime(str(_dr),'%Y-%m-%d')).strftime('%d/%m/%Y')
                             desc = str(row['descricao']).capitalize() if pd.notna(row['descricao']) else "—"
-                            story.append(Paragraph(
-                                f"<b>{str(row['nome_instituicao']).upper()}</b>"
-                                f"&nbsp;&nbsp;<font color='#C0392B' size='8'>{drf}</font>",
-                                st_item))
-                            story.append(Paragraph(f"   {desc}", st_detalhe))
+                            story.append(Paragraph(f"<b>{str(row['nome_instituicao']).upper()}</b> &nbsp;&nbsp; <font color='#888888' size='9'>{drf}</font>", st_item))
+                            story.append(Paragraph(f"↳ {desc}", st_detalhe))
 
-                    # ── Doações financeiras ───────────────────────────────────
-                    if not doacoes_fin.empty:
-                        story.append(Paragraph("DOA&Ccedil;&Otilde;ES FINANCEIRAS &mdash; ENTRAM NA CONTA", st_secao_fin))
-                        for _, row in doacoes_fin.iterrows():
+                    if not doacoes_period.empty:
+                        story.append(Paragraph("Doações recebidas no período", st_secao))
+                        for _, row in doacoes_period.iterrows():
                             _dr  = row['data_registro']
                             drf  = (_dr if hasattr(_dr,'strftime') else datetime.strptime(str(_dr),'%Y-%m-%d')).strftime('%d/%m/%Y')
                             val  = float(row['valor_estimado']) if pd.notna(row['valor_estimado']) else 0
-                            vf   = _fmt_brl(val) if val > 0 else "—"
+                            vf   = f"R$ {val:,.2f}".replace(',','X').replace('.',',').replace('X','.') if val > 0 else "—"
                             desc = str(row['descricao']).capitalize() if pd.notna(row['descricao']) else "—"
-                            story.append(Paragraph(
-                                f"<b>{str(row['nome_instituicao']).upper()}</b>"
-                                f"&nbsp;&nbsp;<font color='#C0392B' size='8'>{drf}</font>"
-                                f"&nbsp;&nbsp;<font color='#1A5FA8'><b>{vf}</b></font>",
-                                st_item))
-                            story.append(Paragraph(f"   {desc}", st_detalhe))
+                            story.append(Paragraph(f"<b>{str(row['nome_instituicao']).upper()}</b> &nbsp;&nbsp; <font color='#888888' size='9'>{drf}</font> &nbsp; <b>{vf}</b>", st_item))
+                            story.append(Paragraph(f"↳ {desc}", st_detalhe))
 
-                    # ── Doações estimadas ─────────────────────────────────────
-                    if not doacoes_est.empty:
-                        story.append(Paragraph("DOA&Ccedil;&Otilde;ES EM BENS E SERVI&Ccedil;OS &mdash; VALOR ESTIMADO PELO PARCEIRO", st_secao_est))
-                        for _, row in doacoes_est.iterrows():
-                            _dr  = row['data_registro']
-                            drf  = (_dr if hasattr(_dr,'strftime') else datetime.strptime(str(_dr),'%Y-%m-%d')).strftime('%d/%m/%Y')
-                            val  = float(row['valor_estimado']) if pd.notna(row['valor_estimado']) else 0
-                            vf   = _fmt_brl(val) if val > 0 else "—"
-                            desc = str(row['descricao']).capitalize() if pd.notna(row['descricao']) else "—"
-                            story.append(Paragraph(
-                                f"<b>{str(row['nome_instituicao']).upper()}</b>"
-                                f"&nbsp;&nbsp;<font color='#C0392B' size='8'>{drf}</font>"
-                                f"&nbsp;&nbsp;<font color='#1B7A4A'><b>{vf}</b></font>",
-                                st_item))
-                            story.append(Paragraph(f"   {desc}", st_detalhe))
-
-                    # ── Nota de rodapé ────────────────────────────────────────
-                    story.append(Spacer(1, 0.4*_rl_cm))
-                    from datetime import datetime as _dt, timedelta as _td
-                    _agora = (_dt.now() - _td(hours=3)).strftime("%d/%m/%Y %H:%M")
-                    story.append(Paragraph(
-                        f"Sistema DI  &bull;  Gerado em {_agora} (Bras&iacute;lia)",
-                        st_nota))
-
-                    _doc.build(story)
-                    return _buf.getvalue()
+                    doc.build(story)
+                    return buf.getvalue()
 
                 try:
                     pdf_bytes = _gerar_pdf_diretoria(df_relatorio, dt_ini_fmt, dt_fim_fmt)
@@ -5290,19 +5259,15 @@ def _gerar_backup_completo():
     return output.getvalue(), "zip", "application/zip"
 
 if _is_gerente():
-    # Backup gerado apenas quando solicitado (evita 7 queries a cada navegação)
-    if st.sidebar.button("⬇ Backup completo", use_container_width=True, key="sidebar_backup_btn"):
-        with st.sidebar:
-            with st.spinner("Gerando backup..."):
-                _backup = _gerar_backup_completo()
-        if _backup:
-            _b_data, _b_ext, _b_mime = _backup
-            _b_nome = "CDP_backup_" + datetime.now().strftime("%Y%m%d") + "." + _b_ext
-            st.sidebar.download_button(
-                "Baixar agora",
-                data=_b_data,
-                file_name=_b_nome,
-                mime=_b_mime,
-                use_container_width=True,
-                key="sidebar_backup_dl",
-            )
+    _backup = _gerar_backup_completo()
+    if _backup:
+        _b_data, _b_ext, _b_mime = _backup
+        _b_nome = "CDP_backup_" + datetime.now().strftime("%Y%m%d") + "." + _b_ext
+        st.sidebar.download_button(
+            "Backup completo",
+            data=_b_data,
+            file_name=_b_nome,
+            mime=_b_mime,
+            use_container_width=True,
+            key="sidebar_backup_dl",
+        )
