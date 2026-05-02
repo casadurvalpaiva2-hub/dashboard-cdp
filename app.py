@@ -4049,6 +4049,19 @@ elif menu == "Relacionamento":
         )
     """)
 
+    run_exec("""
+        CREATE TABLE IF NOT EXISTS Regua_Matriz (
+            id           SERIAL PRIMARY KEY,
+            tipo_publico TEXT NOT NULL,
+            acao         TEXT NOT NULL,
+            periodo_dias INTEGER,
+            canal        TEXT,
+            responsavel  TEXT DEFAULT 'DI',
+            ativo        BOOLEAN DEFAULT TRUE,
+            UNIQUE (tipo_publico, acao)
+        )
+    """)
+
     # ── Régua de relacionamento: config mestra ────────────────────────────────
     REGUA_CONFIG = {
         "Parceiros Importantes": [
@@ -4154,12 +4167,44 @@ elif menu == "Relacionamento":
         ],
     }
 
+    # ── Semear Regua_Matriz a partir do REGUA_CONFIG (idempotente) ────────────
+    _regua_no_banco = run_query("SELECT COUNT(*) AS n FROM Regua_Matriz")
+    if _regua_no_banco.empty or int(_regua_no_banco["n"].values[0]) == 0:
+        for _tipo_pub, _acoes in REGUA_CONFIG.items():
+            for _item in _acoes:
+                run_exec(
+                    "INSERT INTO Regua_Matriz (tipo_publico, acao, periodo_dias, canal) "
+                    "VALUES (%s, %s, %s, %s) ON CONFLICT (tipo_publico, acao) DO NOTHING",
+                    (_tipo_pub, _item["acao"], _item["periodo_dias"], _item["canal"])
+                )
+
+    def _get_regua_config_db() -> dict:
+        """Lê a config da régua do banco. Fallback para REGUA_CONFIG se banco vazio."""
+        df_rm = run_query(
+            "SELECT tipo_publico, acao, periodo_dias, canal "
+            "FROM Regua_Matriz WHERE ativo = TRUE ORDER BY tipo_publico, id"
+        )
+        if df_rm.empty:
+            return REGUA_CONFIG
+        config = {}
+        for _, row in df_rm.iterrows():
+            tp = row["tipo_publico"]
+            if tp not in config:
+                config[tp] = []
+            config[tp].append({
+                "acao": row["acao"],
+                "periodo_dias": int(row["periodo_dias"]) if pd.notna(row["periodo_dias"]) else None,
+                "canal": row["canal"] or "",
+            })
+        return config
+
     def _gerar_regua_pendencias(id_parceiro: int, tipo_publico: str):
         """Gera tarefas da régua para um parceiro, evitando duplicatas e respeitando periodicidade."""
-        if not tipo_publico or tipo_publico not in REGUA_CONFIG:
+        config_ativa = _get_regua_config_db()
+        if not tipo_publico or tipo_publico not in config_ativa:
             return
         hoje_dt = datetime.now().date()
-        for item in REGUA_CONFIG[tipo_publico]:
+        for item in config_ativa[tipo_publico]:
             # Verificar se já existe pendente
             ex_pend = run_query(
                 "SELECT id FROM Regua_Pendencias WHERE id_parceiro=%s AND tipo_acao=%s AND status=\'PENDENTE\'",
@@ -4798,7 +4843,7 @@ elif menu == "Relacionamento":
                     _com_p    = int(_cr["com_pendencias"])
                     _pend     = int(_cr["pendentes"])
                     _conc     = int(_cr["concluidas"])
-                    _acoes_previstas = len(REGUA_CONFIG.get(_tipo, []))
+                    _acoes_previstas = len(_get_regua_config_db().get(_tipo, []))
                     _cobert   = round(_com_p / _total * 100) if _total else 0
 
                     if _cobert >= 80:   _cor_cob = "#34d399"
@@ -4827,8 +4872,82 @@ elif menu == "Relacionamento":
                         unsafe_allow_html=True
                     )
 
-    # ══════════════════════════════════════════════════════════════════════════
-    # ABA 4 — RELATÓRIO PARA A DIRETORIA
+            st.divider()
+
+            # ── Editor da Régua Matriz ────────────────────────────────────────
+            with st.expander("Editar regua de relacionamento", expanded=False):
+                df_matriz = run_query(
+                    "SELECT id, tipo_publico, acao, periodo_dias, canal, responsavel, ativo "
+                    "FROM Regua_Matriz ORDER BY tipo_publico, id"
+                )
+
+                if not df_matriz.empty:
+                    _tipos_disponiveis = sorted(df_matriz["tipo_publico"].unique().tolist())
+                    _ed_tipo = st.selectbox(
+                        "Tipo de publico:", _tipos_disponiveis, key="rm_tipo_sel"
+                    )
+                    df_ed = df_matriz[df_matriz["tipo_publico"] == _ed_tipo].copy()
+
+                    st.markdown(
+                        f"<div style='font-size:0.82rem;color:#94a3b8;margin-bottom:8px;'>"
+                        f"{len(df_ed)} acao(oes) configurada(s) para <b>{_ed_tipo}</b></div>",
+                        unsafe_allow_html=True
+                    )
+
+                    for _, _rm in df_ed.iterrows():
+                        _rm_c1, _rm_c2, _rm_c3, _rm_c4, _rm_c5 = st.columns([3, 1, 2, 1, 1])
+                        _rm_c1.markdown(
+                            f"<div style='font-size:0.85rem;color:#e2e8f0;padding-top:8px;'>{_rm['acao']}</div>",
+                            unsafe_allow_html=True
+                        )
+                        _rm_c2.markdown(
+                            f"<div style='font-size:0.8rem;color:#94a3b8;padding-top:8px;'>"
+                            f"{'A cada ' + str(int(_rm['periodo_dias'])) + 'd' if pd.notna(_rm['periodo_dias']) else 'Unica'}"
+                            f"</div>",
+                            unsafe_allow_html=True
+                        )
+                        _rm_c3.markdown(
+                            f"<div style='font-size:0.8rem;color:#94a3b8;padding-top:8px;'>{_rm['canal'] or '—'}</div>",
+                            unsafe_allow_html=True
+                        )
+                        _rm_ativo = bool(_rm["ativo"])
+                        _rm_key   = f"rm_tog_{_rm['id']}"
+                        _novo_ativo = _rm_c4.toggle("Ativo", value=_rm_ativo, key=_rm_key)
+                        if _novo_ativo != _rm_ativo:
+                            run_exec(
+                                "UPDATE Regua_Matriz SET ativo=%s WHERE id=%s",
+                                (_novo_ativo, int(_rm["id"]))
+                            )
+                            st.rerun()
+                        if _rm_c5.button("Remover", key=f"rm_del_{_rm['id']}"):
+                            run_exec("DELETE FROM Regua_Matriz WHERE id=%s", (int(_rm["id"]),))
+                            st.rerun()
+
+                    st.markdown("---")
+                    st.markdown(
+                        "<div style='font-size:0.82rem;color:#94a3b8;margin-bottom:6px;'>Adicionar nova acao:</div>",
+                        unsafe_allow_html=True
+                    )
+                    _na1, _na2, _na3, _na4 = st.columns([3, 1, 2, 1])
+                    _nova_acao   = _na1.text_input("Acao", key="rm_nova_acao", placeholder="Ex: Visita presencial")
+                    _novo_per    = _na2.number_input("Periodo (dias)", min_value=0, value=30, step=1, key="rm_novo_per",
+                                                     help="0 = acao unica, sem recorrencia")
+                    _novo_canal  = _na3.text_input("Canal", key="rm_novo_canal", placeholder="Ex: WhatsApp/E-mail")
+                    _novo_resp   = _na4.text_input("Responsavel", key="rm_novo_resp", value="DI")
+                    if st.button("Adicionar acao", key="rm_add_btn"):
+                        if _nova_acao.strip():
+                            run_exec(
+                                "INSERT INTO Regua_Matriz (tipo_publico, acao, periodo_dias, canal, responsavel) "
+                                "VALUES (%s, %s, %s, %s, %s) ON CONFLICT (tipo_publico, acao) DO NOTHING",
+                                (_ed_tipo, _nova_acao.strip(),
+                                 int(_novo_per) if _novo_per > 0 else None,
+                                 _novo_canal.strip() or None, _novo_resp.strip() or "DI")
+                            )
+                            st.success(f"Acao '{_nova_acao}' adicionada para {_ed_tipo}.")
+                            st.rerun()
+                        else:
+                            st.warning("Preencha o nome da acao.")
+
     # ══════════════════════════════════════════════════════════════════════════
     # ABA 4 — RELATÓRIO PARA A DIRETORIA
     # ══════════════════════════════════════════════════════════════════════════
