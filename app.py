@@ -4778,7 +4778,24 @@ elif menu == "Relacionamento":
             "Telemarketing":"#3B82F6",
             "Eq. Tecnica":  "#EA580C",
             "Plataforma":   "#16A34A",
-            "RH":           "#CA8A04",
+            "RH":           "#BE185D",
+            "Responsavel":  "#CA8A04",
+        }
+        _LABEL_EQUIPE = {
+            "DI":           "DI",
+            "Telemarketing":"Telemarketing",
+            "Eq. Tecnica":  "Eq. Técnica",
+            "Plataforma":   "Plataforma",
+            "RH":           "RH",
+            "Responsavel":  "Responsável pela ação",
+        }
+        _ABREV_EQUIPE = {
+            "DI":           "DI",
+            "Telemarketing":"TM",
+            "Eq. Tecnica":  "ET",
+            "Plataforma":   "PL",
+            "RH":           "RH",
+            "Responsavel":  "RP",
         }
         _ACOES_HEADER = [
             "Aniversario", "Boas-vindas", "Agradec. padrao", "Agradec. person.",
@@ -4796,7 +4813,7 @@ elif menu == "Relacionamento":
             "Cartao de Boas Festas Digital", "Balanco Social fisico ou digital",
         ]
         _MATRIZ_DADOS = [
-            ("Acolhidos",                    ["RH","RH",None,None,None,None,None,"RH",None,None,"RH",None]),
+            ("Acolhidos",                    ["Responsavel","Responsavel",None,None,None,None,None,"Responsavel",None,None,"Responsavel",None]),
             ("Doador via site",              [None,None,None,None,"Plataforma",None,None,None,"DI",None,"DI",None]),
             ("Doador pontual",               [None,"Telemarketing",None,"Telemarketing",None,None,None,None,"DI",None,"Telemarketing",None]),
             ("Doadores em geral",            [None,"Telemarketing","Telemarketing",None,None,None,"DI","Telemarketing","DI",None,"Telemarketing",None]),
@@ -4804,12 +4821,12 @@ elif menu == "Relacionamento":
             ("Parceiros importantes",        [None,"DI",None,"DI",None,"DI","DI","DI","DI","DI","DI","DI"]),
             ("Financiador",                  [None,"DI",None,"DI",None,"DI","DI","DI","DI","DI","DI","DI"]),
             ("Imprensa",                     [None,"DI",None,"DI",None,"DI","DI","DI","DI","DI","DI",None]),
-            ("Voluntario",                   ["RH","RH",None,None,None,None,"DI","DI","DI",None,"RH",None]),
+            ("Voluntário",                   ["RH","RH",None,None,None,None,"DI","DI","DI",None,"RH",None]),
             ("Visitantes",                   [None,None,"Telemarketing",None,None,None,None,None,"DI",None,"Telemarketing",None]),
             ("Apoiadores de eventos",        [None,"Eq. Tecnica",None,"Eq. Tecnica",None,"DI","DI",None,"DI",None,"DI",None]),
             ("Conselho e diretoria",         ["DI",None,None,None,None,None,"DI","DI","DI",None,"DI","DI"]),
-            ("Funcionario",                  ["RH","RH",None,None,None,None,"RH",None,"DI",None,"RH",None]),
-            ("Fornecedores",                 [None,None,"RH",None,None,None,None,None,"DI",None,"RH",None]),
+            ("Funcionário",                  ["RH","RH",None,None,None,None,"RH",None,"DI",None,"RH",None]),
+            ("Fornecedores",                 [None,None,"Responsavel",None,None,None,None,None,"DI",None,"Responsavel",None]),
         ]
 
         _th_style = "background:#1e293b;color:#94a3b8;font-size:10px;font-weight:700;text-align:center;padding:6px 4px;border:1px solid #334155;white-space:nowrap;"
@@ -4821,10 +4838,11 @@ elif menu == "Relacionamento":
             for equipe in acoes:
                 if equipe:
                     _cor = _CORES_EQUIPE.get(equipe, "#64748b")
-                    _abrev = equipe[:2].upper()
+                    _abrev = _ABREV_EQUIPE.get(equipe, equipe[:2].upper())
+                    _label = _LABEL_EQUIPE.get(equipe, equipe)
                     _cells += (
                         f"<td style='background:{_cor}22;border:1px solid #334155;"
-                        f"text-align:center;padding:4px 2px;' title='{equipe}'>"
+                        f"text-align:center;padding:4px 2px;' title='{_label}'>"
                         f"<span style='display:inline-block;width:22px;height:22px;border-radius:50%;"
                         f"background:{_cor};color:#fff;font-size:9px;font-weight:700;"
                         f"line-height:22px;text-align:center;'>{_abrev}</span></td>"
@@ -4839,7 +4857,8 @@ elif menu == "Relacionamento":
 
         _legend_html = "".join([
             f"<span style='display:inline-flex;align-items:center;gap:5px;margin-right:14px;font-size:11px;color:#94a3b8;'>"
-            f"<span style='width:14px;height:14px;border-radius:50%;background:{cor};display:inline-block;'></span>{eq}</span>"
+            f"<span style='width:14px;height:14px;border-radius:50%;background:{cor};display:inline-block;'></span>"
+            f"{_LABEL_EQUIPE.get(eq, eq)}</span>"
             for eq, cor in _CORES_EQUIPE.items()
         ])
 
