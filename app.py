@@ -4116,6 +4116,42 @@ elif menu == "Relacionamento":
             {"acao": "Cartao de boas festas digital",    "periodo_dias": 365, "canal": "E-mail"},
             {"acao": "Balanco social",                   "periodo_dias": 365, "canal": "E-mail/Fisico"},
         ],
+        "Acolhidos": [
+            {"acao": "Cartao de aniversario digital",   "periodo_dias": 365, "canal": "WhatsApp/E-mail"},
+            {"acao": "Boas-vindas",                      "periodo_dias": None, "canal": "E-mail"},
+            {"acao": "Mensagem de campanha",             "periodo_dias": 45,  "canal": "WhatsApp/E-mail"},
+            {"acao": "Cartao de boas festas digital",    "periodo_dias": 365, "canal": "E-mail"},
+        ],
+        "Doador via Site": [
+            {"acao": "Agradecimento automatico",         "periodo_dias": None, "canal": "E-mail"},
+            {"acao": "Boletim semanal",                  "periodo_dias": 7,   "canal": "WhatsApp/E-mail"},
+            {"acao": "Cartao de boas festas digital",    "periodo_dias": 365, "canal": "E-mail"},
+        ],
+        "Doadores em Geral": [
+            {"acao": "Boas-vindas",                      "periodo_dias": None, "canal": "E-mail"},
+            {"acao": "Agradecimento padrao",             "periodo_dias": 90,  "canal": "E-mail"},
+            {"acao": "Mensagem mensal",                  "periodo_dias": 30,  "canal": "E-mail/WhatsApp"},
+            {"acao": "Mensagem de campanha",             "periodo_dias": 45,  "canal": "WhatsApp/E-mail"},
+            {"acao": "Boletim semanal",                  "periodo_dias": 7,   "canal": "WhatsApp/E-mail"},
+            {"acao": "Cartao de boas festas digital",    "periodo_dias": 365, "canal": "E-mail"},
+        ],
+        "Visitantes": [
+            {"acao": "Agradecimento padrao",             "periodo_dias": 90,  "canal": "E-mail"},
+            {"acao": "Boletim semanal",                  "periodo_dias": 7,   "canal": "WhatsApp/E-mail"},
+            {"acao": "Cartao de boas festas digital",    "periodo_dias": 365, "canal": "E-mail"},
+        ],
+        "Funcionario": [
+            {"acao": "Cartao de aniversario digital",   "periodo_dias": 365, "canal": "WhatsApp"},
+            {"acao": "Boas-vindas",                      "periodo_dias": None, "canal": "E-mail"},
+            {"acao": "Mensagem mensal",                  "periodo_dias": 30,  "canal": "E-mail/WhatsApp"},
+            {"acao": "Boletim semanal",                  "periodo_dias": 7,   "canal": "WhatsApp/E-mail"},
+            {"acao": "Cartao de boas festas digital",    "periodo_dias": 365, "canal": "E-mail"},
+        ],
+        "Fornecedores": [
+            {"acao": "Agradecimento padrao",             "periodo_dias": 90,  "canal": "E-mail"},
+            {"acao": "Boletim semanal",                  "periodo_dias": 7,   "canal": "WhatsApp/E-mail"},
+            {"acao": "Cartao de boas festas digital",    "periodo_dias": 365, "canal": "E-mail"},
+        ],
     }
 
     def _gerar_regua_pendencias(id_parceiro: int, tipo_publico: str):
@@ -4557,7 +4593,7 @@ elif menu == "Relacionamento":
     # ABA 3 — FOLLOW-UPS E RÉGUA
     # ══════════════════════════════════════════════════════════════════════════
     with tab_followup:
-        _fu_sub1, _fu_sub2 = st.tabs(["Follow-ups manuais", "Pendencias da regua"])
+        _fu_sub1, _fu_sub2, _fu_sub3 = st.tabs(["Follow-ups manuais", "Pendencias da regua", "Compliance da regua"])
 
         # ── Sub-aba: Follow-ups manuais ───────────────────────────────────────
         with _fu_sub1:
@@ -4684,6 +4720,112 @@ elif menu == "Relacionamento":
                                 )
                                 st.success(f"{_rp['tipo_acao']} marcado como feito.")
                                 st.rerun()
+
+        # ── Sub-aba: Compliance da Régua ──────────────────────────────────────
+        with _fu_sub3:
+            section("Compliance da regua de relacionamento")
+
+            # ── Botão de sincronização em massa ──────────────────────────────
+            _sc1, _sc2 = st.columns([3, 1])
+            with _sc2:
+                if st.button("Sincronizar pendencias", use_container_width=True, type="primary"):
+                    _parceiros_para_sync = run_query(
+                        "SELECT id_parceiro, tipo_publico_regua FROM Parceiro "
+                        "WHERE tipo_publico_regua IS NOT NULL AND tipo_publico_regua != '' "
+                        "AND UPPER(TRIM(status)) IN ('ATIVO', 'PROSPECCAO', 'PROSPECÇÃO')"
+                    )
+                    _gerados = 0
+                    for _, _pr in _parceiros_para_sync.iterrows():
+                        before = run_query(
+                            "SELECT COUNT(*) AS n FROM Regua_Pendencias WHERE id_parceiro=%s AND status='PENDENTE'",
+                            (int(_pr["id_parceiro"]),)
+                        )["n"].values[0]
+                        _gerar_regua_pendencias(int(_pr["id_parceiro"]), _pr["tipo_publico_regua"])
+                        after = run_query(
+                            "SELECT COUNT(*) AS n FROM Regua_Pendencias WHERE id_parceiro=%s AND status='PENDENTE'",
+                            (int(_pr["id_parceiro"]),)
+                        )["n"].values[0]
+                        _gerados += max(0, int(after) - int(before))
+                    st.success(f"{_gerados} nova(s) pendencia(s) gerada(s) para {len(_parceiros_para_sync)} parceiro(s).")
+                    st.rerun()
+
+            with _sc1:
+                st.markdown(
+                    "<div style='font-size:0.82rem;color:#94A3B8;padding-top:10px;'>"
+                    "Gera automaticamente as pendencias previstas pela regua para todos os parceiros ativos "
+                    "que ainda nao as possuem, respeitando a periodicidade de cada acao."
+                    "</div>",
+                    unsafe_allow_html=True
+                )
+
+            st.divider()
+
+            # ── Painel de cobertura por tipo de público ───────────────────────
+            df_compliance = run_query_slow(
+                "SELECT p.tipo_publico_regua, "
+                "COUNT(DISTINCT p.id_parceiro) AS total_parceiros, "
+                "COUNT(DISTINCT CASE WHEN rp.status IS NOT NULL THEN p.id_parceiro END) AS com_pendencias, "
+                "COUNT(DISTINCT CASE WHEN rp.status='PENDENTE' THEN rp.id END) AS pendentes, "
+                "COUNT(DISTINCT CASE WHEN rp.status='FEITO' THEN rp.id END) AS concluidas "
+                "FROM Parceiro p "
+                "LEFT JOIN Regua_Pendencias rp ON p.id_parceiro = rp.id_parceiro "
+                "WHERE p.tipo_publico_regua IS NOT NULL AND p.tipo_publico_regua != '' "
+                "GROUP BY p.tipo_publico_regua "
+                "ORDER BY total_parceiros DESC"
+            )
+
+            if df_compliance.empty:
+                st.info("Nenhum parceiro com tipo de publico da regua cadastrado.")
+            else:
+                # KPIs gerais
+                _ck1, _ck2, _ck3 = st.columns(3)
+                _total_parc_regua = int(df_compliance["total_parceiros"].sum())
+                _total_com_pend   = int(df_compliance["com_pendencias"].sum())
+                _total_pendentes  = int(df_compliance["pendentes"].sum())
+                _total_concluidas = int(df_compliance["concluidas"].sum())
+                _cobertura_pct    = round(_total_com_pend / _total_parc_regua * 100) if _total_parc_regua else 0
+
+                _ck1.metric("Parceiros na regua", _total_parc_regua)
+                _ck2.metric("Com pendencias ativas", f"{_total_com_pend} ({_cobertura_pct}%)")
+                _ck3.metric("Acoes concluidas (total)", _total_concluidas)
+
+                st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
+
+                # Detalhe por tipo de público
+                for _, _cr in df_compliance.iterrows():
+                    _tipo     = _cr["tipo_publico_regua"]
+                    _total    = int(_cr["total_parceiros"])
+                    _com_p    = int(_cr["com_pendencias"])
+                    _pend     = int(_cr["pendentes"])
+                    _conc     = int(_cr["concluidas"])
+                    _acoes_previstas = len(REGUA_CONFIG.get(_tipo, []))
+                    _cobert   = round(_com_p / _total * 100) if _total else 0
+
+                    if _cobert >= 80:   _cor_cob = "#34d399"
+                    elif _cobert >= 50: _cor_cob = "#fbbf24"
+                    else:               _cor_cob = "#f87171"
+
+                    st.markdown(
+                        f"<div style='background:#1e293b;border:1px solid #334155;border-radius:8px;"
+                        f"padding:12px 16px;margin-bottom:8px;'>"
+                        f"<div style='display:flex;justify-content:space-between;align-items:center;'>"
+                        f"<div>"
+                        f"<span style='font-size:0.9rem;font-weight:700;color:#e2e8f0;'>{_tipo}</span>"
+                        f"<span style='font-size:0.78rem;color:#94a3b8;margin-left:10px;'>"
+                        f"{_total} parceiro(s) · {_acoes_previstas} acao(oes) prevista(s) na regua</span>"
+                        f"</div>"
+                        f"<div style='text-align:right;'>"
+                        f"<span style='font-size:0.85rem;color:{_cor_cob};font-weight:700;'>{_cobert}% cobertura</span>"
+                        f"<span style='font-size:0.75rem;color:#64748b;margin-left:12px;'>"
+                        f"{_pend} pendentes · {_conc} concluidas</span>"
+                        f"</div>"
+                        f"</div>"
+                        f"<div style='margin-top:8px;height:4px;background:#0f172a;border-radius:2px;'>"
+                        f"<div style='height:4px;width:{_cobert}%;background:{_cor_cob};border-radius:2px;'></div>"
+                        f"</div>"
+                        f"</div>",
+                        unsafe_allow_html=True
+                    )
 
     # ══════════════════════════════════════════════════════════════════════════
     # ABA 4 — RELATÓRIO PARA A DIRETORIA
