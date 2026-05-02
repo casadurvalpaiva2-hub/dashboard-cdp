@@ -4798,26 +4798,26 @@ elif menu == "Relacionamento":
             "Responsavel":  "RP",
         }
         _ACOES_HEADER = [
-            "Aniversario", "Boas-vindas", "Agradec. padrao", "Agradec. person.",
-            "Agradec. auto", "Destaque redes", "Msg. mensais", "Msg. esporadicas",
-            "Boletim", "Brindes", "Boas Festas", "Balanco Social",
+            "Aniversário", "Boas-vindas", "Agradec. padrão", "Agradec. person.",
+            "Agradec. auto", "Destaque redes", "Msg. mensais", "Msg. esporádicas",
+            "Boletim", "Brindes", "Boas Festas", "Balanço Social",
         ]
         _ACOES_FULL = [
-            "Cartao de aniversario digital", "Boas-vindas", "Agradecimento padrao",
-            "Agradecimento personalizado", "Agradecimento automatico",
+            "Cartão de aniversário digital", "Boas-vindas", "Agradecimento padrão",
+            "Agradecimento personalizado", "Agradecimento automático",
             "Destaque de reconhecimento nas redes sociais",
-            "Mensagens mensais: Noticias, datas comemorativas",
-            "Mensagens esporadicas de campanhas via WhatsApp ou e-mail",
+            "Mensagens mensais: Notícias, datas comemorativas",
+            "Mensagens esporádicas de campanhas via WhatsApp ou e-mail",
             "Boletim Semanal via e-mail e WhatsApp",
-            "Brindes em datas comemorativas (Midia Kit)",
-            "Cartao de Boas Festas Digital", "Balanco Social fisico ou digital",
+            "Brindes em datas comemorativas (Mídia Kit)",
+            "Cartão de Boas Festas Digital", "Balanço Social físico ou digital",
         ]
         _MATRIZ_DADOS = [
-            ("Acolhidos",                    ["Responsavel","Responsavel",None,None,None,None,None,"Responsavel",None,None,"Responsavel",None]),
-            ("Doador via site",              [None,None,None,None,"Plataforma",None,None,None,"DI",None,"DI",None]),
-            ("Doador pontual",               [None,"Telemarketing",None,"Telemarketing",None,None,None,None,"DI",None,"Telemarketing",None]),
-            ("Doadores em geral",            [None,"Telemarketing","Telemarketing",None,None,None,"DI","Telemarketing","DI",None,"Telemarketing",None]),
-            ("Doadores especiais: nao mon.", [None,"Eq. Tecnica",None,"Eq. Tecnica",None,None,"DI","Eq. Tecnica","DI",None,"Eq. Tecnica",None]),
+            ("Acolhidos",                     ["Responsavel","Responsavel",None,None,None,None,None,"Responsavel",None,None,"Responsavel",None]),
+            ("Doador via site",               [None,None,None,None,"Plataforma",None,None,None,"DI",None,"DI",None]),
+            ("Doador pontual",                [None,"Telemarketing",None,"Telemarketing",None,None,None,None,"DI",None,"Telemarketing",None]),
+            ("Doadores em geral",             [None,"Telemarketing","Telemarketing",None,None,None,"DI","Telemarketing","DI",None,"Telemarketing",None]),
+            ("Doadores especiais: não mon.",  [None,"Eq. Tecnica",None,"Eq. Tecnica",None,None,"DI","Eq. Tecnica","DI",None,"Eq. Tecnica",None]),
             ("Parceiros importantes",        [None,"DI",None,"DI",None,"DI","DI","DI","DI","DI","DI","DI"]),
             ("Financiador",                  [None,"DI",None,"DI",None,"DI","DI","DI","DI","DI","DI","DI"]),
             ("Imprensa",                     [None,"DI",None,"DI",None,"DI","DI","DI","DI","DI","DI",None]),
@@ -4851,7 +4851,7 @@ elif menu == "Relacionamento":
                     _cells += "<td style='background:#0f172a;border:1px solid #1e293b;'></td>"
             _html_rows += f"<tr>{_cells}</tr>"
 
-        _header_cells = f"<th style='{_th_style}'>Publico</th>"
+        _header_cells = f"<th style='{_th_style}'>Público</th>"
         for h in _ACOES_HEADER:
             _header_cells += f"<th style='{_th_style}' title='{_ACOES_FULL[_ACOES_HEADER.index(h)]}'>{h}</th>"
 
