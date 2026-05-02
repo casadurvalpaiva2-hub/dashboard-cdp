@@ -4277,7 +4277,7 @@ elif menu == "Relacionamento":
 
     # ── Abas ──────────────────────────────────────────────────────────────────
     tab_reg, tab_parceiros, tab_followups, tab_regua, tab_relatorio = st.tabs([
-        "Registrar", "Parceiros", "Follow-ups", "Regua", "Relatorio"
+        "Registrar", "Parceiros", "Follow-ups", "Régua", "Relatório"
     ])
 
     # ══════════════════════════════════════════════════════════════════════════
@@ -4287,9 +4287,9 @@ elif menu == "Relacionamento":
         _rc1, _rc2 = st.columns([3, 2], gap="large")
 
         with _rc1:
-            section("Nova interacao")
+            section("Nova interação")
             _TIPOS_INTERACAO = [
-                "Almoco CDP", "Reuniao presencial", "Ligacao telefonica",
+                "Almoço CDP", "Reunião presencial", "Ligação telefônica",
                 "WhatsApp", "E-mail", "Visita ao parceiro",
                 "Evento externo", "Envio de material", "Agradecimento", "Follow-up", "Outro",
             ]
@@ -4299,7 +4299,7 @@ elif menu == "Relacionamento":
                 _nomes_parc = sorted(df_parceiros["nome_instituicao"].dropna().tolist())
                 _fi1, _fi2  = st.columns(2)
                 _parc_sel   = _fi1.selectbox("Parceiro *", ["-- selecione --"] + _nomes_parc, key="ni_parc")
-                _tipo_sel   = _fi2.selectbox("Tipo de interacao *", _TIPOS_INTERACAO, key="ni_tipo")
+                _tipo_sel   = _fi2.selectbox("Tipo de interação *", _TIPOS_INTERACAO, key="ni_tipo")
 
                 _fi3, _fi4  = st.columns(2)
                 _canal_sel  = _fi3.selectbox("Canal", _CANAIS, key="ni_canal")
@@ -4314,12 +4314,12 @@ elif menu == "Relacionamento":
                         _id_p_form_val  = int(_row_p["id_parceiro"].values[0])
                         _tipo_pub_atual = _row_p["tipo_publico_regua"].values[0]
 
-                _opts_pub = ["(nao definir)"] + list(REGUA_CONFIG.keys())
+                _opts_pub = ["(não definir)"] + list(REGUA_CONFIG.keys())
                 _idx_pub  = 0
                 if _tipo_pub_atual and _tipo_pub_atual in _opts_pub:
                     _idx_pub = _opts_pub.index(_tipo_pub_atual)
                 _tipo_pub_sel = st.selectbox(
-                    "Tipo de publico (regua) — define automacoes",
+                    "Tipo de público (régua) — define automações",
                     options=_opts_pub, index=_idx_pub, key="ni_pub"
                 )
 
@@ -4343,9 +4343,9 @@ elif menu == "Relacionamento":
                     height=100, key="ni_desc"
                 )
                 _fi5, _fi6  = st.columns(2)
-                _prox_acao  = _fi5.text_input("Proxima acao", placeholder="ex: Enviar proposta", key="ni_prox")
-                _prox_data  = _fi6.date_input("Data da proxima acao", value=None, key="ni_prox_data")
-                _resp       = st.text_input("Responsavel", placeholder="Quem fez o contato?", key="ni_resp")
+                _prox_acao  = _fi5.text_input("Próxima ação", placeholder="ex: Enviar proposta", key="ni_prox")
+                _prox_data  = _fi6.date_input("Data da próxima ação", value=None, key="ni_prox_data")
+                _resp       = st.text_input("Responsável", placeholder="Quem fez o contato?", key="ni_resp")
 
                 _submitted = st.form_submit_button("Registrar", type="primary", use_container_width=True)
                 if _submitted:
@@ -4371,22 +4371,22 @@ elif menu == "Relacionamento":
                             )
                         )
                         # Atualizar tipo_publico_regua do parceiro se selecionado
-                        if _tipo_pub_sel != "(nao definir)":
+                        if _tipo_pub_sel != "(não definir)":
                             run_exec(
                                 "UPDATE Parceiro SET tipo_publico_regua = %s WHERE id_parceiro = %s",
                                 (_tipo_pub_sel, _id_p_reg)
                             )
                             # Gerar pendências da régua
-                            _gerar_regua_pendencias(_id_p_reg, _tipo_pub_sel)
+                            _gerar_regua_pendências(_id_p_reg, _tipo_pub_sel)
 
                         run_exec("INSERT INTO Logs (acao) VALUES (%s)",
-                                 (f"Interacao: {_parc_sel} — {_tipo_sel}",))
-                        st.success(f"Interacao com {_parc_sel} registrada.")
+                                 (f"Interação: {_parc_sel} — {_tipo_sel}",))
+                        st.success(f"Interação com {_parc_sel} registrada.")
                         st.rerun()
 
         # ── Painel direito: alertas da régua para o parceiro selecionado ──────
         with _rc2:
-            section("Regua de relacionamento")
+            section("Régua de relacionamento")
             if "ni_parc" in st.session_state and st.session_state["ni_parc"] != "-- selecione --":
                 _pn = st.session_state["ni_parc"]
                 _row_sel = df_parceiros[df_parceiros["nome_instituicao"] == _pn]
@@ -4396,7 +4396,7 @@ elif menu == "Relacionamento":
                     if _pub_sel and _pub_sel in REGUA_CONFIG:
                         st.markdown(
                             f"<div style=\'font-size:0.8rem;color:#94A3B8;margin-bottom:8px;\'>"
-                            f"Publico: <b style='color:#E5E7EB;'>{_pub_sel}</b></div>",
+                            f"Público: <b style='color:#E5E7EB;'>{_pub_sel}</b></div>",
                             unsafe_allow_html=True
                         )
                         _pend_parc = run_query(
@@ -4416,12 +4416,12 @@ elif menu == "Relacionamento":
                                     unsafe_allow_html=True
                                 )
                         else:
-                            st.markdown("<div style=\'font-size:0.82rem;color:#059669;\'>Sem pendencias na regua para este parceiro.</div>", unsafe_allow_html=True)
+                            st.markdown("<div style=\'font-size:0.82rem;color:#059669;\'>Sem pendências na régua para este parceiro.</div>", unsafe_allow_html=True)
                     else:
-                        st.info("Defina o tipo de publico (campo acima) para ativar as automacoes da regua.")
+                        st.info("Defina o tipo de público (campo acima) para ativar as automações da régua.")
             else:
                 # Mostrar referência geral da régua
-                st.markdown("<div style=\'font-size:0.82rem;color:#94A3B8;margin-bottom:8px;\'>Acoes por tipo de publico:</div>", unsafe_allow_html=True)
+                st.markdown("<div style=\'font-size:0.82rem;color:#94A3B8;margin-bottom:8px;\'>Ações por tipo de público:</div>", unsafe_allow_html=True)
                 _REGUA_REF = [
                     ("Parceiros Importantes", ["Agradec. personalizado", "Destaque em redes", "Mensagem mensal", "Boletim semanal", "Brindes", "Boas festas", "Balanco social"]),
                     ("Financiador",           ["Agradec. personalizado", "Destaque em redes", "Mensagem mensal", "Mensagem campanha", "Boletim semanal", "Brindes", "Balanco social"]),
@@ -4439,11 +4439,11 @@ elif menu == "Relacionamento":
 
         # ── Últimas interações ────────────────────────────────────────────────
         st.divider()
-        section("Ultimas interacoes registradas")
+        section("Últimas interações registradas")
         _df_ult     = df_interacoes.head(8) if not df_interacoes.empty else pd.DataFrame()
         _nomes_map  = df_parceiros.set_index("id_parceiro")["nome_instituicao"].to_dict()
         if _df_ult.empty:
-            st.info("Nenhuma interacao registrada ainda.")
+            st.info("Nenhuma interação registrada ainda.")
         else:
             for _, _r in _df_ult.iterrows():
                 _nome_p  = _nomes_map.get(_r["id_parceiro"], "—")
@@ -4505,7 +4505,7 @@ elif menu == "Relacionamento":
 
             _total_st = len(df_st_show)
             if _total_st == 0:
-                st.success(f"Todos os parceiros ativos foram contatados nos ultimos {_limiar_dias} dias.")
+                st.success(f"Todos os parceiros ativos foram contatados nos últimos {_limiar_dias} dias.")
             else:
                 st.markdown(
                     f"<div style='font-size:0.85rem;color:#F59E0B;margin-bottom:12px;'>"
@@ -4514,14 +4514,14 @@ elif menu == "Relacionamento":
                     unsafe_allow_html=True
                 )
                 for _, _sr in df_st_show.iterrows():
-                    _dias_label = "Nunca contatado" if _sr["_dias_sem"] >= 9999 else f"Ultimo contato ha {_sr['_dias_sem']}d"
+                    _dias_label = "Nunca contatado" if _sr["_dias_sem"] >= 9999 else f"Último contato há {_sr['_dias_sem']}d"
                     if _sr["_dias_sem"] >= 9999 or _sr["_dias_sem"] >= 180:
                         _tom_st = "danger"
                     else:
                         _tom_st = "warning"
                     _data_label = (
                         f"Ultimo: {_sr['_ultimo'].strftime('%d/%m/%Y')}"
-                        if pd.notna(_sr["_ultimo"]) else "Sem historico"
+                        if pd.notna(_sr["_ultimo"]) else "Sem histórico"
                     )
                     action_card(
                         titulo=str(_sr["nome_instituicao"]),
@@ -4534,7 +4534,7 @@ elif menu == "Relacionamento":
         st.divider()
 
         # ── Historico por parceiro ────────────────────────────────────────────
-        section("Historico por parceiro")
+        section("Histórico por parceiro")
 
         _tl1, _tl2 = st.columns([2, 1])
         p_lista = ["-- selecione --"] + sorted(df_parceiros["nome_instituicao"].dropna().tolist())
@@ -4549,7 +4549,7 @@ elif menu == "Relacionamento":
             with _tl2:
                 if _pub_tl:
                     st.markdown(
-                        f"<div style=\'font-size:0.82rem;color:#94A3B8;margin-top:28px;\'>Tipo publico: "
+                        f"<div style=\'font-size:0.82rem;color:#94A3B8;margin-top:28px;\'>Tipo público: "
                         f"<b style='color:#E5E7EB;'>{_pub_tl}</b></div>", unsafe_allow_html=True
                     )
                 _pend_tl = run_query(
@@ -4559,7 +4559,7 @@ elif menu == "Relacionamento":
                 if not _pend_tl.empty:
                     _n_pend = int(_pend_tl["n"].values[0])
                     if _n_pend > 0:
-                        st.warning(f"{_n_pend} pendencia(s) da regua para este parceiro.")
+                        st.warning(f"{_n_pend} pendência(s) da régua para este parceiro.")
 
             hist_int = run_query(
                 "SELECT data_interacao AS data, descricao_do_que_foi_feito AS descricao, "
@@ -4574,14 +4574,14 @@ elif menu == "Relacionamento":
             )
 
             if hist_int.empty and hist_doa.empty:
-                empty_state("—", "Sem historico", "Nenhuma interacao ou doacao registrada para este parceiro.")
+                empty_state("—", "Sem histórico", "Nenhuma interação ou doação registrada para este parceiro.")
             else:
                 # Totais
                 total_int     = len(hist_int)
                 total_doa_val = hist_doa["valor_estimado"].fillna(0).sum() if not hist_doa.empty else 0
                 total_doa_fmt = f"R$ {total_doa_val:,.2f}".replace(",","X").replace(".",",").replace("X",".")
                 kpi_row([
-                    {"label": "Interacoes",       "value": total_int},
+                    {"label": "Interações",       "value": total_int},
                     {"label": "Total doado",       "value": total_doa_fmt},
                 ])
 
@@ -4603,7 +4603,7 @@ elif menu == "Relacionamento":
                     val_fmt = f"R$ {val:,.2f}".replace(",","X").replace(".",",").replace("X",".")
                     eventos.append({
                         "data":   pd.to_datetime(r["data"], errors="coerce"),
-                        "label":  str(r["tipo"]) if pd.notna(r["tipo"]) else "Doacao",
+                        "label":  str(r["tipo"]) if pd.notna(r["tipo"]) else "Doação",
                         "desc":   str(r["descricao"]) if pd.notna(r["descricao"]) else "—",
                         "extra":  f"Valor: {val_fmt}" if val > 0 else None,
                         "extra2": None,
@@ -4638,7 +4638,7 @@ elif menu == "Relacionamento":
     # ABA 3 — FOLLOW-UPS
     # ══════════════════════════════════════════════════════════════════════════
     with tab_followups:
-        _fu_sub1, _fu_sub2 = st.tabs(["Follow-ups manuais", "Pendencias da regua"])
+        _fu_sub1, _fu_sub2 = st.tabs(["Follow-ups manuais", "Pendências da régua"])
 
         # ── Sub-aba: Follow-ups manuais ───────────────────────────────────────
         with _fu_sub1:
@@ -4663,13 +4663,13 @@ elif menu == "Relacionamento":
                 df_fu["_dias"] = df_fu["_data"].apply(lambda d: (d - hoje).days if d else 999)
 
                 _ff1, _ff2 = st.columns(2)
-                _filtro_per = _ff1.selectbox("Periodo:", ["Todos", "Vencidos", "Esta semana", "Este mes", "Futuros"], key="fu_periodo")
+                _filtro_per = _ff1.selectbox("Período:", ["Todos", "Vencidos", "Esta semana", "Este mês", "Futuros"], key="fu_periodo")
                 _filtro_par = _ff2.text_input("Filtrar por parceiro:", key="fu_parc")
 
                 df_fshow = df_fu.copy()
                 if _filtro_per == "Vencidos":      df_fshow = df_fshow[df_fshow["_dias"] < 0]
                 elif _filtro_per == "Esta semana":  df_fshow = df_fshow[(df_fshow["_dias"] >= 0) & (df_fshow["_dias"] <= 7)]
-                elif _filtro_per == "Este mes":     df_fshow = df_fshow[(df_fshow["_dias"] >= 0) & (df_fshow["_dias"] <= 30)]
+                elif _filtro_per == "Este mês":     df_fshow = df_fshow[(df_fshow["_dias"] >= 0) & (df_fshow["_dias"] <= 30)]
                 elif _filtro_per == "Futuros":      df_fshow = df_fshow[df_fshow["_dias"] > 30]
                 if _filtro_par:
                     df_fshow = df_fshow[df_fshow["nome_instituicao"].str.contains(_filtro_par, case=False, na=False)]
@@ -4713,15 +4713,15 @@ elif menu == "Relacionamento":
                                         "AND proxima_acao_data::date < CURRENT_DATE",
                                         (_id_p_fu,)
                                     )
-                                    st.success(f"Follow-up de {row['nome_instituicao']} concluido.")
+                                    st.success(f"Follow-up de {row['nome_instituicao']} concluído.")
                                     st.rerun()
 
         # ── Sub-aba: Pendências da Régua ──────────────────────────────────────
         with _fu_sub2:
-            section("Pendencias geradas pela regua")
+            section("Pendências geradas pela régua")
 
             if df_regua_pend.empty:
-                st.success("Nenhuma pendencia da regua no momento.")
+                st.success("Nenhuma pendência da régua no momento.")
             else:
                 # Filtro por parceiro
                 _rp_parc = st.text_input("Filtrar por parceiro:", key="rp_parc_filtro")
@@ -4733,7 +4733,7 @@ elif menu == "Relacionamento":
                 _parceiros_pend = _df_rp["nome_instituicao"].unique() if not _df_rp.empty else []
                 for _np in _parceiros_pend:
                     _df_p_rp = _df_rp[_df_rp["nome_instituicao"] == _np]
-                    with st.expander(f"{_np}  ({len(_df_p_rp)} pendencia(s))", expanded=True):
+                    with st.expander(f"{_np}  ({len(_df_p_rp)} pendência(s))", expanded=True):
                         for _, _rp in _df_p_rp.iterrows():
                             _ds    = str(_rp["data_sugerida"])[:10] if pd.notna(_rp["data_sugerida"]) else "—"
                             _dias_rp = (pd.to_datetime(_rp["data_sugerida"]).date() - hoje).days if pd.notna(_rp["data_sugerida"]) else 0
@@ -4770,7 +4770,7 @@ elif menu == "Relacionamento":
     # ABA 4 — RÉGUA DE RELACIONAMENTO
     # ══════════════════════════════════════════════════════════════════════════
     with tab_regua:
-        section("Matriz da regua de relacionamento")
+        section("Matriz da régua de relacionamento")
 
         # ── Matriz visual fiel à planilha ─────────────────────────────────────
         _CORES_EQUIPE = {
@@ -4855,12 +4855,12 @@ elif menu == "Relacionamento":
 
         st.divider()
 
-        section("Compliance da regua de relacionamento")
+        section("Compliance da régua de relacionamento")
 
         # ── Botão de sincronização em massa ──────────────────────────────
         _sc1, _sc2 = st.columns([3, 1])
         with _sc2:
-            if st.button("Sincronizar pendencias", use_container_width=True, type="primary"):
+            if st.button("Sincronizar pendências", use_container_width=True, type="primary"):
                 _parceiros_para_sync = run_query(
                     "SELECT id_parceiro, tipo_publico_regua FROM Parceiro "
                     "WHERE tipo_publico_regua IS NOT NULL AND tipo_publico_regua != '' "
@@ -4872,19 +4872,19 @@ elif menu == "Relacionamento":
                         "SELECT COUNT(*) AS n FROM Regua_Pendencias WHERE id_parceiro=%s AND status='PENDENTE'",
                         (int(_pr["id_parceiro"]),)
                     )["n"].values[0]
-                    _gerar_regua_pendencias(int(_pr["id_parceiro"]), _pr["tipo_publico_regua"])
+                    _gerar_regua_pendências(int(_pr["id_parceiro"]), _pr["tipo_publico_regua"])
                     after = run_query(
                         "SELECT COUNT(*) AS n FROM Regua_Pendencias WHERE id_parceiro=%s AND status='PENDENTE'",
                         (int(_pr["id_parceiro"]),)
                     )["n"].values[0]
                     _gerados += max(0, int(after) - int(before))
-                st.success(f"{_gerados} nova(s) pendencia(s) gerada(s) para {len(_parceiros_para_sync)} parceiro(s).")
+                st.success(f"{_gerados} nova(s) pendência(s) gerada(s) para {len(_parceiros_para_sync)} parceiro(s).")
                 st.rerun()
     
         with _sc1:
             st.markdown(
                 "<div style='font-size:0.82rem;color:#94A3B8;padding-top:10px;'>"
-                "Gera automaticamente as pendencias previstas pela regua para todos os parceiros ativos "
+                "Gera automaticamente as pendências previstas pela regua para todos os parceiros ativos "
                 "que ainda nao as possuem, respeitando a periodicidade de cada acao."
                 "</div>",
                 unsafe_allow_html=True
@@ -4896,9 +4896,9 @@ elif menu == "Relacionamento":
         df_compliance = run_query_slow(
             "SELECT p.tipo_publico_regua, "
             "COUNT(DISTINCT p.id_parceiro) AS total_parceiros, "
-            "COUNT(DISTINCT CASE WHEN rp.status IS NOT NULL THEN p.id_parceiro END) AS com_pendencias, "
+            "COUNT(DISTINCT CASE WHEN rp.status IS NOT NULL THEN p.id_parceiro END) AS com_pendências, "
             "COUNT(DISTINCT CASE WHEN rp.status='PENDENTE' THEN rp.id END) AS pendentes, "
-            "COUNT(DISTINCT CASE WHEN rp.status='FEITO' THEN rp.id END) AS concluidas "
+            "COUNT(DISTINCT CASE WHEN rp.status='FEITO' THEN rp.id END) AS concluídas "
             "FROM Parceiro p "
             "LEFT JOIN Regua_Pendencias rp ON p.id_parceiro = rp.id_parceiro "
             "WHERE p.tipo_publico_regua IS NOT NULL AND p.tipo_publico_regua != '' "
@@ -4907,19 +4907,19 @@ elif menu == "Relacionamento":
         )
     
         if df_compliance.empty:
-            st.info("Nenhum parceiro com tipo de publico da regua cadastrado.")
+            st.info("Nenhum parceiro com tipo de público da régua cadastrado.")
         else:
             # KPIs gerais
             _ck1, _ck2, _ck3 = st.columns(3)
             _total_parc_regua = int(df_compliance["total_parceiros"].sum())
-            _total_com_pend   = int(df_compliance["com_pendencias"].sum())
+            _total_com_pend   = int(df_compliance["com_pendências"].sum())
             _total_pendentes  = int(df_compliance["pendentes"].sum())
-            _total_concluidas = int(df_compliance["concluidas"].sum())
+            _total_concluídas = int(df_compliance["concluídas"].sum())
             _cobertura_pct    = round(_total_com_pend / _total_parc_regua * 100) if _total_parc_regua else 0
     
             _ck1.metric("Parceiros na regua", _total_parc_regua)
-            _ck2.metric("Com pendencias ativas", f"{_total_com_pend} ({_cobertura_pct}%)")
-            _ck3.metric("Acoes concluidas (total)", _total_concluidas)
+            _ck2.metric("Com pendências ativas", f"{_total_com_pend} ({_cobertura_pct}%)")
+            _ck3.metric("Acoes concluídas (total)", _total_concluídas)
     
             st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
     
@@ -4927,9 +4927,9 @@ elif menu == "Relacionamento":
             for _, _cr in df_compliance.iterrows():
                 _tipo     = _cr["tipo_publico_regua"]
                 _total    = int(_cr["total_parceiros"])
-                _com_p    = int(_cr["com_pendencias"])
+                _com_p    = int(_cr["com_pendências"])
                 _pend     = int(_cr["pendentes"])
-                _conc     = int(_cr["concluidas"])
+                _conc     = int(_cr["concluídas"])
                 _acoes_previstas = len(_get_regua_config_db().get(_tipo, []))
                 _cobert   = round(_com_p / _total * 100) if _total else 0
     
@@ -4944,12 +4944,12 @@ elif menu == "Relacionamento":
                     f"<div>"
                     f"<span style='font-size:0.9rem;font-weight:700;color:#e2e8f0;'>{_tipo}</span>"
                     f"<span style='font-size:0.78rem;color:#94a3b8;margin-left:10px;'>"
-                    f"{_total} parceiro(s) · {_acoes_previstas} acao(oes) prevista(s) na regua</span>"
+                    f"{_total} parceiro(s) · {_acoes_previstas} ação(ões) prevista(s) na régua</span>"
                     f"</div>"
                     f"<div style='text-align:right;'>"
                     f"<span style='font-size:0.85rem;color:{_cor_cob};font-weight:700;'>{_cobert}% cobertura</span>"
                     f"<span style='font-size:0.75rem;color:#64748b;margin-left:12px;'>"
-                    f"{_pend} pendentes · {_conc} concluidas</span>"
+                    f"{_pend} pendentes · {_conc} concluídas</span>"
                     f"</div>"
                     f"</div>"
                     f"<div style='margin-top:8px;height:4px;background:#0f172a;border-radius:2px;'>"
@@ -4962,7 +4962,7 @@ elif menu == "Relacionamento":
         st.divider()
     
         # ── Editor da Régua Matriz ────────────────────────────────────────
-        with st.expander("Editar regua de relacionamento", expanded=False):
+        with st.expander("Editar régua de relacionamento", expanded=False):
             df_matriz = run_query(
                 "SELECT id, tipo_publico, acao, periodo_dias, canal, responsavel, ativo "
                 "FROM Regua_Matriz ORDER BY tipo_publico, id"
@@ -4971,13 +4971,13 @@ elif menu == "Relacionamento":
             if not df_matriz.empty:
                 _tipos_disponiveis = sorted(df_matriz["tipo_publico"].unique().tolist())
                 _ed_tipo = st.selectbox(
-                    "Tipo de publico:", _tipos_disponiveis, key="rm_tipo_sel"
+                    "Tipo de público:", _tipos_disponiveis, key="rm_tipo_sel"
                 )
                 df_ed = df_matriz[df_matriz["tipo_publico"] == _ed_tipo].copy()
     
                 st.markdown(
                     f"<div style='font-size:0.82rem;color:#94a3b8;margin-bottom:8px;'>"
-                    f"{len(df_ed)} acao(oes) configurada(s) para <b>{_ed_tipo}</b></div>",
+                    f"{len(df_ed)} ação(ões) configurada(s) para <b>{_ed_tipo}</b></div>",
                     unsafe_allow_html=True
                 )
     
@@ -5016,19 +5016,19 @@ elif menu == "Relacionamento":
                 st.divider()
                 st.markdown(
                     "<div style='font-size:0.82rem;color:#94a3b8;margin-bottom:8px;"
-                    "font-weight:600;'>Adicionar nova acao:</div>",
+                    "font-weight:600;'>Adicionar nova ação:</div>",
                     unsafe_allow_html=True
                 )
                 _add_c1, _add_c2, _add_c3, _add_c4 = st.columns([3, 2, 2, 1])
                 _add_tipo    = _add_c1.selectbox(
-                    "Tipo de publico", _tipos_disponiveis, key="rm_add_tipo"
+                    "Tipo de público", _tipos_disponiveis, key="rm_add_tipo"
                 )
-                _add_acao    = _add_c2.text_input("Nome da acao", key="rm_add_acao")
+                _add_acao    = _add_c2.text_input("Nome da ação", key="rm_add_acao")
                 _add_canal   = _add_c3.text_input("Canal sugerido", key="rm_add_canal")
                 _add_periodo = _add_c4.number_input(
-                    "Periodo (dias, 0=unico)", min_value=0, step=1, key="rm_add_periodo"
+                    "Período (dias, 0=único)", min_value=0, step=1, key="rm_add_periodo"
                 )
-                if st.button("Adicionar acao", key="rm_add_btn", use_container_width=True):
+                if st.button("Adicionar ação", key="rm_add_btn", use_container_width=True):
                     if _add_acao.strip():
                         run_exec(
                             "INSERT INTO Regua_Matriz "
@@ -5042,10 +5042,10 @@ elif menu == "Relacionamento":
                                 int(_add_periodo) if _add_periodo else None,
                             )
                         )
-                        st.success("Acao adicionada.")
+                        st.success("Ação adicionada.")
                         st.rerun()
                     else:
-                        st.warning("Informe o nome da acao.")
+                        st.warning("Informe o nome da ação.")
 
     # ABA 5 — RELATÓRIO PARA A DIRETORIA
     # ══════════════════════════════════════════════════════════════════════════
@@ -5225,7 +5225,7 @@ def _gerar_backup_completo():
     """Gera backup de todas as tabelas como XLSX ou ZIP de CSVs."""
     tabelas = [
         ("Parceiro",               "SELECT * FROM Parceiro"),
-        ("Doacao",                 "SELECT * FROM Doacao"),
+        ("Doação",                 "SELECT * FROM Doacao"),
         ("Registro_Relacionamento","SELECT * FROM Registro_Relacionamento"),
         ("Demandas_Estrategicas",  "SELECT * FROM Demandas_Estrategicas"),
         ("Registro_Captacao_DI",   "SELECT * FROM Registro_Captacao_DI"),
