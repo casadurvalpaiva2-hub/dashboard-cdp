@@ -1435,7 +1435,7 @@ REGUA_CONFIG = {
 
 def _get_regua_config_db() -> dict:
     """Lê a config da régua do banco. Fallback para REGUA_CONFIG se banco vazio."""
-    df_rm = run_query(
+    df_rm = run_query_cached(
         "SELECT tipo_publico, acao, periodo_dias, canal "
         "FROM Regua_Matriz WHERE ativo = TRUE ORDER BY tipo_publico, id"
     )
@@ -4199,9 +4199,9 @@ elif menu == "Parcerias":
                 FROM Parceiro p 
                 LEFT JOIN Categoria_Parceiro c ON p.id_categoria = c.id_categoria
             """
-            df_p = run_query(query)
+            df_p = run_query_cached(query)
         except Exception:
-            df_p = run_query("SELECT * FROM Parceiro")
+            df_p = run_query_cached("SELECT * FROM Parceiro")
 
         # KPIs no topo
         if not df_p.empty:
@@ -4271,7 +4271,7 @@ elif menu == "Parcerias":
 
         with st.expander("**CADASTRAR NOVO PARCEIRO**", expanded=_abrir_p):
             # Busca categorias para o menu
-            df_cat_list = run_query("SELECT id_categoria, nome_categoria FROM Categoria_Parceiro")
+            df_cat_list = run_query_slow("SELECT id_categoria, nome_categoria FROM Categoria_Parceiro")
             opcoes_cat = dict(zip(df_cat_list['nome_categoria'], df_cat_list['id_categoria']))
             
             with st.form("form_novo_p", clear_on_submit=True):
@@ -4368,7 +4368,7 @@ elif menu == "Parcerias":
         st.markdown("#### Funil de conversão")
         st.caption("Acompanhe o pipeline de prospecção e as conversões recentes para parceiro ativo.")
 
-        df_funil = run_query("""
+        df_funil = run_query_cached("""
             SELECT nome_instituicao, status, data_adesao,
                    (CURRENT_DATE - data_adesao::date) AS dias_na_base
             FROM Parceiro
@@ -4376,7 +4376,7 @@ elif menu == "Parcerias":
             ORDER BY data_adesao DESC
         """)
 
-        df_funil_all = run_query("SELECT nome_instituicao, status, data_adesao FROM Parceiro")
+        df_funil_all = run_query_cached("SELECT nome_instituicao, status, data_adesao FROM Parceiro")
 
         if df_funil_all.empty:
             empty_state("—", "Sem dados", "Cadastre parceiros para visualizar o funil.")
@@ -4441,7 +4441,7 @@ elif menu == "Parcerias":
 
             with col_pc:
                 section("Convertidos nos últimos 90 dias")
-                df_conv = run_query("""
+                df_conv = run_query_cached("""
                     SELECT nome_instituicao, data_adesao,
                            (CURRENT_DATE - data_adesao::date) AS dias_na_base
                     FROM Parceiro
@@ -4525,7 +4525,7 @@ elif menu == "Parcerias":
 
                     if st.button(f"Confirmar importação de {len(df_import)} parceiros", type="primary", use_container_width=True):
                         # Busca id_categoria padrão (primeira disponível)
-                        df_cat_imp = run_query("SELECT id_categoria FROM Categoria_Parceiro LIMIT 1")
+                        df_cat_imp = run_query_slow("SELECT id_categoria FROM Categoria_Parceiro LIMIT 1")
                         id_cat_default = int(df_cat_imp['id_categoria'].values[0]) if not df_cat_imp.empty else 1
 
                         erros = 0
@@ -5199,7 +5199,7 @@ elif menu == "Relacionamento":
 
 
     # ── Semear Regua_Matriz a partir do REGUA_CONFIG (idempotente) ────────────
-    _regua_no_banco = run_query("SELECT COUNT(*) AS n FROM Regua_Matriz")
+    _regua_no_banco = run_query_cached("SELECT COUNT(*) AS n FROM Regua_Matriz")
     if _regua_no_banco.empty or int(_regua_no_banco["n"].values[0]) == 0:
         for _tipo_pub, _acoes in REGUA_CONFIG.items():
             for _item in _acoes:
