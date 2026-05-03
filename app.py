@@ -1332,106 +1332,111 @@ if "schema_ok" not in st.session_state:
 
 # ── Régua de relacionamento: config mestra ──────────────────────────────
 REGUA_CONFIG = {
-    "Parceiros Importantes": [
-        {"acao": "Cartao de aniversario digital",   "periodo_dias": 365, "canal": "WhatsApp/E-mail"},
-        {"acao": "Agradecimento personalizado",      "periodo_dias": 90,  "canal": "E-mail/Presencial"},
-        {"acao": "Destaque em redes + Selo Amigo",   "periodo_dias": 180, "canal": "Redes Sociais"},
-        {"acao": "Mensagem mensal",                  "periodo_dias": 30,  "canal": "E-mail/WhatsApp"},
-        {"acao": "Boletim semanal",                  "periodo_dias": 7,   "canal": "WhatsApp/E-mail"},
-        {"acao": "Brindes e datas comemorativas",    "periodo_dias": 365, "canal": "Presencial"},
-        {"acao": "Cartao de boas festas digital",    "periodo_dias": 365, "canal": "E-mail"},
-        {"acao": "Balanco social",                   "periodo_dias": 365, "canal": "E-mail/Fisico"},
+    "Parceiros importantes": [
+        {"acao": "Cartao de aniversario digital",   "periodo_dias": 365,  "canal": "WhatsApp/E-mail",   "responsavel": "DI"},
+        {"acao": "Agradecimento personalizado",      "periodo_dias": 90,   "canal": "E-mail/Presencial", "responsavel": "DI"},
+        {"acao": "Destaque em redes + Selo Amigo",   "periodo_dias": 180,  "canal": "Redes Sociais",     "responsavel": "DI"},
+        {"acao": "Mensagem mensal",                  "periodo_dias": 30,   "canal": "E-mail/WhatsApp",   "responsavel": "DI"},
+        {"acao": "Mensagem de campanha",             "periodo_dias": 45,   "canal": "WhatsApp/E-mail",   "responsavel": "DI"},
+        {"acao": "Boletim semanal",                  "periodo_dias": 7,    "canal": "WhatsApp/E-mail",   "responsavel": "DI"},
+        {"acao": "Brindes e datas comemorativas",    "periodo_dias": 365,  "canal": "Presencial",        "responsavel": "DI"},
+        {"acao": "Cartao de boas festas digital",    "periodo_dias": 365,  "canal": "E-mail",            "responsavel": "DI"},
+        {"acao": "Balanco social",                   "periodo_dias": 365,  "canal": "E-mail/Fisico",     "responsavel": "DI"},
     ],
     "Financiador": [
-        {"acao": "Cartao de aniversario digital",   "periodo_dias": 365, "canal": "WhatsApp/E-mail"},
-        {"acao": "Agradecimento personalizado",      "periodo_dias": 90,  "canal": "E-mail/Presencial"},
-        {"acao": "Destaque em redes + Selo Amigo",   "periodo_dias": 180, "canal": "Redes Sociais"},
-        {"acao": "Mensagem mensal",                  "periodo_dias": 30,  "canal": "E-mail/WhatsApp"},
-        {"acao": "Mensagem de campanha",             "periodo_dias": 45,  "canal": "WhatsApp/E-mail"},
-        {"acao": "Boletim semanal",                  "periodo_dias": 7,   "canal": "WhatsApp/E-mail"},
-        {"acao": "Brindes e datas comemorativas",    "periodo_dias": 365, "canal": "Presencial"},
-        {"acao": "Cartao de boas festas digital",    "periodo_dias": 365, "canal": "E-mail"},
-        {"acao": "Balanco social",                   "periodo_dias": 365, "canal": "E-mail/Fisico"},
+        {"acao": "Cartao de aniversario digital",   "periodo_dias": 365,  "canal": "WhatsApp/E-mail",   "responsavel": "DI"},
+        {"acao": "Agradecimento personalizado",      "periodo_dias": 90,   "canal": "E-mail/Presencial", "responsavel": "DI"},
+        {"acao": "Destaque em redes + Selo Amigo",   "periodo_dias": 180,  "canal": "Redes Sociais",     "responsavel": "DI"},
+        {"acao": "Mensagem mensal",                  "periodo_dias": 30,   "canal": "E-mail/WhatsApp",   "responsavel": "DI"},
+        {"acao": "Mensagem de campanha",             "periodo_dias": 45,   "canal": "WhatsApp/E-mail",   "responsavel": "DI"},
+        {"acao": "Boletim semanal",                  "periodo_dias": 7,    "canal": "WhatsApp/E-mail",   "responsavel": "DI"},
+        {"acao": "Brindes e datas comemorativas",    "periodo_dias": 365,  "canal": "Presencial",        "responsavel": "DI"},
+        {"acao": "Cartao de boas festas digital",    "periodo_dias": 365,  "canal": "E-mail",            "responsavel": "DI"},
+        {"acao": "Balanco social",                   "periodo_dias": 365,  "canal": "E-mail/Fisico",     "responsavel": "DI"},
     ],
     "Imprensa": [
-        {"acao": "Agradecimento padrao",             "periodo_dias": 90,  "canal": "E-mail"},
-        {"acao": "Mensagem mensal",                  "periodo_dias": 30,  "canal": "E-mail/WhatsApp"},
-        {"acao": "Mensagem de campanha",             "periodo_dias": 45,  "canal": "WhatsApp/E-mail"},
-        {"acao": "Boletim semanal",                  "periodo_dias": 7,   "canal": "WhatsApp/E-mail"},
-        {"acao": "Cartao de boas festas digital",    "periodo_dias": 365, "canal": "E-mail"},
-        {"acao": "Balanco social",                   "periodo_dias": 365, "canal": "E-mail"},
+        {"acao": "Agradecimento padrao",             "periodo_dias": 90,   "canal": "E-mail",            "responsavel": "DI"},
+        {"acao": "Mensagem mensal",                  "periodo_dias": 30,   "canal": "E-mail/WhatsApp",   "responsavel": "DI"},
+        {"acao": "Mensagem de campanha",             "periodo_dias": 45,   "canal": "WhatsApp/E-mail",   "responsavel": "DI"},
+        {"acao": "Boletim semanal",                  "periodo_dias": 7,    "canal": "WhatsApp/E-mail",   "responsavel": "DI"},
+        {"acao": "Cartao de boas festas digital",    "periodo_dias": 365,  "canal": "E-mail",            "responsavel": "DI"},
+        {"acao": "Balanco social",                   "periodo_dias": 365,  "canal": "E-mail",            "responsavel": "DI"},
     ],
-    "Doadores Especiais (nao monetario)": [
-        {"acao": "Cartao de aniversario digital",   "periodo_dias": 365, "canal": "WhatsApp/E-mail"},
-        {"acao": "Agradecimento personalizado",      "periodo_dias": 90,  "canal": "E-mail"},
-        {"acao": "Mensagem mensal",                  "periodo_dias": 30,  "canal": "E-mail/WhatsApp"},
-        {"acao": "Mensagem de campanha",             "periodo_dias": 45,  "canal": "WhatsApp/E-mail"},
-        {"acao": "Boletim semanal",                  "periodo_dias": 7,   "canal": "WhatsApp/E-mail"},
-        {"acao": "Brindes e datas comemorativas",    "periodo_dias": 365, "canal": "Presencial"},
-        {"acao": "Cartao de boas festas digital",    "periodo_dias": 365, "canal": "E-mail"},
+    "Doadores especiais: não mon.": [
+        {"acao": "Cartao de aniversario digital",   "periodo_dias": 365,  "canal": "WhatsApp/E-mail",   "responsavel": "Eq. Tecnica"},
+        {"acao": "Boas-vindas",                      "periodo_dias": None, "canal": "E-mail",            "responsavel": "Eq. Tecnica"},
+        {"acao": "Agradecimento personalizado",      "periodo_dias": 90,   "canal": "E-mail",            "responsavel": "Eq. Tecnica"},
+        {"acao": "Mensagem mensal",                  "periodo_dias": 30,   "canal": "E-mail/WhatsApp",   "responsavel": "DI"},
+        {"acao": "Mensagem de campanha",             "periodo_dias": 45,   "canal": "WhatsApp/E-mail",   "responsavel": "Eq. Tecnica"},
+        {"acao": "Boletim semanal",                  "periodo_dias": 7,    "canal": "WhatsApp/E-mail",   "responsavel": "DI"},
+        {"acao": "Brindes e datas comemorativas",    "periodo_dias": 365,  "canal": "Presencial",        "responsavel": "Eq. Tecnica"},
+        {"acao": "Cartao de boas festas digital",    "periodo_dias": 365,  "canal": "E-mail",            "responsavel": "Eq. Tecnica"},
     ],
-    "Doador Pontual": [
-        {"acao": "Boas-vindas",                      "periodo_dias": None, "canal": "E-mail"},
-        {"acao": "Agradecimento padrao",             "periodo_dias": 90,   "canal": "E-mail"},
-        {"acao": "Boletim semanal",                  "periodo_dias": 7,    "canal": "WhatsApp/E-mail"},
-        {"acao": "Cartao de boas festas digital",    "periodo_dias": 365,  "canal": "E-mail"},
+    "Doador pontual": [
+        {"acao": "Boas-vindas",                      "periodo_dias": None, "canal": "E-mail",            "responsavel": "Telemarketing"},
+        {"acao": "Agradecimento personalizado",      "periodo_dias": 90,   "canal": "E-mail/Presencial", "responsavel": "Telemarketing"},
+        {"acao": "Boletim semanal",                  "periodo_dias": 7,    "canal": "WhatsApp/E-mail",   "responsavel": "DI"},
+        {"acao": "Cartao de boas festas digital",    "periodo_dias": 365,  "canal": "E-mail",            "responsavel": "Telemarketing"},
     ],
-    "Voluntario": [
-        {"acao": "Cartao de aniversario digital",   "periodo_dias": 365, "canal": "WhatsApp/E-mail"},
-        {"acao": "Boas-vindas",                      "periodo_dias": None, "canal": "E-mail"},
-        {"acao": "Mensagem mensal",                  "periodo_dias": 30,  "canal": "E-mail/WhatsApp"},
-        {"acao": "Mensagem de campanha",             "periodo_dias": 45,  "canal": "WhatsApp/E-mail"},
-        {"acao": "Boletim semanal",                  "periodo_dias": 7,   "canal": "WhatsApp/E-mail"},
-        {"acao": "Cartao de boas festas digital",    "periodo_dias": 365, "canal": "E-mail"},
+    "Voluntário": [
+        {"acao": "Cartao de aniversario digital",   "periodo_dias": 365,  "canal": "WhatsApp/E-mail",   "responsavel": "RH"},
+        {"acao": "Boas-vindas",                      "periodo_dias": None, "canal": "E-mail",            "responsavel": "RH"},
+        {"acao": "Mensagem mensal",                  "periodo_dias": 30,   "canal": "E-mail/WhatsApp",   "responsavel": "DI"},
+        {"acao": "Mensagem de campanha",             "periodo_dias": 45,   "canal": "WhatsApp/E-mail",   "responsavel": "DI"},
+        {"acao": "Boletim semanal",                  "periodo_dias": 7,    "canal": "WhatsApp/E-mail",   "responsavel": "DI"},
+        {"acao": "Cartao de boas festas digital",    "periodo_dias": 365,  "canal": "E-mail",            "responsavel": "RH"},
     ],
-    "Apoiadores de Eventos": [
-        {"acao": "Agradecimento padrao",             "periodo_dias": 90,  "canal": "E-mail"},
-        {"acao": "Mensagem mensal",                  "periodo_dias": 30,  "canal": "E-mail/WhatsApp"},
-        {"acao": "Cartao de boas festas digital",    "periodo_dias": 365, "canal": "E-mail"},
+    "Apoiadores de eventos": [
+        {"acao": "Boas-vindas",                      "periodo_dias": None, "canal": "E-mail",            "responsavel": "Eq. Tecnica"},
+        {"acao": "Agradecimento personalizado",      "periodo_dias": 90,   "canal": "E-mail",            "responsavel": "Eq. Tecnica"},
+        {"acao": "Destaque em redes + Selo Amigo",   "periodo_dias": 180,  "canal": "Redes Sociais",     "responsavel": "DI"},
+        {"acao": "Mensagem mensal",                  "periodo_dias": 30,   "canal": "E-mail/WhatsApp",   "responsavel": "DI"},
+        {"acao": "Boletim semanal",                  "periodo_dias": 7,    "canal": "WhatsApp/E-mail",   "responsavel": "DI"},
+        {"acao": "Cartao de boas festas digital",    "periodo_dias": 365,  "canal": "E-mail",            "responsavel": "DI"},
     ],
-    "Conselho e Diretoria": [
-        {"acao": "Cartao de aniversario digital",   "periodo_dias": 365, "canal": "WhatsApp"},
-        {"acao": "Mensagem mensal",                  "periodo_dias": 30,  "canal": "E-mail/WhatsApp"},
-        {"acao": "Mensagem de campanha",             "periodo_dias": 45,  "canal": "WhatsApp"},
-        {"acao": "Boletim semanal",                  "periodo_dias": 7,   "canal": "WhatsApp/E-mail"},
-        {"acao": "Cartao de boas festas digital",    "periodo_dias": 365, "canal": "E-mail"},
-        {"acao": "Balanco social",                   "periodo_dias": 365, "canal": "E-mail/Fisico"},
+    "Conselho e diretoria": [
+        {"acao": "Cartao de aniversario digital",   "periodo_dias": 365,  "canal": "WhatsApp/E-mail",   "responsavel": "DI"},
+        {"acao": "Mensagem mensal",                  "periodo_dias": 30,   "canal": "E-mail/WhatsApp",   "responsavel": "DI"},
+        {"acao": "Mensagem de campanha",             "periodo_dias": 45,   "canal": "WhatsApp/E-mail",   "responsavel": "DI"},
+        {"acao": "Boletim semanal",                  "periodo_dias": 7,    "canal": "WhatsApp/E-mail",   "responsavel": "DI"},
+        {"acao": "Cartao de boas festas digital",    "periodo_dias": 365,  "canal": "E-mail",            "responsavel": "DI"},
+        {"acao": "Balanco social",                   "periodo_dias": 365,  "canal": "E-mail/Fisico",     "responsavel": "DI"},
     ],
     "Acolhidos": [
-        {"acao": "Cartao de aniversario digital",   "periodo_dias": 365, "canal": "WhatsApp/E-mail"},
-        {"acao": "Boas-vindas",                      "periodo_dias": None, "canal": "E-mail"},
-        {"acao": "Mensagem de campanha",             "periodo_dias": 45,  "canal": "WhatsApp/E-mail"},
-        {"acao": "Cartao de boas festas digital",    "periodo_dias": 365, "canal": "E-mail"},
+        {"acao": "Cartao de aniversario digital",   "periodo_dias": 365,  "canal": "WhatsApp/E-mail",   "responsavel": "Responsavel"},
+        {"acao": "Boas-vindas",                      "periodo_dias": None, "canal": "E-mail",            "responsavel": "Responsavel"},
+        {"acao": "Mensagem de campanha",             "periodo_dias": 45,   "canal": "WhatsApp/E-mail",   "responsavel": "Responsavel"},
+        {"acao": "Cartao de boas festas digital",    "periodo_dias": 365,  "canal": "E-mail",            "responsavel": "Responsavel"},
     ],
-    "Doador via Site": [
-        {"acao": "Agradecimento automatico",         "periodo_dias": None, "canal": "E-mail"},
-        {"acao": "Boletim semanal",                  "periodo_dias": 7,   "canal": "WhatsApp/E-mail"},
-        {"acao": "Cartao de boas festas digital",    "periodo_dias": 365, "canal": "E-mail"},
+    "Doador via site": [
+        {"acao": "Agradecimento automatico",         "periodo_dias": None, "canal": "E-mail",            "responsavel": "Plataforma"},
+        {"acao": "Boletim semanal",                  "periodo_dias": 7,    "canal": "WhatsApp/E-mail",   "responsavel": "DI"},
+        {"acao": "Cartao de boas festas digital",    "periodo_dias": 365,  "canal": "E-mail",            "responsavel": "DI"},
     ],
-    "Doadores em Geral": [
-        {"acao": "Boas-vindas",                      "periodo_dias": None, "canal": "E-mail"},
-        {"acao": "Agradecimento padrao",             "periodo_dias": 90,  "canal": "E-mail"},
-        {"acao": "Mensagem mensal",                  "periodo_dias": 30,  "canal": "E-mail/WhatsApp"},
-        {"acao": "Mensagem de campanha",             "periodo_dias": 45,  "canal": "WhatsApp/E-mail"},
-        {"acao": "Boletim semanal",                  "periodo_dias": 7,   "canal": "WhatsApp/E-mail"},
-        {"acao": "Cartao de boas festas digital",    "periodo_dias": 365, "canal": "E-mail"},
+    "Doadores em geral": [
+        {"acao": "Boas-vindas",                      "periodo_dias": None, "canal": "E-mail",            "responsavel": "Telemarketing"},
+        {"acao": "Agradecimento padrao",             "periodo_dias": 90,   "canal": "E-mail",            "responsavel": "Telemarketing"},
+        {"acao": "Mensagem mensal",                  "periodo_dias": 30,   "canal": "E-mail/WhatsApp",   "responsavel": "DI"},
+        {"acao": "Mensagem de campanha",             "periodo_dias": 45,   "canal": "WhatsApp/E-mail",   "responsavel": "Telemarketing"},
+        {"acao": "Boletim semanal",                  "periodo_dias": 7,    "canal": "WhatsApp/E-mail",   "responsavel": "DI"},
+        {"acao": "Cartao de boas festas digital",    "periodo_dias": 365,  "canal": "E-mail",            "responsavel": "Telemarketing"},
     ],
     "Visitantes": [
-        {"acao": "Agradecimento padrao",             "periodo_dias": 90,  "canal": "E-mail"},
-        {"acao": "Boletim semanal",                  "periodo_dias": 7,   "canal": "WhatsApp/E-mail"},
-        {"acao": "Cartao de boas festas digital",    "periodo_dias": 365, "canal": "E-mail"},
+        {"acao": "Agradecimento padrao",             "periodo_dias": 90,   "canal": "E-mail",            "responsavel": "Telemarketing"},
+        {"acao": "Boletim semanal",                  "periodo_dias": 7,    "canal": "WhatsApp/E-mail",   "responsavel": "DI"},
+        {"acao": "Cartao de boas festas digital",    "periodo_dias": 365,  "canal": "E-mail",            "responsavel": "Telemarketing"},
     ],
-    "Funcionario": [
-        {"acao": "Cartao de aniversario digital",   "periodo_dias": 365, "canal": "WhatsApp"},
-        {"acao": "Boas-vindas",                      "periodo_dias": None, "canal": "E-mail"},
-        {"acao": "Mensagem mensal",                  "periodo_dias": 30,  "canal": "E-mail/WhatsApp"},
-        {"acao": "Boletim semanal",                  "periodo_dias": 7,   "canal": "WhatsApp/E-mail"},
-        {"acao": "Cartao de boas festas digital",    "periodo_dias": 365, "canal": "E-mail"},
+    "Funcionário": [
+        {"acao": "Cartao de aniversario digital",   "periodo_dias": 365,  "canal": "WhatsApp",          "responsavel": "RH"},
+        {"acao": "Boas-vindas",                      "periodo_dias": None, "canal": "E-mail",            "responsavel": "RH"},
+        {"acao": "Mensagem mensal",                  "periodo_dias": 30,   "canal": "E-mail/WhatsApp",   "responsavel": "RH"},
+        {"acao": "Boletim semanal",                  "periodo_dias": 7,    "canal": "WhatsApp/E-mail",   "responsavel": "DI"},
+        {"acao": "Cartao de boas festas digital",    "periodo_dias": 365,  "canal": "E-mail",            "responsavel": "RH"},
     ],
     "Fornecedores": [
-        {"acao": "Agradecimento padrao",             "periodo_dias": 90,  "canal": "E-mail"},
-        {"acao": "Boletim semanal",                  "periodo_dias": 7,   "canal": "WhatsApp/E-mail"},
-        {"acao": "Cartao de boas festas digital",    "periodo_dias": 365, "canal": "E-mail"},
+        {"acao": "Agradecimento padrao",             "periodo_dias": 90,   "canal": "E-mail",            "responsavel": "Responsavel"},
+        {"acao": "Boletim semanal",                  "periodo_dias": 7,    "canal": "WhatsApp/E-mail",   "responsavel": "DI"},
+        {"acao": "Cartao de boas festas digital",    "periodo_dias": 365,  "canal": "E-mail",            "responsavel": "Responsavel"},
     ],
 }
 
@@ -1439,13 +1444,34 @@ REGUA_CONFIG = {
 # ON CONFLICT DO NOTHING preserva edições manuais feitas pela UI.
 # Sem gate de COUNT: novos tipos adicionados ao REGUA_CONFIG propagam
 # automaticamente na próxima sessão sem precisar de deploy ou reset.
+if "regua_tipo_norm_ok" not in st.session_state:
+    _tp_renames = [
+        ("Parceiros Importantes",             "Parceiros importantes"),
+        ("Doadores Especiais (nao monetario)","Doadores especiais: não mon."),
+        ("Doador Pontual",                    "Doador pontual"),
+        ("Voluntario",                        "Voluntário"),
+        ("Apoiadores de Eventos",             "Apoiadores de eventos"),
+        ("Conselho e Diretoria",              "Conselho e diretoria"),
+        ("Doador via Site",                   "Doador via site"),
+        ("Doadores em Geral",                 "Doadores em geral"),
+        ("Funcionario",                       "Funcionário"),
+    ]
+    for _old, _new in _tp_renames:
+        run_exec("UPDATE Regua_Matriz SET tipo_publico = %s WHERE tipo_publico = %s",   (_new, _old))
+        run_exec("UPDATE Regua_Pendencias SET tipo_publico_regua = %s WHERE tipo_publico_regua = %s", (_new, _old))
+        run_exec("UPDATE Parceiro SET tipo_publico_regua = %s WHERE tipo_publico_regua = %s", (_new, _old))
+    st.session_state.regua_tipo_norm_ok = True
+
 if "regua_seed_ok" not in st.session_state:
     for _rsc_tp, _rsc_acoes in REGUA_CONFIG.items():
         for _rsc_item in _rsc_acoes:
             run_exec(
-                "INSERT INTO Regua_Matriz (tipo_publico, acao, periodo_dias, canal) "
-                "VALUES (%s, %s, %s, %s) ON CONFLICT (tipo_publico, acao) DO NOTHING",
-                (_rsc_tp, _rsc_item["acao"], _rsc_item["periodo_dias"], _rsc_item["canal"])
+                "INSERT INTO Regua_Matriz (tipo_publico, acao, periodo_dias, canal, responsavel) "
+                "VALUES (%s, %s, %s, %s, %s) "
+                "ON CONFLICT (tipo_publico, acao) "
+                "DO UPDATE SET responsavel = EXCLUDED.responsavel",
+                (_rsc_tp, _rsc_item["acao"], _rsc_item["periodo_dias"],
+                 _rsc_item["canal"], _rsc_item.get("responsavel", "DI"))
             )
     st.session_state.regua_seed_ok = True
 
@@ -2029,6 +2055,7 @@ def _rel_tab_regua():
         "RH":           "RH",
         "Responsavel":  "RP",
     }
+    # ── Colunas fixas da matriz (12 ações canônicas) ──────────────────────
     _ACOES_HEADER = [
         "Aniversário", "Boas-vindas", "Agradec. padrão", "Agradec. person.",
         "Agradec. auto", "Destaque redes", "Msg. mensais", "Msg. esporádicas",
@@ -2044,30 +2071,47 @@ def _rel_tab_regua():
         "Brindes em datas comemorativas (Mídia Kit)",
         "Cartão de Boas Festas Digital", "Balanço Social físico ou digital",
     ]
-    _MATRIZ_DADOS = [
-        ("Acolhidos",                     ["Responsavel","Responsavel",None,None,None,None,None,"Responsavel",None,None,"Responsavel",None]),
-        ("Doador via site",               [None,None,None,None,"Plataforma",None,None,None,"DI",None,"DI",None]),
-        ("Doador pontual",                [None,"Telemarketing",None,"Telemarketing",None,None,None,None,"DI",None,"Telemarketing",None]),
-        ("Doadores em geral",             [None,"Telemarketing","Telemarketing",None,None,None,"DI","Telemarketing","DI",None,"Telemarketing",None]),
-        ("Doadores especiais: não mon.",  [None,"Eq. Tecnica",None,"Eq. Tecnica",None,None,"DI","Eq. Tecnica","DI",None,"Eq. Tecnica",None]),
-        ("Parceiros importantes",        [None,"DI",None,"DI",None,"DI","DI","DI","DI","DI","DI","DI"]),
-        ("Financiador",                  [None,"DI",None,"DI",None,"DI","DI","DI","DI","DI","DI","DI"]),
-        ("Imprensa",                     [None,"DI",None,"DI",None,"DI","DI","DI","DI","DI","DI",None]),
-        ("Voluntário",                   ["RH","RH",None,None,None,None,"DI","DI","DI",None,"RH",None]),
-        ("Visitantes",                   [None,None,"Telemarketing",None,None,None,None,None,"DI",None,"Telemarketing",None]),
-        ("Apoiadores de eventos",        [None,"Eq. Tecnica",None,"Eq. Tecnica",None,"DI","DI",None,"DI",None,"DI",None]),
-        ("Conselho e diretoria",         ["DI",None,None,None,None,None,"DI","DI","DI",None,"DI","DI"]),
-        ("Funcionário",                  ["RH","RH",None,None,None,None,"RH",None,"DI",None,"RH",None]),
-        ("Fornecedores",                 [None,None,"Responsavel",None,None,None,None,None,"DI",None,"Responsavel",None]),
+    # Mapa: nome longo da coluna → nome da ação no banco (REGUA_CONFIG usa nomes curtos)
+    _ACOES_DB = [
+        "Cartao de aniversario digital", "Boas-vindas", "Agradecimento padrao",
+        "Agradecimento personalizado",   "Agradecimento automatico",
+        "Destaque em redes + Selo Amigo", "Mensagem mensal", "Mensagem de campanha",
+        "Boletim semanal", "Brindes e datas comemorativas",
+        "Cartao de boas festas digital", "Balanco social",
     ]
+    # Ordem canônica das linhas
+    _TIPOS_ORDER = [
+        "Acolhidos", "Doador via site", "Doador pontual", "Doadores em geral",
+        "Doadores especiais: não mon.", "Parceiros importantes", "Financiador",
+        "Imprensa", "Voluntário", "Visitantes", "Apoiadores de eventos",
+        "Conselho e diretoria", "Funcionário", "Fornecedores",
+    ]
+
+    # ── Buscar atribuições de equipe do banco ──────────────────────────────
+    _df_rm = run_query_cached(
+        "SELECT tipo_publico, acao, responsavel FROM Regua_Matriz WHERE ativo = TRUE"
+    )
+    # pivot: {(tipo_publico, col_idx): equipe}
+    _rm_pivot: dict = {}
+    if not _df_rm.empty:
+        _acao_to_col = {acao: i for i, acao in enumerate(_ACOES_DB)}
+        for _, _rm_row in _df_rm.iterrows():
+            _col = _acao_to_col.get(_rm_row["acao"])
+            if _col is not None and _rm_row["responsavel"]:
+                _rm_pivot[(_rm_row["tipo_publico"], _col)] = _rm_row["responsavel"]
+
+    # Linhas = tipos com pelo menos 1 ação no banco; respeitar _TIPOS_ORDER
+    _tipos_db = set(_df_rm["tipo_publico"].unique()) if not _df_rm.empty else set()
+    _tipos_matrix = [t for t in _TIPOS_ORDER if t in _tipos_db] or _TIPOS_ORDER
 
     _th_style = "background:#1e293b;color:#94a3b8;font-size:10px;font-weight:700;text-align:center;padding:6px 4px;border:1px solid #334155;white-space:nowrap;"
     _td_pub_style = "background:#1e293b;color:#e2e8f0;font-size:11px;font-weight:600;padding:6px 10px;border:1px solid #334155;white-space:nowrap;"
 
     _html_rows = ""
-    for pub, acoes in _MATRIZ_DADOS:
+    for pub in _tipos_matrix:
         _cells = f"<td style='{_td_pub_style}'>{pub}</td>"
-        for equipe in acoes:
+        for _col_idx in range(len(_ACOES_HEADER)):
+            equipe = _rm_pivot.get((pub, _col_idx))
             if equipe:
                 _cor = _CORES_EQUIPE.get(equipe, "#64748b")
                 _abrev = _ABREV_EQUIPE.get(equipe, equipe[:2].upper())
