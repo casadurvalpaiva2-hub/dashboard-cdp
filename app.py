@@ -1325,6 +1325,21 @@ if "schema_ok" not in st.session_state:
     setup_schema()
     st.session_state.schema_ok = True
 
+# ── Seed da Regua_Matriz — roda 1x por sessão ────────────────────────────────
+# Garante que todo tipo definido em REGUA_CONFIG exista no banco.
+# ON CONFLICT DO NOTHING preserva edições manuais feitas pela UI.
+# Sem gate de COUNT: novos tipos adicionados ao REGUA_CONFIG propagam
+# automaticamente na próxima sessão sem precisar de deploy ou reset.
+if "regua_seed_ok" not in st.session_state:
+    for _rsc_tp, _rsc_acoes in REGUA_CONFIG.items():
+        for _rsc_item in _rsc_acoes:
+            run_exec(
+                "INSERT INTO Regua_Matriz (tipo_publico, acao, periodo_dias, canal) "
+                "VALUES (%s, %s, %s, %s) ON CONFLICT (tipo_publico, acao) DO NOTHING",
+                (_rsc_tp, _rsc_item["acao"], _rsc_item["periodo_dias"], _rsc_item["canal"])
+            )
+    st.session_state.regua_seed_ok = True
+
 
 
 # ── Régua de relacionamento: config mestra ──────────────────────────────
@@ -1434,7 +1449,9 @@ REGUA_CONFIG = {
 
 
 def _get_regua_config_db() -> dict:
-    """Lê a config da régua do banco. Fallback para REGUA_CONFIG se banco vazio."""
+    """Lê a config da régua do banco (fonte de verdade em runtime).
+    Fallback para REGUA_CONFIG apenas como segurança — em condições normais
+    a tabela já foi semeada pelo bloco de seed na inicialização da sessão."""
     df_rm = run_query_cached(
         "SELECT tipo_publico, acao, periodo_dias, canal "
         "FROM Regua_Matriz WHERE ativo = TRUE ORDER BY tipo_publico, id"
@@ -5196,18 +5213,6 @@ elif menu == "Relacionamento":
             UNIQUE (tipo_publico, acao)
         )
     """)
-
-
-    # ── Semear Regua_Matriz a partir do REGUA_CONFIG (idempotente) ────────────
-    _regua_no_banco = run_query_cached("SELECT COUNT(*) AS n FROM Regua_Matriz")
-    if _regua_no_banco.empty or int(_regua_no_banco["n"].values[0]) == 0:
-        for _tipo_pub, _acoes in REGUA_CONFIG.items():
-            for _item in _acoes:
-                run_exec(
-                    "INSERT INTO Regua_Matriz (tipo_publico, acao, periodo_dias, canal) "
-                    "VALUES (%s, %s, %s, %s) ON CONFLICT (tipo_publico, acao) DO NOTHING",
-                    (_tipo_pub, _item["acao"], _item["periodo_dias"], _item["canal"])
-                )
 
 
     # ── Dados base ────────────────────────────────────────────────────────────
