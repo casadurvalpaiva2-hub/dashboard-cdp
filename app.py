@@ -1457,8 +1457,7 @@ if "regua_tipo_norm_ok" not in st.session_state:
         ("Funcionario",                       "Funcionário"),
     ]
     for _old, _new in _tp_renames:
-        run_exec("UPDATE Regua_Matriz SET tipo_publico = %s WHERE tipo_publico = %s",   (_new, _old))
-        run_exec("UPDATE Regua_Pendencias SET tipo_publico_regua = %s WHERE tipo_publico_regua = %s", (_new, _old))
+        run_exec("UPDATE Regua_Matriz SET tipo_publico = %s WHERE tipo_publico = %s", (_new, _old))
         run_exec("UPDATE Parceiro SET tipo_publico_regua = %s WHERE tipo_publico_regua = %s", (_new, _old))
     st.session_state.regua_tipo_norm_ok = True
 
