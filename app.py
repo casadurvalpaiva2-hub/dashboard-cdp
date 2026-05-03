@@ -2267,79 +2267,62 @@ def _rel_tab_regua():
             _ed_tipo = st.selectbox(
                 "Tipo de público:", _tipos_disponiveis, key="rm_tipo_sel"
             )
-            df_ed = df_matriz[df_matriz["tipo_publico"] == _ed_tipo].copy()
+            df_orig = df_matriz[df_matriz["tipo_publico"] == _ed_tipo].copy()
 
-            st.markdown(
-                f"<div style='font-size:0.82rem;color:#94a3b8;margin-bottom:8px;'>"
-                f"{len(df_ed)} ação(ões) configurada(s) para <b>{_ed_tipo}</b></div>",
-                unsafe_allow_html=True
+            _equipes = ["DI","Telemarketing","Eq. Tecnica","Plataforma","RH","Responsavel"]
+
+            df_edited = st.data_editor(
+                df_orig[["id","acao","periodo_dias","canal","responsavel","ativo"]],
+                column_config={
+                    "id":           st.column_config.NumberColumn("ID",            disabled=True, width="small"),
+                    "acao":         st.column_config.TextColumn("Ação",            width="large"),
+                    "periodo_dias": st.column_config.NumberColumn("Período (dias)", min_value=0, step=1),
+                    "canal":        st.column_config.TextColumn("Canal"),
+                    "responsavel":  st.column_config.SelectboxColumn("Equipe",     options=_equipes),
+                    "ativo":        st.column_config.CheckboxColumn("Ativo",       width="small"),
+                },
+                hide_index=True,
+                use_container_width=True,
+                num_rows="dynamic",
+                key="rm_data_editor",
             )
 
-            for _, _rm in df_ed.iterrows():
-                _rm_c1, _rm_c2, _rm_c3, _rm_c4, _rm_c5 = st.columns([3, 1, 2, 1, 1])
-                _rm_c1.markdown(
-                    f"<div style='font-size:0.85rem;color:#e2e8f0;padding-top:8px;'>{_rm['acao']}</div>",
-                    unsafe_allow_html=True
-                )
-                _rm_c2.markdown(
-                    f"<div style='font-size:0.8rem;color:#94a3b8;padding-top:8px;'>"
-                    f"{'A cada ' + str(int(_rm['periodo_dias'])) + 'd' if pd.notna(_rm['periodo_dias']) else 'Unica'}"
-                    f"</div>",
-                    unsafe_allow_html=True
-                )
-                _rm_c3.markdown(
-                    f"<div style='font-size:0.8rem;color:#94a3b8;padding-top:8px;'>{_rm['canal'] or '—'}</div>",
-                    unsafe_allow_html=True
-                )
-                _new_ativo = _rm_c4.toggle(
-                    "Ativo", value=bool(_rm["ativo"]), key=f"rm_ativo_{_rm['id']}"
-                )
-                if bool(_new_ativo) != bool(_rm["ativo"]):
-                    run_exec(
-                        "UPDATE Regua_Matriz SET ativo = %s WHERE id = %s",
-                        (bool(_new_ativo), int(_rm["id"]))
-                    )
-                    st.rerun()
-                if _rm_c5.button("Remover", key=f"rm_del_{_rm['id']}", type="secondary"):
-                    run_exec(
-                        "DELETE FROM Regua_Matriz WHERE id = %s",
-                        (int(_rm["id"]),)
-                    )
-                    st.rerun()
+            _sv_col, _del_col = st.columns([1, 3])
+            if _sv_col.button("Salvar alterações", key="rm_save_btn", type="primary", use_container_width=True):
+                _orig_ids = set(df_orig["id"].tolist())
+                _edit_ids = set(df_edited["id"].dropna().astype(int).tolist())
 
-            st.divider()
-            st.markdown(
-                "<div style='font-size:0.82rem;color:#94a3b8;margin-bottom:8px;"
-                "font-weight:600;'>Adicionar nova ação:</div>",
-                unsafe_allow_html=True
-            )
-            _add_c1, _add_c2, _add_c3, _add_c4 = st.columns([3, 2, 2, 1])
-            _add_tipo    = _add_c1.selectbox(
-                "Tipo de público", _tipos_disponiveis, key="rm_add_tipo"
-            )
-            _add_acao    = _add_c2.text_input("Nome da ação", key="rm_add_acao")
-            _add_canal   = _add_c3.text_input("Canal sugerido", key="rm_add_canal")
-            _add_periodo = _add_c4.number_input(
-                "Período (dias, 0=único)", min_value=0, step=1, key="rm_add_periodo"
-            )
-            if st.button("Adicionar ação", key="rm_add_btn", use_container_width=True):
-                if _add_acao.strip():
-                    run_exec(
-                        "INSERT INTO Regua_Matriz "
-                        "(tipo_publico, acao, canal, periodo_dias, ativo) "
-                        "VALUES (%s, %s, %s, %s, TRUE) "
-                        "ON CONFLICT (tipo_publico, acao) DO NOTHING",
-                        (
-                            _add_tipo,
-                            _add_acao.strip(),
-                            _add_canal.strip() or None,
-                            int(_add_periodo) if _add_periodo else None,
+                # Linhas removidas → DELETE
+                for _del_id in _orig_ids - _edit_ids:
+                    run_exec("DELETE FROM Regua_Matriz WHERE id = %s", (int(_del_id),))
+
+                for _, _erow in df_edited.iterrows():
+                    _row_id = _erow.get("id")
+                    _acao   = (_erow["acao"] or "").strip()
+                    if not _acao:
+                        continue
+                    _periodo = int(_erow["periodo_dias"]) if pd.notna(_erow.get("periodo_dias")) and _erow["periodo_dias"] else None
+                    _canal   = (_erow.get("canal") or "").strip() or None
+                    _resp    = _erow.get("responsavel") or "DI"
+                    _ativo   = bool(_erow.get("ativo", True))
+
+                    if pd.notna(_row_id):  # linha existente → UPDATE
+                        run_exec(
+                            "UPDATE Regua_Matriz "
+                            "SET acao=%s, periodo_dias=%s, canal=%s, responsavel=%s, ativo=%s "
+                            "WHERE id=%s",
+                            (_acao, _periodo, _canal, _resp, _ativo, int(_row_id))
                         )
-                    )
-                    st.success("Ação adicionada.")
-                    st.rerun()
-                else:
-                    st.warning("Informe o nome da ação.")
+                    else:  # linha nova → INSERT
+                        run_exec(
+                            "INSERT INTO Regua_Matriz (tipo_publico, acao, periodo_dias, canal, responsavel, ativo) "
+                            "VALUES (%s, %s, %s, %s, %s, %s) "
+                            "ON CONFLICT (tipo_publico, acao) DO NOTHING",
+                            (_ed_tipo, _acao, _periodo, _canal, _resp, _ativo)
+                        )
+
+                st.success("Alterações salvas.")
+                st.rerun()
 
 # ABA 5 — RELATÓRIO PARA A DIRETORIA
 # ══════════════════════════════════════════════════════════════════════════
