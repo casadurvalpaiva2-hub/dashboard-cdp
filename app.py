@@ -1341,7 +1341,7 @@ REGUA_CONFIG = {
         {"acao": "Boletim semanal",                  "periodo_dias": 7,    "canal": "WhatsApp/E-mail",   "responsavel": "DI"},
         {"acao": "Brindes e datas comemorativas",    "periodo_dias": 365,  "canal": "Presencial",        "responsavel": "DI"},
         {"acao": "Cartao de boas festas digital",    "periodo_dias": 365,  "canal": "E-mail",            "responsavel": "DI"},
-        {"acao": "Balanco social",                   "periodo_dias": 365,  "canal": "E-mail/Fisico",     "responsavel": "DI"},
+        {"acao": "Balanço Social",                   "periodo_dias": 365,  "canal": "E-mail/Fisico",     "responsavel": "DI"},
     ],
     "Financiador": [
         {"acao": "Cartao de aniversario digital",   "periodo_dias": 365,  "canal": "WhatsApp/E-mail",   "responsavel": "DI"},
@@ -1352,7 +1352,7 @@ REGUA_CONFIG = {
         {"acao": "Boletim semanal",                  "periodo_dias": 7,    "canal": "WhatsApp/E-mail",   "responsavel": "DI"},
         {"acao": "Brindes e datas comemorativas",    "periodo_dias": 365,  "canal": "Presencial",        "responsavel": "DI"},
         {"acao": "Cartao de boas festas digital",    "periodo_dias": 365,  "canal": "E-mail",            "responsavel": "DI"},
-        {"acao": "Balanco social",                   "periodo_dias": 365,  "canal": "E-mail/Fisico",     "responsavel": "DI"},
+        {"acao": "Balanço Social",                   "periodo_dias": 365,  "canal": "E-mail/Fisico",     "responsavel": "DI"},
     ],
     "Imprensa": [
         {"acao": "Agradecimento padrao",             "periodo_dias": 90,   "canal": "E-mail",            "responsavel": "DI"},
@@ -1360,7 +1360,7 @@ REGUA_CONFIG = {
         {"acao": "Mensagem de campanha",             "periodo_dias": 45,   "canal": "WhatsApp/E-mail",   "responsavel": "DI"},
         {"acao": "Boletim semanal",                  "periodo_dias": 7,    "canal": "WhatsApp/E-mail",   "responsavel": "DI"},
         {"acao": "Cartao de boas festas digital",    "periodo_dias": 365,  "canal": "E-mail",            "responsavel": "DI"},
-        {"acao": "Balanco social",                   "periodo_dias": 365,  "canal": "E-mail",            "responsavel": "DI"},
+        {"acao": "Balanço Social",                   "periodo_dias": 365,  "canal": "E-mail",            "responsavel": "DI"},
     ],
     "Doadores especiais: não mon.": [
         {"acao": "Cartao de aniversario digital",   "periodo_dias": 365,  "canal": "WhatsApp/E-mail",   "responsavel": "Eq. Tecnica"},
@@ -1400,7 +1400,7 @@ REGUA_CONFIG = {
         {"acao": "Mensagem de campanha",             "periodo_dias": 45,   "canal": "WhatsApp/E-mail",   "responsavel": "DI"},
         {"acao": "Boletim semanal",                  "periodo_dias": 7,    "canal": "WhatsApp/E-mail",   "responsavel": "DI"},
         {"acao": "Cartao de boas festas digital",    "periodo_dias": 365,  "canal": "E-mail",            "responsavel": "DI"},
-        {"acao": "Balanco social",                   "periodo_dias": 365,  "canal": "E-mail/Fisico",     "responsavel": "DI"},
+        {"acao": "Balanço Social",                   "periodo_dias": 365,  "canal": "E-mail/Fisico",     "responsavel": "DI"},
     ],
     "Acolhidos": [
         {"acao": "Cartao de aniversario digital",   "periodo_dias": 365,  "canal": "WhatsApp/E-mail",   "responsavel": "Responsavel"},
@@ -1446,12 +1446,12 @@ REGUA_CONFIG = {
 # automaticamente na próxima sessão sem precisar de deploy ou reset.
 if "regua_tipo_norm_ok" not in st.session_state:
     _tp_renames = [
-        ("Parceiros Importantes",             "Parceiros importantes"),
+        ("Parceiros importantes",             "Parceiros importantes"),
         ("Doadores Especiais (nao monetario)","Doadores especiais: não mon."),
         ("Doador Pontual",                    "Doador pontual"),
-        ("Voluntario",                        "Voluntário"),
+        ("Voluntário",                        "Voluntário"),
         ("Apoiadores de Eventos",             "Apoiadores de eventos"),
-        ("Conselho e Diretoria",              "Conselho e diretoria"),
+        ("Conselho e diretoria",              "Conselho e diretoria"),
         ("Doador via Site",                   "Doador via site"),
         ("Doadores em Geral",                 "Doadores em geral"),
         ("Funcionario",                       "Funcionário"),
@@ -1608,7 +1608,7 @@ def _rel_tab_registrar(df_parceiros, df_interacoes):
                     _id_p_reg   = int(df_parceiros[df_parceiros["nome_instituicao"] == _parc_sel]["id_parceiro"].values[0])
                     _desc_final = f"[{_tipo_sel}] {_descricao.strip()}"
                     if _prox_acao.strip():
-                        _desc_final += f" | Proxima acao: {_prox_acao.strip()}"
+                        _desc_final += f" | Próxima ação: {_prox_acao.strip()}"
                     run_exec(
                         "INSERT INTO Registro_Relacionamento "
                         "(id_parceiro, id_contato, data_interacao, descricao_do_que_foi_feito, "
@@ -1674,14 +1674,14 @@ def _rel_tab_registrar(df_parceiros, df_interacoes):
             # Mostrar referência geral da régua
             st.markdown("<div style=\'font-size:0.82rem;color:#94A3B8;margin-bottom:8px;\'>Ações por tipo de público:</div>", unsafe_allow_html=True)
             _REGUA_REF = [
-                ("Parceiros Importantes", ["Agradec. personalizado", "Destaque em redes", "Mensagem mensal", "Boletim semanal", "Brindes", "Boas festas", "Balanco social"]),
-                ("Financiador",           ["Agradec. personalizado", "Destaque em redes", "Mensagem mensal", "Mensagem campanha", "Boletim semanal", "Brindes", "Balanco social"]),
+                ("Parceiros importantes", ["Agradec. personalizado", "Destaque em redes", "Mensagem mensal", "Boletim semanal", "Brindes", "Boas festas", "Balanço Social"]),
+                ("Financiador",           ["Agradec. personalizado", "Destaque em redes", "Mensagem mensal", "Mensagem campanha", "Boletim semanal", "Brindes", "Balanço Social"]),
                 ("Imprensa",              ["Agradec. padrao", "Mensagem mensal", "Mensagem campanha", "Boletim semanal"]),
                 ("Doadores Especiais",    ["Agradec. personalizado", "Mensagem mensal", "Boletim semanal", "Brindes"]),
                 ("Doador Pontual",        ["Boas-vindas", "Agradec. padrao", "Boletim semanal"]),
-                ("Voluntario",            ["Aniversario", "Mensagem mensal", "Boletim semanal"]),
+                ("Voluntário",            ["Aniversário", "Mensagem mensal", "Boletim semanal"]),
                 ("Apoiadores de Eventos", ["Agradec. padrao", "Mensagem mensal"]),
-                ("Conselho e Diretoria",  ["Aniversario", "Mensagem mensal", "Boletim semanal", "Balanco social"]),
+                ("Conselho e diretoria",  ["Aniversário", "Mensagem mensal", "Boletim semanal", "Balanço Social"]),
             ]
             for _pub, _acoes in _REGUA_REF:
                 with st.expander(_pub, expanded=False):
@@ -1786,7 +1786,7 @@ def _rel_tab_parceiros(df_parceiros, hoje):
 
     st.divider()
 
-    # ── Historico por parceiro ────────────────────────────────────────────
+    # ── Histórico por parceiro ────────────────────────────────────────────
     section("Histórico por parceiro")
 
     _tl1, _tl2 = st.columns([2, 1])
@@ -1912,7 +1912,7 @@ def _rel_tab_followups(df_regua_pend, hoje):
 
         if df_fu.empty:
             empty_state("—", "Nenhum follow-up agendado",
-                        "Ao registrar uma interacao, preencha \'Proxima acao\' para aparecer aqui.")
+                        "Ao registrar uma interação, preencha \'Próxima ação\' para aparecer aqui.")
         else:
             df_fu["_data"] = pd.to_datetime(df_fu["proxima_acao_data"], errors="coerce").dt.date
             df_fu["_dias"] = df_fu["_data"].apply(lambda d: (d - hoje).days if d else 999)
@@ -1958,7 +1958,7 @@ def _rel_tab_followups(df_regua_pend, hoje):
                                     "INSERT INTO Registro_Relacionamento "
                                     "(id_parceiro, data_interacao, descricao_do_que_foi_feito, tipo_interacao) "
                                     "VALUES (%s, %s, %s, %s)",
-                                    (_id_p_fu, hoje, f"Follow-up concluido (prazo: {data_fmt})", "Follow-up")
+                                    (_id_p_fu, hoje, f"Follow-up concluído (prazo: {data_fmt})", "Follow-up")
                                 )
                                 run_exec(
                                     "UPDATE Registro_Relacionamento "
@@ -2016,7 +2016,7 @@ def _rel_tab_followups(df_regua_pend, hoje):
                                 "(id_parceiro, data_interacao, descricao_do_que_foi_feito, tipo_interacao) "
                                 "VALUES (%s, %s, %s, %s)",
                                 (int(_rp["id_parceiro"]), hoje,
-                                 f"[Regua] {_rp['tipo_acao']} — concluido", _rp["tipo_acao"])
+                                 f"[Régua] {_rp['tipo_acao']} — concluído", _rp["tipo_acao"])
                             )
                             st.success(f"{_rp['tipo_acao']} marcado como feito.")
                             st.rerun()
@@ -2076,7 +2076,7 @@ def _rel_tab_regua():
         "Agradecimento personalizado",   "Agradecimento automatico",
         "Destaque em redes + Selo Amigo", "Mensagem mensal", "Mensagem de campanha",
         "Boletim semanal", "Brindes e datas comemorativas",
-        "Cartao de boas festas digital", "Balanco social",
+        "Cartao de boas festas digital", "Balanço Social",
     ]
     # Ordem canônica das linhas
     _TIPOS_ORDER = [
@@ -2178,8 +2178,8 @@ def _rel_tab_regua():
     with _sc1:
         st.markdown(
             "<div style='font-size:0.82rem;color:#94A3B8;padding-top:10px;'>"
-            "Gera automaticamente as pendências previstas pela regua para todos os parceiros ativos "
-            "que ainda nao as possuem, respeitando a periodicidade de cada acao."
+            "Gera automaticamente as pendências previstas pela régua para todos os parceiros ativos "
+            "que ainda não as possuem, respeitando a periodicidade de cada ação."
             "</div>",
             unsafe_allow_html=True
         )
@@ -2211,7 +2211,7 @@ def _rel_tab_regua():
         _total_concluídas = int(df_compliance["concluídas"].sum())
         _cobertura_pct    = round(_total_com_pend / _total_parc_regua * 100) if _total_parc_regua else 0
 
-        _ck1.metric("Parceiros na regua", _total_parc_regua)
+        _ck1.metric("Parceiros na régua", _total_parc_regua)
         _ck2.metric("Com pendências ativas", f"{_total_com_pend} ({_cobertura_pct}%)")
         _ck3.metric("Acoes concluídas (total)", _total_concluídas)
 
@@ -3751,7 +3751,7 @@ elif menu == "Ações":
                     st.rerun()
 
     # ── Realizadas + Métricas ────────────────────────────────────────────────
-    with st.expander("Historico e metricas"):
+    with st.expander("Histórico e métricas"):
         _sql_hist = "SELECT tarefa, TO_CHAR(data_ultima_conclusao,'DD/MM/YYYY HH24:MI') AS concluido_em FROM Demandas_Estrategicas WHERE status='REALIZADO'"
         if not eh_gerente:
             _sql_hist += f" AND setor='{meu_setor}'"
@@ -3808,7 +3808,7 @@ elif menu == "Ações":
 
     # ── Admin (gerência) ─────────────────────────────────────────────────────
     if eh_gerente:
-        with st.expander("Gestao de usuarios"):
+        with st.expander("Gestão de usuários"):
             section("Usuários do sistema")
             for _login, _dados in CONTAS.items():
                 _ua1, _ua2, _ua3 = st.columns([3, 2, 1])
@@ -4632,7 +4632,7 @@ elif menu == "Entrada de Recursos":
 
         tab_novo, tab_hist, tab_alertas = st.tabs([
             "Registrar nova",
-            "Historico",
+            "Histórico",
             "Doadores recorrentes",
         ])
 
@@ -4713,8 +4713,8 @@ elif menu == "Entrada de Recursos":
                 # → Doacao com tipo nao-financeiro (nao conta nas metas do Plano DI)
                 st.info(
                     "Valores declarados pelos parceiros — espaco de midia, materiais, alimentos etc. "
-                    "Sao registrados para controle de impacto e relacionamento, mas **nao entram no caixa** "
-                    "e **nao contam para as metas financeiras** do Plano DI.",
+                    "Sao registrados para controle de impacto e relacionamento, mas **não entram no caixa** "
+                    "e **não contam para as metas financeiras** do Plano DI.",
                 )
                 _tipos_estimado = ["Midiatica", "Vestuario", "Alimentos", "Servicos", "Outros (estimado)"]
                 with st.form("form_entrada_estimada", clear_on_submit=True):
@@ -4744,7 +4744,7 @@ elif menu == "Entrada de Recursos":
                                  desc_est.upper() if desc_est else "",
                                  "GERAL", "Estimada"),
                             )
-                            st.success(f"Registrado: {nome_est} — {format_br(valor_est)} ({tipo_est}). Nao conta para metas financeiras.")
+                            st.success(f"Registrado: {nome_est} — {format_br(valor_est)} ({tipo_est}). Não conta para metas financeiras.")
                             st.rerun()
 
             else:
@@ -5265,7 +5265,7 @@ elif menu == "Relacionamento":
         "WHERE rp.status = \'PENDENTE\' ORDER BY rp.data_sugerida ASC"
     )
 
-    page_header("Relacionamento", "Registro, automacoes da regua e historico de parceiros.")
+    page_header("Relacionamento", "Registro, automações da régua e histórico de parceiros.")
 
 
     hoje = datetime.now().date()
@@ -5285,7 +5285,7 @@ elif menu == "Relacionamento":
         {"label": "Prospecção",          "value": int(m_p.sum())},
         {"label": "Inativos",            "value": int(m_i.sum())},
         {"label": "Follow-ups vencidos", "value": vencidos},
-        {"label": "Pendencias da regua", "value": pendencias_regua, "hint": "acoes da regua nao realizadas"},
+        {"label": "Pendências da régua", "value": pendencias_regua, "hint": "ações da régua não realizadas"},
     ])
 
 
