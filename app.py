@@ -2257,7 +2257,7 @@ def _rel_tab_regua():
 
     # ── Editor da Régua Matriz ────────────────────────────────────────
     with st.expander("Editar régua de relacionamento", expanded=False):
-        df_matriz = run_query(
+        df_matriz = run_query_cached(
             "SELECT id, tipo_publico, acao, periodo_dias, canal, responsavel, ativo "
             "FROM Regua_Matriz ORDER BY tipo_publico, id"
         )
@@ -3331,7 +3331,7 @@ elif menu == "Plano DI 2026":
     # ══════════════════════════════════════════════════════════════════════════
     with tab_cap:
         df_prog = run_query_slow("SELECT * FROM View_Progresso_PlanoAnual ORDER BY meta_2026 DESC")
-        df_hist = run_query("""
+        df_hist = run_query_slow("""
             SELECT
                 CASE
                     WHEN LENGTH(rc.mes_referencia) = 10
@@ -3496,7 +3496,7 @@ elif menu == "Plano DI 2026":
     _meses_opcoes  = [f"2026-{m:02d}" for m in range(1, 13)]
     _idx_mes_pad   = _meses_opcoes.index(_mes_atual_str) if _mes_atual_str in _meses_opcoes else 0
 
-    df_ultimos_com = run_query(
+    df_ultimos_com = run_query_cached(
         "SELECT DISTINCT ON (indicador) indicador, valor, mes_referencia "
         "FROM Indicadores_Comunicacao_2026 ORDER BY indicador, mes_referencia DESC"
     )
@@ -3543,7 +3543,7 @@ elif menu == "Plano DI 2026":
         mes_sel = st.selectbox("Mes de referencia", _meses_opcoes,
                                index=_idx_mes_pad, key=f"mes_sel_{prefix}",
                                format_func=lambda m: datetime.strptime(m, "%Y-%m").strftime("%B/%Y").capitalize())
-        df_mes_com = run_query(
+        df_mes_com = run_query_cached(
             "SELECT indicador, valor FROM Indicadores_Comunicacao_2026 WHERE mes_referencia = %s",
             (mes_sel,)
         )
@@ -3781,7 +3781,7 @@ elif menu == "Ações":
 
     # ── Follow-ups de CRM ────────────────────────────────────────────────────
     with st.expander("Follow-ups de relacionamento"):
-        _df_crm = run_query("SELECT * FROM View_Tarefas_Abertas")
+        _df_crm = run_query_cached("SELECT * FROM View_Tarefas_Abertas")
         if _df_crm.empty:
             st.info("Nenhum follow-up pendente.")
         else:
@@ -5050,7 +5050,7 @@ elif menu == "Contatos":
         LEFT JOIN Parceiro p ON c.id_parceiro = p.id_parceiro
         ORDER BY c.nome_pessoa ASC
     """
-    df_contatos = run_query(query_view)
+    df_contatos = run_query_cached(query_view)
 
     # Se veio do botão "+ Novo > Contato", mostra atalho de cadastro no topo
     if st.session_state.open_form == "contato":
