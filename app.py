@@ -1461,7 +1461,7 @@ if "regua_tipo_norm_ok" not in st.session_state:
         run_exec("UPDATE Parceiro SET tipo_publico_regua = %s WHERE tipo_publico_regua = %s", (_new, _old))
     st.session_state.regua_tipo_norm_ok = True
 
-if "regua_seed_ok" not in st.session_state:
+if "regua_seed_v2_ok" not in st.session_state:
     for _rsc_tp, _rsc_acoes in REGUA_CONFIG.items():
         for _rsc_item in _rsc_acoes:
             run_exec(
