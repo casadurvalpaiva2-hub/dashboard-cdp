@@ -1055,12 +1055,8 @@ def run_exec(query, params=()):
                     "(SELECT id FROM Logs ORDER BY id DESC LIMIT 1000)"
                 )
         conn.commit()
-        # Invalida caches de leitura para refletir alterações imediatamente
-        try:
-            run_query_cached.clear()
-            run_query_slow.clear()
-        except Exception:
-            pass
+        # Cache invalidado apenas pelo TTL (60s/300s) — evita reload total a cada escrita.
+        # run_query_cached.clear() foi removido: causava reload de ~47 queries em cada ação.
     except Exception as e:
         conn.rollback()
         st.error(f"Erro ao salvar: {e}")
