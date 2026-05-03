@@ -1327,18 +1327,6 @@ if "schema_ok" not in st.session_state:
 
 # ── Seed da Regua_Matriz — roda 1x por sessão ────────────────────────────────
 # Garante que todo tipo definido em REGUA_CONFIG exista no banco.
-# ON CONFLICT DO NOTHING preserva edições manuais feitas pela UI.
-# Sem gate de COUNT: novos tipos adicionados ao REGUA_CONFIG propagam
-# automaticamente na próxima sessão sem precisar de deploy ou reset.
-if "regua_seed_ok" not in st.session_state:
-    for _rsc_tp, _rsc_acoes in REGUA_CONFIG.items():
-        for _rsc_item in _rsc_acoes:
-            run_exec(
-                "INSERT INTO Regua_Matriz (tipo_publico, acao, periodo_dias, canal) "
-                "VALUES (%s, %s, %s, %s) ON CONFLICT (tipo_publico, acao) DO NOTHING",
-                (_rsc_tp, _rsc_item["acao"], _rsc_item["periodo_dias"], _rsc_item["canal"])
-            )
-    st.session_state.regua_seed_ok = True
 
 
 
@@ -1446,6 +1434,21 @@ REGUA_CONFIG = {
         {"acao": "Cartao de boas festas digital",    "periodo_dias": 365, "canal": "E-mail"},
     ],
 }
+
+
+# ON CONFLICT DO NOTHING preserva edições manuais feitas pela UI.
+# Sem gate de COUNT: novos tipos adicionados ao REGUA_CONFIG propagam
+# automaticamente na próxima sessão sem precisar de deploy ou reset.
+if "regua_seed_ok" not in st.session_state:
+    for _rsc_tp, _rsc_acoes in REGUA_CONFIG.items():
+        for _rsc_item in _rsc_acoes:
+            run_exec(
+                "INSERT INTO Regua_Matriz (tipo_publico, acao, periodo_dias, canal) "
+                "VALUES (%s, %s, %s, %s) ON CONFLICT (tipo_publico, acao) DO NOTHING",
+                (_rsc_tp, _rsc_item["acao"], _rsc_item["periodo_dias"], _rsc_item["canal"])
+            )
+    st.session_state.regua_seed_ok = True
+
 
 
 def _get_regua_config_db() -> dict:
@@ -5316,13 +5319,12 @@ def _gerar_backup_completo():
 if _is_gerente():
     _backup = _gerar_backup_completo()
     if _backup:
-        _b_data, _b_ext, _b_mime = _backup
-        _b_nome = "CDP_backup_" + datetime.now().strftime("%Y%m%d") + "." + _b_ext
+        dados, ext, mime = _backup
+        hoje = __import__('datetime').date.today().isoformat()
         st.sidebar.download_button(
-            "Backup completo",
-            data=_b_data,
-            file_name=_b_nome,
-            mime=_b_mime,
+            label="Baixar backup completo",
+            data=dados,
+            file_name=f"backup_cdp_{hoje}.{ext}",
+            mime=mime,
             use_container_width=True,
-            key="sidebar_backup_dl",
         )
