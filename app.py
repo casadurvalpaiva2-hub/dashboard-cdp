@@ -1508,7 +1508,7 @@ if "regua_seed_v2_ok" not in st.session_state:
                 (_rsc_tp, _rsc_item["acao"], _rsc_item["periodo_dias"],
                  _rsc_item["canal"], _rsc_item.get("responsavel", "DI"))
             )
-    st.session_state.regua_seed_ok = True
+    st.session_state.regua_seed_v2_ok = True
 
 
 
