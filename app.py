@@ -1312,6 +1312,46 @@ def setup_schema():
                 ORDER BY m.meta_2026 DESC
             """)
 
+
+            # Colunas e tabelas da aba Relacionamento
+            for _rel_ddl in [
+                "ALTER TABLE Registro_Relacionamento ADD COLUMN IF NOT EXISTS tipo_interacao TEXT",
+                "ALTER TABLE Registro_Relacionamento ADD COLUMN IF NOT EXISTS canal TEXT",
+                "ALTER TABLE Registro_Relacionamento ADD COLUMN IF NOT EXISTS responsavel TEXT",
+                "ALTER TABLE Parceiro ADD COLUMN IF NOT EXISTS tipo_publico_regua TEXT",
+            ]:
+                try:
+                    cur.execute(_rel_ddl)
+                    conn.commit()
+                except Exception:
+                    conn.rollback()
+
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS Regua_Pendencias (
+                    id            SERIAL PRIMARY KEY,
+                    id_parceiro   INTEGER REFERENCES Parceiro(id_parceiro) ON DELETE CASCADE,
+                    tipo_acao     TEXT NOT NULL,
+                    canal_sugerido TEXT,
+                    data_sugerida DATE,
+                    status        TEXT DEFAULT 'PENDENTE',
+                    gerado_em     TIMESTAMP DEFAULT NOW(),
+                    feito_em      TIMESTAMP,
+                    observacao    TEXT
+                )
+            """)
+
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS Regua_Matriz (
+                    id           SERIAL PRIMARY KEY,
+                    tipo_publico TEXT NOT NULL,
+                    acao         TEXT NOT NULL,
+                    periodo_dias INTEGER,
+                    canal        TEXT,
+                    responsavel  TEXT DEFAULT 'DI',
+                    ativo        BOOLEAN DEFAULT TRUE,
+                    UNIQUE (tipo_publico, acao)
+                )
+            """)
             conn.commit()
     except Exception as e:
         conn.rollback()
@@ -5198,50 +5238,11 @@ elif menu == "Contatos":
 
 # --- COLOQUE ISSO NO FINAL DO ARQUIVO ---
 elif menu == "Relacionamento":
-    import plotly.graph_objects as go
 
     # ══════════════════════════════════════════════════════════════
     # SETUP E MIGRAÇÃO
     # ══════════════════════════════════════════════════════════════
-    for _col, _tipo in [
-        ("tipo_interacao", "TEXT"), ("canal", "TEXT"), ("responsavel", "TEXT")
-    ]:
-        try:
-            run_exec(f"ALTER TABLE Registro_Relacionamento ADD COLUMN IF NOT EXISTS {_col} {_tipo}")
-        except Exception as e:
-            pass  # coluna já existe ou driver sinalizou IF NOT EXISTS
-
-    try:
-        run_exec("ALTER TABLE Parceiro ADD COLUMN IF NOT EXISTS tipo_publico_regua TEXT")
-    except Exception as e:
-        pass  # coluna já existe ou driver sinalizou IF NOT EXISTS
-
-    run_exec("""
-        CREATE TABLE IF NOT EXISTS Regua_Pendencias (
-            id            SERIAL PRIMARY KEY,
-            id_parceiro   INTEGER REFERENCES Parceiro(id_parceiro) ON DELETE CASCADE,
-            tipo_acao     TEXT NOT NULL,
-            canal_sugerido TEXT,
-            data_sugerida DATE,
-            status        TEXT DEFAULT 'PENDENTE',
-            gerado_em     TIMESTAMP DEFAULT NOW(),
-            feito_em      TIMESTAMP,
-            observacao    TEXT
-        )
-    """)
-
-    run_exec("""
-        CREATE TABLE IF NOT EXISTS Regua_Matriz (
-            id           SERIAL PRIMARY KEY,
-            tipo_publico TEXT NOT NULL,
-            acao         TEXT NOT NULL,
-            periodo_dias INTEGER,
-            canal        TEXT,
-            responsavel  TEXT DEFAULT 'DI',
-            ativo        BOOLEAN DEFAULT TRUE,
-            UNIQUE (tipo_publico, acao)
-        )
-    """)
+    # DDLs de Relacionamento já executados em setup_schema (1x por sessão)
 
 
     # ── Dados base ────────────────────────────────────────────────────────────
