@@ -4200,7 +4200,7 @@ elif menu == "Parcerias":
                 LEFT JOIN Categoria_Parceiro c ON p.id_categoria = c.id_categoria
             """
             df_p = run_query(query)
-        except:
+        except Exception:
             df_p = run_query("SELECT * FROM Parceiro")
 
         # KPIs no topo
@@ -4530,6 +4530,7 @@ elif menu == "Parcerias":
 
                         erros = 0
                         ok = 0
+                        _erros_detalhe: list[str] = []
                         for _, row in df_import.iterrows():
                             try:
                                 _data = None
@@ -4546,11 +4547,17 @@ elif menu == "Parcerias":
                                      id_cat_default, str(row['subcategoria']).strip(), _data)
                                 )
                                 ok += 1
-                            except Exception:
+                            except Exception as e:
                                 erros += 1
+                                _erros_detalhe.append(
+                                    f"• {str(row.get('nome_instituicao','?'))[:40]}: {e}"
+                                )
 
                         if ok > 0:
                             st.success(f"**{ok} parceiros importados** com sucesso! {f'({erros} ignorados por erro)' if erros else ''}")
+                        if erros > 0:
+                            with st.expander(f"{erros} registro(s) com erro — ver detalhes"):
+                                st.code("\n".join(_erros_detalhe))
                         if erros > 0 and ok == 0:
                             st.error("Nenhum registro foi importado. Verifique o formato da planilha.")
 
@@ -5155,13 +5162,13 @@ elif menu == "Relacionamento":
     ]:
         try:
             run_exec(f"ALTER TABLE Registro_Relacionamento ADD COLUMN IF NOT EXISTS {_col} {_tipo}")
-        except Exception:
-            pass
+        except Exception as e:
+            pass  # coluna já existe ou driver sinalizou IF NOT EXISTS
 
     try:
         run_exec("ALTER TABLE Parceiro ADD COLUMN IF NOT EXISTS tipo_publico_regua TEXT")
-    except Exception:
-        pass
+    except Exception as e:
+        pass  # coluna já existe ou driver sinalizou IF NOT EXISTS
 
     run_exec("""
         CREATE TABLE IF NOT EXISTS Regua_Pendencias (
