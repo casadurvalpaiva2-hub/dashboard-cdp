@@ -995,7 +995,7 @@ def _db_url() -> str:
 def _pool() -> pg_pool.ThreadedConnectionPool:
     """Pool de conexões (reutilizado entre reruns do Streamlit)."""
     url = _db_url()
-    return pg_pool.ThreadedConnectionPool(2, 10, url)
+    return pg_pool.ThreadedConnectionPool(2, 10, url, connect_timeout=10)
 
 
 # ------------------------------------------------------------
@@ -1004,15 +1004,21 @@ def _pool() -> pg_pool.ThreadedConnectionPool:
 def run_query(query, params=()):
     """Executa SELECT e retorna DataFrame. Compatível com PostgreSQL."""
     pool = _pool()
-    conn = pool.getconn()
+    conn = None
     try:
+        conn = pool.getconn()
         q = query.replace('?', '%s')
         return pd.read_sql_query(q, conn, params=params if params else None)
     except Exception as e:
-        st.error(f"Erro na consulta: {e}")
+        msg = str(e)
+        if "timeout" in msg.lower() or "timed out" in msg.lower():
+            st.warning("Banco de dados temporariamente indisponível. Aguarde e recarregue a página.")
+        else:
+            st.error(f"Erro na consulta: {e}")
         return pd.DataFrame()
     finally:
-        pool.putconn(conn)
+        if conn:
+            pool.putconn(conn)
 
 
 @st.cache_data(ttl=60, show_spinner=False)
