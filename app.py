@@ -2870,9 +2870,9 @@ if menu == "Painel Geral":
         # BLOCO 5 — QUALIDADE DOS DADOS (compacto)
         # ════════════════════════════════════════════════════════════════════════
         section("Qualidade dos dados")
-        df_qd_sem_contato   = run_query_slow("SELECT COUNT(*) as n FROM Parceiro p WHERE UPPER(p.status) LIKE '%ATIVO%' AND NOT EXISTS (SELECT 1 FROM Contato_Direto c WHERE c.id_parceiro=p.id_parceiro)")
-        df_qd_sem_interacao = run_query_slow("SELECT COUNT(*) as n FROM Parceiro p WHERE UPPER(p.status) LIKE '%ATIVO%' AND NOT EXISTS (SELECT 1 FROM Registro_Relacionamento r WHERE r.id_parceiro=p.id_parceiro)")
-        df_qd_sem_doacao    = run_query_slow(f"SELECT COUNT(*) as n FROM Parceiro p WHERE UPPER(p.status) LIKE '%ATIVO%' AND NOT EXISTS (SELECT 1 FROM Doacao d WHERE d.id_parceiro=p.id_parceiro AND EXTRACT(YEAR FROM d.data_doacao)={ano_sel})")
+        df_qd_sem_contato   = run_query_slow("SELECT COUNT(*) as n FROM Parceiro p WHERE p.status = 'Ativo' AND NOT EXISTS (SELECT 1 FROM Contato_Direto c WHERE c.id_parceiro=p.id_parceiro)")
+        df_qd_sem_interacao = run_query_slow("SELECT COUNT(*) as n FROM Parceiro p WHERE p.status = 'Ativo' AND NOT EXISTS (SELECT 1 FROM Registro_Relacionamento r WHERE r.id_parceiro=p.id_parceiro)")
+        df_qd_sem_doacao    = run_query_slow(f"SELECT COUNT(*) as n FROM Parceiro p WHERE p.status = 'Ativo' AND NOT EXISTS (SELECT 1 FROM Doacao d WHERE d.id_parceiro=p.id_parceiro AND EXTRACT(YEAR FROM d.data_doacao)={ano_sel})")
         df_qd_sem_tipo_c    = run_query_slow(f"SELECT COUNT(*) as n FROM Doacao WHERE (tipo_doacao IS NULL OR tipo_doacao='' OR tipo_doacao='Selecione...') AND EXTRACT(YEAR FROM data_doacao)={ano_sel}")
 
         n_sc = int(df_qd_sem_contato['n'].iloc[0])   if not df_qd_sem_contato.empty   else 0
@@ -4533,7 +4533,7 @@ elif menu == "Parcerias":
                     SELECT nome_instituicao, data_adesao,
                            (CURRENT_DATE - data_adesao::date) AS dias_na_base
                     FROM Parceiro
-                    WHERE UPPER(status) LIKE '%ATIVO%'
+                    WHERE status = 'Ativo'
                       AND data_adesao IS NOT NULL
                       AND (CURRENT_DATE - data_adesao::date) <= 90
                     ORDER BY data_adesao DESC
