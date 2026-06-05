@@ -1,4 +1,4 @@
-# ===========================================================
+# ============================================================
 #  SISTEMA INTERNO DI CDP
 #  Versão refatorada — dívida técnica limpa
 #  (login unificado, CSS centralizado, imports consolidados)
@@ -922,8 +922,8 @@ if "open_form" not in st.session_state:
 if "_qa_nonce" not in st.session_state:
     st.session_state._qa_nonce = 0
 
-_menus_gerencia = ["Painel Geral", "Calendário", "Plano DI 2026", "Parcerias", "Contatos", "Almoço CDP", "Ações", "Entrada de Recursos", "Relacionamento"]
-_menus_operacional = ["Painel Geral", "Calendário", "Plano DI 2026", "Parcerias", "Contatos", "Almoço CDP", "Ações", "Entrada de Recursos", "Relacionamento"]
+_menus_gerencia = ["Painel Geral", "Calendário", "Plano DI 2026", "Parcerias", "Contatos", "Almoço CDP", "Entrada de Recursos", "Relacionamento"]
+_menus_operacional = ["Painel Geral", "Calendário", "Plano DI 2026", "Parcerias", "Contatos", "Almoço CDP", "Entrada de Recursos", "Relacionamento"]
 _opcoes_menu = _menus_gerencia if _is_gerente() else _menus_operacional
 
 def _trigger_quick_add(tipo: str):
@@ -955,7 +955,7 @@ with st.sidebar:
     unsafe_allow_html=True)
 
     _opcoes_nav = ["Painel Geral", "Calendário", "Plano DI 2026", "Parcerias", "Contatos",
-                   "Almoço CDP", "Ações", "Entrada de Recursos", "Relacionamento"]
+                   "Almoço CDP", "Entrada de Recursos", "Relacionamento"]
     _nav_items = [(p, p) for p in _opcoes_nav]
 
     _nav_idx = _opcoes_nav.index(st.session_state.current_page) \
@@ -1072,6 +1072,36 @@ def run_exec(query, params=()):
 
 # Alias para não quebrar as ~20 chamadas existentes no código
 run_insert = run_exec
+
+
+# ------------------------------------------------------------
+#  TROCAR SENHA — na barra lateral (movido do antigo "Centro de Ações")
+#  Fica aqui porque depende de run_exec/run_query já definidos acima.
+# ------------------------------------------------------------
+with st.sidebar.expander("Trocar minha senha"):
+    _u_sb = st.session_state.get("user_data") or {}
+    _login_cur = next((k for k, v in CONTAS.items() if v.get("nome") == _u_sb.get("nome")), None)
+    run_exec("CREATE TABLE IF NOT EXISTS Usuario_Senhas (login TEXT PRIMARY KEY, senha TEXT NOT NULL)")
+    with st.form("form_senha_sidebar", clear_on_submit=True):
+        _s1 = st.text_input("Senha atual",         type="password", placeholder="••••••")
+        _s2 = st.text_input("Nova senha",          type="password", placeholder="Mínimo 6 caracteres")
+        _s3 = st.text_input("Confirmar nova senha", type="password", placeholder="Repita a nova senha")
+        if st.form_submit_button("Salvar", use_container_width=True, type="primary"):
+            _df_s = run_query("SELECT senha FROM Usuario_Senhas WHERE login=%s", (_login_cur,))
+            _senha_ok = _df_s.iloc[0]["senha"] if not _df_s.empty else CONTAS.get(_login_cur, {}).get("senha", "")
+            if not _s1:
+                st.error("Informe a senha atual.")
+            elif _s1 != _senha_ok:
+                st.error("Senha atual incorreta.")
+            elif len(_s2) < 6:
+                st.error("A nova senha deve ter pelo menos 6 caracteres.")
+            elif _s2 != _s3:
+                st.error("As senhas não conferem.")
+            elif _login_cur is None:
+                st.error("Usuário não identificado.")
+            else:
+                run_exec("INSERT INTO Usuario_Senhas (login,senha) VALUES (%s,%s) ON CONFLICT (login) DO UPDATE SET senha=EXCLUDED.senha", (_login_cur, _s2))
+                st.success("Senha alterada com sucesso.")
 
 
 # ------------------------------------------------------------
@@ -2896,22 +2926,63 @@ if menu == "Painel Geral":
             unsafe_allow_html=True
         )
         itens_qd = [
-            (n_sd, f"Parceiros ativos sem doação em {ano_sel}"),
-            (n_st, "Doações sem tipo definido"),
-            (n_sc, "Parceiros sem contato cadastrado"),
-            (n_si, "Parceiros sem interação registrada"),
+            (n_sd, f"Parceiros ativos sem doação em {ano_sel}",
+             f"SELECT p.nome_instituicao AS \"Parceiro\", c.nome_categoria AS \"Categoria\" "
+             f"FROM Parceiro p LEFT JOIN Categoria_Parceiro c ON p.id_categoria=c.id_categoria "
+             f"WHERE p.status='Ativo' AND NOT EXISTS (SELECT 1 FROM Doacao d WHERE d.id_parceiro=p.id_parceiro "
+             f"AND EXTRACT(YEAR FROM d.data_doacao)={ano_sel}) ORDER BY p.nome_instituicao"),
+            (n_st, "Doações sem tipo definido",
+             f"SELECT p.nome_instituicao AS \"Parceiro\", d.valor_estimado AS \"Valor\", d.data_doacao AS \"Data\" "
+             f"FROM Doacao d LEFT JOIN Parceiro p ON d.id_parceiro=p.id_parceiro "
+             f"WHERE (d.tipo_doacao IS NULL OR d.tipo_doacao='' OR d.tipo_doacao='Selecione...') "
+             f"AND EXTRACT(YEAR FROM d.data_doacao)={ano_sel} ORDER BY p.nome_instituicao"),
+            (n_sc, "Parceiros sem contato cadastrado",
+             "SELECT p.nome_instituicao AS \"Parceiro\", c.nome_categoria AS \"Categoria\" "
+             "FROM Parceiro p LEFT JOIN Categoria_Parceiro c ON p.id_categoria=c.id_categoria "
+             "WHERE p.status='Ativo' AND NOT EXISTS (SELECT 1 FROM Contato_Direto ct WHERE ct.id_parceiro=p.id_parceiro) "
+             "ORDER BY p.nome_instituicao"),
+            (n_si, "Parceiros sem interação registrada",
+             "SELECT p.nome_instituicao AS \"Parceiro\", c.nome_categoria AS \"Categoria\" "
+             "FROM Parceiro p LEFT JOIN Categoria_Parceiro c ON p.id_categoria=c.id_categoria "
+             "WHERE p.status='Ativo' AND NOT EXISTS (SELECT 1 FROM Registro_Relacionamento r WHERE r.id_parceiro=p.id_parceiro) "
+             "ORDER BY p.nome_instituicao"),
         ]
-        for n_v, label_v in itens_qd:
+        for n_v, label_v, sql_v in itens_qd:
             if n_v > 0:
-                st.markdown(
-                    f'<div style="display:flex;justify-content:space-between;padding:5px 10px;'
-                    f'border-left:2px solid #D97706;margin-bottom:4px;border-radius:0 4px 4px 0;'
-                    f'background:rgba(217,119,6,0.06);font-size:13px;">'
-                    f'<span>{label_v}</span><span style="color:#D97706;font-weight:600;">{n_v}</span></div>',
-                    unsafe_allow_html=True
-                )
+                with st.expander(f"{label_v}  —  {n_v}"):
+                    _df_qd = run_query_cached(sql_v)
+                    if not _df_qd.empty:
+                        st.dataframe(_df_qd, hide_index=True, use_container_width=True)
+                    else:
+                        st.caption("Sem registros para exibir.")
         if n_pend == 0:
             st.markdown('<div style="font-size:13px;color:#059669;">Banco de dados completo.</div>', unsafe_allow_html=True)
+
+        # BLOCO 6 — PARCEIROS ATIVOS SEM CONTATO RECENTE (régua de relacionamento)
+        section("Parceiros ativos sem contato recente")
+        _limiar_dias = st.selectbox(
+            "Mostrar quem está sem interação há mais de:",
+            [30, 60, 90, 180], index=1,
+            format_func=lambda d: f"{d} dias", key="painel_limiar_frios"
+        )
+        _df_frios = run_query_cached(
+            "SELECT p.nome_instituicao AS \"Parceiro\", "
+            "MAX(r.data_interacao) AS \"Última interação\", "
+            "(CURRENT_DATE - MAX(r.data_interacao)) AS \"Dias sem contato\" "
+            "FROM Parceiro p JOIN Registro_Relacionamento r ON r.id_parceiro = p.id_parceiro "
+            "WHERE p.status = 'Ativo' "
+            "GROUP BY p.id_parceiro, p.nome_instituicao "
+            f"HAVING MAX(r.data_interacao) < CURRENT_DATE - INTERVAL '{int(_limiar_dias)} days' "
+            "ORDER BY MAX(r.data_interacao) ASC"
+        )
+        if not _df_frios.empty:
+            st.caption(f"{len(_df_frios)} parceiro(s) ativo(s) sem interação há mais de {_limiar_dias} dias — priorize um follow-up.")
+            st.dataframe(
+                _df_frios, hide_index=True, use_container_width=True,
+                column_config={"Última interação": st.column_config.DateColumn("Última interação", format="DD/MM/YYYY")}
+            )
+        else:
+            st.caption(f"Nenhum parceiro ativo está sem contato há mais de {_limiar_dias} dias.")
 
 
 
@@ -4350,6 +4421,23 @@ elif menu == "Parcerias":
             else:
                 empty_state("—", f"Sem contatos em {parceiro_selecionado}", "Use o botao NOVO no topo do menu para cadastrar um contato.")
 
+            # --- AÇÃO RÁPIDA: alterar status do parceiro ---
+            _status_atual = str(df_p[df_p['nome_instituicao'] == parceiro_selecionado]['status'].values[0])
+            st.write(f"**Status atual:** {_status_atual}")
+            _cs1, _cs2, _cs3 = st.columns(3)
+            if _status_atual != "Ativo" and _cs1.button("Promover para Ativo", key="st_ativo", use_container_width=True, type="primary"):
+                run_exec("UPDATE Parceiro SET status='Ativo' WHERE id_parceiro=?", (int(id_selecionado),))
+                run_query_cached.clear()
+                st.success(f"{parceiro_selecionado} agora está Ativo."); st.rerun()
+            if _status_atual != "Prospecção" and _cs2.button("Voltar p/ Prospecção", key="st_prosp", use_container_width=True):
+                run_exec("UPDATE Parceiro SET status='Prospecção' WHERE id_parceiro=?", (int(id_selecionado),))
+                run_query_cached.clear()
+                st.success(f"{parceiro_selecionado} voltou para Prospecção."); st.rerun()
+            if _status_atual != "Inativo" and _cs3.button("Marcar como Inativo", key="st_inativo", use_container_width=True):
+                run_exec("UPDATE Parceiro SET status='Inativo' WHERE id_parceiro=?", (int(id_selecionado),))
+                run_query_cached.clear()
+                st.success(f"{parceiro_selecionado} marcado como Inativo."); st.rerun()
+
         # 2. SEÇÃO DE CADASTRO
         # Auto-abre se o usuário veio do botão "+ Novo > Parceiro"
         _abrir_p = (st.session_state.open_form == "parceiro")
@@ -5159,7 +5247,7 @@ elif menu == "Contatos":
                     lambda x: f"https://wa.me/55{re.sub(r'[^0-9]', '', str(x))}" if pd.notnull(x) and x != "" else None
                 )
                 df_filtrado['Ação_Email'] = df_filtrado['Email'].apply(
-                    lambda x: f"mailto:{x}" if pd.notnull(x) and x != "" else None
+                    lambda x: f"https://mail.google.com/mail/?view=cm&fs=1&to={str(x).strip()}" if pd.notnull(x) and x != "" else None
                 )
 
                 # 4. Exibição da Tabela com Column Config
