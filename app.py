@@ -2787,7 +2787,8 @@ if menu == "Painel Geral":
         # ════════════════════════════════════════════════════════════════════════
         # BLOCO 1 — EVOLUÇÃO MENSAL (combo: barra captado + linha meta proporcional + linha 2025)
         # ════════════════════════════════════════════════════════════════════════
-        section("Evolução mensal da captação")
+        section("Evolução mensal — doações financeiras diretas")
+        st.caption("Considera apenas doações tipo Financeira/Projetos lançadas na agenda. O velocímetro acima usa o total do Plano (todas as fontes), por isso os valores diferem.")
 
         if not df_fin.empty:
             # Agrupa por mês
@@ -2892,27 +2893,33 @@ if menu == "Painel Geral":
                     "icone": "(!)",
                     "titulo": f"{len(df_fu_venc)} follow-up(s) vencido(s)",
                     "contexto": f"{nomes}{mais} estão aguardando contato.",
-                    "acao": "Acesse Relacionamento → Follow-ups para ver a lista completa.",
+                    "acao": "Acesse Relacionamento → Hoje para resolver a fila.",
                     "tom": "danger",
                 })
         except Exception:
             pass
 
-        # 2. Parceiros críticos sem contato há 90+ dias
-        if not df_rel_pg.empty:
-            df_rel_pg['Dias_Sem_Contato'] = pd.to_numeric(df_rel_pg['Dias_Sem_Contato'], errors='coerce')
-            criticos = df_rel_pg[df_rel_pg['Status_Relacionamento'].str.contains("CRIT", na=False)]
-            if not criticos.empty:
-                nomes_c = ", ".join(criticos['Empresa'].tolist()[:2])
-                mais_c  = f" e mais {len(criticos)-2}" if len(criticos) > 2 else ""
+        # 2. Parceiros ATIVOS sem contato há 90+ dias (ou nunca) — só ativos, não prospecção
+        try:
+            df_frios90 = run_query_cached(
+                "SELECT p.nome_instituicao FROM Parceiro p WHERE p.status = 'Ativo' AND ("
+                " NOT EXISTS (SELECT 1 FROM Registro_Relacionamento r WHERE r.id_parceiro = p.id_parceiro) "
+                " OR (SELECT MAX(r.data_interacao) FROM Registro_Relacionamento r WHERE r.id_parceiro = p.id_parceiro) < CURRENT_DATE - 90) "
+                "ORDER BY p.nome_instituicao"
+            )
+            if not df_frios90.empty:
+                nomes_c = ", ".join(df_frios90['nome_instituicao'].tolist()[:2])
+                mais_c  = f" e mais {len(df_frios90)-2}" if len(df_frios90) > 2 else ""
                 _alertas_priorizados.append({
                     "prioridade": 2,
                     "icone": "(!)",
-                    "titulo": f"{len(criticos)} parceiro(s) sem contato há mais de 90 dias",
-                    "contexto": f"{nomes_c}{mais_c} estão em risco de abandono.",
-                    "acao": "Registre uma interação ou agende uma ligação esta semana.",
+                    "titulo": f"{len(df_frios90)} parceiro(s) ativo(s) sem contato há 90+ dias",
+                    "contexto": f"{nomes_c}{mais_c} em risco de esfriar.",
+                    "acao": "Acesse Relacionamento → Hoje para registrar contato.",
                     "tom": "warning",
                 })
+        except Exception:
+            pass
 
         # 3. Fontes do Plano DI abaixo de 30% da meta
         if not df_prog_plano.empty and ano_sel == 2026:
@@ -2975,14 +2982,11 @@ if menu == "Painel Geral":
             ativos_p   = int(s_lp.str.fullmatch("ATIVO",   na=False).sum())
             prospec_p  = int(s_lp.str.contains("PROSPEC", na=False).sum())
             inativos_p = int(s_lp.str.contains("INATIVO", na=False).sum())
-            df_parceiros_pg['_ad'] = pd.to_datetime(df_parceiros_pg['data_adesao'], errors='coerce')
-            novos_p = int((df_parceiros_pg['_ad'].dt.year == ano_sel).sum())
             kpi_row([
-                {"label": "Total",             "value": len(df_parceiros_pg)},
-                {"label": "Ativos",            "value": ativos_p, "accent": True},
-                {"label": "Prospecção",        "value": prospec_p},
-                {"label": "Inativos",          "value": inativos_p},
-                {"label": f"Novos {ano_sel}",  "value": novos_p},
+                {"label": "Total",      "value": len(df_parceiros_pg)},
+                {"label": "Ativos",     "value": ativos_p, "accent": True},
+                {"label": "Prospecção", "value": prospec_p},
+                {"label": "Inativos",   "value": inativos_p},
             ])
             with st.expander("Ver lista de parceiros por status"):
                 _tab_a, _tab_p, _tab_i = st.tabs(["Ativos", "Prospecção", "Inativos"])
@@ -3001,7 +3005,7 @@ if menu == "Painel Geral":
         # ════════════════════════════════════════════════════════════════════════
         # BLOCO 4 — MAIORES DOADORES
         # ════════════════════════════════════════════════════════════════════════
-        section("Maiores doadores do ano")
+        section("Maiores doadores financeiros do ano")
         df_top = run_query_slow(
             "SELECT UPPER(p.nome_instituicao) AS \"Parceiro\", SUM(d.valor_estimado) AS \"Total\", COUNT(*) AS \"Repasses\" "
             "FROM Doacao d JOIN Parceiro p ON d.id_parceiro=p.id_parceiro "
@@ -3015,6 +3019,29 @@ if menu == "Painel Geral":
                 column_config={"Total": "Valor total", "Repasses": st.column_config.NumberColumn("Repasses", format="%d")})
         else:
             st.caption("Sem doações financeiras registradas para este ano.")
+
+        # ── Apoio em mídia/espécie (não-financeiro) — antes invisível no painel ──
+        section("Apoio em mídia e espécie (não-financeiro)")
+        _tot_ik = run_query_slow(
+            "SELECT COALESCE(SUM(valor_estimado),0) AS t, COUNT(*) AS n FROM Doacao "
+            "WHERE EXTRACT(YEAR FROM data_doacao)=%s AND tipo_doacao NOT IN ('Financeira','Projetos')",
+            (int(ano_sel),)
+        )
+        df_ik = run_query_slow(
+            "SELECT UPPER(p.nome_instituicao) AS \"Parceiro\", d.tipo_doacao AS \"Tipo\", "
+            "SUM(d.valor_estimado) AS \"Valor estimado\", COUNT(*) AS \"Itens\" "
+            "FROM Doacao d JOIN Parceiro p ON d.id_parceiro=p.id_parceiro "
+            "WHERE EXTRACT(YEAR FROM d.data_doacao)=%s AND d.tipo_doacao NOT IN ('Financeira','Projetos') "
+            "GROUP BY p.nome_instituicao, d.tipo_doacao ORDER BY \"Valor estimado\" DESC LIMIT 6",
+            (int(ano_sel),)
+        )
+        if not df_ik.empty:
+            _ti = float(_tot_ik['t'].iloc[0]); _ni = int(_tot_ik['n'].iloc[0])
+            st.caption(f"Valor estimado de {_fmt(_ti)} em {_ni} contrapartida(s). Não entra na meta financeira do Plano — é valor de mídia/espécie. Revise valores atípicos.")
+            df_ik['Valor estimado'] = df_ik['Valor estimado'].apply(_fmt)
+            st.dataframe(df_ik, use_container_width=True, hide_index=True)
+        else:
+            st.caption("Sem apoio em mídia/espécie registrado neste ano.")
 
         # ════════════════════════════════════════════════════════════════════════
         # BLOCO 5 — QUALIDADE DOS DADOS (compacto)
