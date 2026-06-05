@@ -2876,6 +2876,19 @@ if menu == "Painel Geral":
                 {"label": "Inativos",          "value": inativos_p},
                 {"label": f"Novos {ano_sel}",  "value": novos_p},
             ])
+            with st.expander("Ver lista de parceiros por status"):
+                _tab_a, _tab_p, _tab_i = st.tabs(["Ativos", "Prospecção", "Inativos"])
+                for _tabx, _sttx in [(_tab_a, "Ativo"), (_tab_p, "Prospecção"), (_tab_i, "Inativo")]:
+                    with _tabx:
+                        _dfx = run_query_cached(
+                            "SELECT p.nome_instituicao AS \"Parceiro\", c.nome_categoria AS \"Categoria\", p.subcategoria AS \"Subcategoria\" "
+                            "FROM Parceiro p LEFT JOIN Categoria_Parceiro c ON p.id_categoria=c.id_categoria "
+                            "WHERE p.status=%s ORDER BY p.nome_instituicao", (_sttx,)
+                        )
+                        if not _dfx.empty:
+                            st.dataframe(_dfx, hide_index=True, use_container_width=True)
+                        else:
+                            st.caption("Nenhum parceiro neste status.")
 
         # ════════════════════════════════════════════════════════════════════════
         # BLOCO 4 — MAIORES DOADORES
@@ -2909,10 +2922,25 @@ if menu == "Painel Geral":
         n_sd = int(df_qd_sem_doacao['n'].iloc[0])    if not df_qd_sem_doacao.empty    else 0
         n_st = int(df_qd_sem_tipo_c['n'].iloc[0])    if not df_qd_sem_tipo_c.empty    else 0
 
+        # Denominadores para o cálculo proporcional da completude
+        _df_at  = run_query_slow("SELECT COUNT(*) as n FROM Parceiro WHERE status = 'Ativo'")
+        _tot_at = int(_df_at['n'].iloc[0]) if not _df_at.empty else 0
+        _df_d26 = run_query_slow(f"SELECT COUNT(*) as n FROM Doacao WHERE EXTRACT(YEAR FROM data_doacao)={ano_sel}")
+        _tot_d26 = int(_df_d26['n'].iloc[0]) if not _df_d26.empty else 0
+
+        # Completude = média das dimensões preenchidas (move suave a cada registro)
+        _dims = []
+        if _tot_at > 0:
+            _dims.append((_tot_at - n_sc) / _tot_at)    # % ativos com contato
+            _dims.append((_tot_at - n_si) / _tot_at)    # % ativos com interação
+            _dims.append((_tot_at - n_sd) / _tot_at)    # % ativos com doação no ano
+        if _tot_d26 > 0:
+            _dims.append((_tot_d26 - n_st) / _tot_d26)  # % doações do ano com tipo
+        score_q = round(sum(_dims) / len(_dims) * 100) if _dims else 100
+
         pendencias = [n_sc > 0, n_si > 0, n_sd > 0, n_st > 0]
         n_pend = sum(pendencias)
-        score_q = round((4 - n_pend) / 4 * 100)
-        cor_score = "#059669" if score_q == 100 else "#D97706" if score_q >= 50 else "#DC2626"
+        cor_score = "#059669" if score_q >= 90 else "#D97706" if score_q >= 60 else "#DC2626"
 
         st.markdown(
             f'<div style="padding:10px 14px;background:rgba(255,255,255,0.03);border-radius:8px;'
@@ -2924,6 +2952,7 @@ if menu == "Painel Geral":
             f'<span style="font-size:12px;color:#666;">completude</span></div></div>',
             unsafe_allow_html=True
         )
+        st.caption("Média de preenchimento dos parceiros ativos (contato, interação, doação no ano) e do tipo das doações. Cada registro completado faz a barra subir.")
         itens_qd = [
             (n_sd, f"Parceiros ativos sem doação em {ano_sel}",
              f"SELECT p.nome_instituicao AS \"Parceiro\", c.nome_categoria AS \"Categoria\" "
