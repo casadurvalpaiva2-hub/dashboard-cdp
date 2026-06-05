@@ -2687,7 +2687,7 @@ if menu == "Painel Geral":
     page_header("Painel geral", "Visão consolidada do Desenvolvimento Institucional.")
 
     # ── Dados transversais ────────────────────────────────────────────────────
-    df_doacoes      = run_query_cached("SELECT data_doacao, valor_estimado, tipo_doacao, origem_captacao FROM Doacao")
+    df_doacoes      = run_query_cached("SELECT data_doacao, valor_estimado, tipo_doacao, origem_captacao, COALESCE(status_doacao,'Realizada') AS status_doacao FROM Doacao")
     df_parceiros_pg = run_query_cached("SELECT id_parceiro, nome_instituicao, status, data_adesao FROM Parceiro")
     df_acoes_pg     = run_query_cached("SELECT fonte, situacao FROM View_Acoes_Unificadas")
     df_rel_pg       = run_query_cached("SELECT * FROM View_Relacionamento_Critico")
@@ -2706,8 +2706,12 @@ if menu == "Painel Geral":
 
         df_atual   = df_doacoes[df_doacoes['data_doacao'].dt.year == ano_sel]
         df_passado = df_doacoes[df_doacoes['data_doacao'].dt.year == (ano_sel - 1)]
-        df_fin     = df_atual[df_atual['tipo_doacao'].isin(_tipos_fin)]
-        df_fin_pa  = df_passado[df_passado['tipo_doacao'].isin(_tipos_fin)]
+        # Financeiro do painel conta apenas doações REALIZADAS (Previstas = pipeline, não entram)
+        _real = df_atual['status_doacao'].eq('Realizada')
+        df_fin     = df_atual[df_atual['tipo_doacao'].isin(_tipos_fin) & _real]
+        df_fin_pa  = df_passado[df_passado['tipo_doacao'].isin(_tipos_fin) & df_passado['status_doacao'].eq('Realizada')]
+        # Total previsto (pipeline) do ano — doações ainda não realizadas
+        previsto_ano = float(df_atual[df_atual['status_doacao'].eq('Prevista')]['valor_estimado'].fillna(0).sum())
 
         total_fin    = float(df_fin['valor_estimado'].sum())
         total_fin_pa = float(df_fin_pa['valor_estimado'].sum())
@@ -2767,6 +2771,13 @@ if menu == "Painel Geral":
                     {"label": "Saldo restante", "value": _fmt(saldo)},
                     {"label": "% da meta",      "value": f"{pct_total:.1f}%"},
                 ])
+                if previsto_ano > 0:
+                    st.markdown(
+                        f"<div style='margin-top:6px;padding:6px 10px;background:rgba(59,130,246,0.10);"
+                        f"border-left:3px solid #3B82F6;border-radius:0 6px 6px 0;font-size:12px;color:#93C5FD;'>"
+                        f"Pipeline previsto (ainda não realizado): <b>{_fmt(previsto_ano)}</b></div>",
+                        unsafe_allow_html=True
+                    )
                 # Mini-barras por fonte (top 5)
                 st.markdown("<div style='margin-top:8px;'>", unsafe_allow_html=True)
                 df_top5 = df_prog_plano.sort_values('meta_2026', ascending=False).head(5)
@@ -3009,7 +3020,7 @@ if menu == "Painel Geral":
         df_top = run_query_slow(
             "SELECT UPPER(p.nome_instituicao) AS \"Parceiro\", SUM(d.valor_estimado) AS \"Total\", COUNT(*) AS \"Repasses\" "
             "FROM Doacao d JOIN Parceiro p ON d.id_parceiro=p.id_parceiro "
-            "WHERE EXTRACT(YEAR FROM d.data_doacao)=%s AND d.tipo_doacao IN ('Financeira','Projetos') "
+            "WHERE EXTRACT(YEAR FROM d.data_doacao)=%s AND d.tipo_doacao IN ('Financeira','Projetos') AND d.status_doacao='Realizada' "
             "GROUP BY p.nome_instituicao ORDER BY \"Total\" DESC LIMIT 5",
             (int(ano_sel),)
         )
@@ -3024,14 +3035,14 @@ if menu == "Painel Geral":
         section("Apoio em mídia e espécie (não-financeiro)")
         _tot_ik = run_query_slow(
             "SELECT COALESCE(SUM(valor_estimado),0) AS t, COUNT(*) AS n FROM Doacao "
-            "WHERE EXTRACT(YEAR FROM data_doacao)=%s AND tipo_doacao NOT IN ('Financeira','Projetos')",
+            "WHERE EXTRACT(YEAR FROM data_doacao)=%s AND tipo_doacao NOT IN ('Financeira','Projetos') AND status_doacao='Realizada'",
             (int(ano_sel),)
         )
         df_ik = run_query_slow(
             "SELECT UPPER(p.nome_instituicao) AS \"Parceiro\", d.tipo_doacao AS \"Tipo\", "
             "SUM(d.valor_estimado) AS \"Valor estimado\", COUNT(*) AS \"Itens\" "
             "FROM Doacao d JOIN Parceiro p ON d.id_parceiro=p.id_parceiro "
-            "WHERE EXTRACT(YEAR FROM d.data_doacao)=%s AND d.tipo_doacao NOT IN ('Financeira','Projetos') "
+            "WHERE EXTRACT(YEAR FROM d.data_doacao)=%s AND d.tipo_doacao NOT IN ('Financeira','Projetos') AND d.status_doacao='Realizada' "
             "GROUP BY p.nome_instituicao, d.tipo_doacao ORDER BY \"Valor estimado\" DESC LIMIT 6",
             (int(ano_sel),)
         )
@@ -5079,6 +5090,12 @@ elif menu == "Entrada de Recursos":
                     data_doa    = pa.date_input("Data do recebimento", datetime.now())
                     projeto_doa = pb.text_input("Projeto / Emenda / Finalidade",
                                                placeholder="ex: Projeto Vida")
+                    _status_doa = st.selectbox(
+                        "Status",
+                        ["Realizada (já recebido)", "Prevista (pipeline — ainda não recebido)"],
+                        help="Prevista entra no pipeline e tira o parceiro de 'sem doação', mas NÃO conta na captação realizada até você mudar para Realizada."
+                    )
+                    _status_val = "Prevista" if _status_doa.startswith("Prevista") else "Realizada"
                     desc_doa    = st.text_area("Observações",
                                               placeholder="Contexto, forma de pagamento, referências…")
 
@@ -5086,21 +5103,22 @@ elif menu == "Entrada de Recursos":
                         if nome_sel == "Selecione o parceiro...":
                             st.warning("Selecione o parceiro.")
                         elif valor_doa <= 0:
-                            st.warning("Informe um valor maior que zero.")
+                            st.warning("Informe um valor (estimado, se for previsão) maior que zero.")
                         else:
                             id_p = int(df_p[df_p['nome_instituicao'] == nome_sel]['id_parceiro'].values[0])
                             run_insert(
                                 """INSERT INTO Doacao (
                                     id_parceiro, valor_estimado, tipo_doacao,
-                                    data_doacao, descricao, nome_projeto, origem_captacao
-                                ) VALUES (?,?,?,?,?,?,?)""",
+                                    data_doacao, descricao, nome_projeto, origem_captacao, status_doacao
+                                ) VALUES (?,?,?,?,?,?,?,?)""",
                                 (id_p, valor_doa, tipo_doa,
                                  data_doa.strftime('%Y-%m-%d'),
                                  desc_doa.upper() if desc_doa else "",
                                  projeto_doa.upper() if projeto_doa else "GERAL",
-                                 origem_doa),
+                                 origem_doa, _status_val),
                             )
-                            st.success(f"{nome_sel} — {format_br(valor_doa)} registrado com sucesso.")
+                            _msg_st = "registrado" if _status_val == "Realizada" else "registrado como PREVISTO (pipeline)"
+                            st.success(f"{nome_sel} — {format_br(valor_doa)} {_msg_st}.")
                             st.rerun()
 
         # ════════════════════════════════════════════════════════
@@ -5144,7 +5162,8 @@ elif menu == "Entrada de Recursos":
             # ── Query base ─────────────────────────────────────
             query_hist = """
                 SELECT d.id_doacao, p.nome_instituicao AS parceiro, d.valor_estimado,
-                       d.data_doacao, d.nome_projeto, d.descricao, d.tipo_doacao, d.origem_captacao
+                       d.data_doacao, d.nome_projeto, d.descricao, d.tipo_doacao, d.origem_captacao,
+                       COALESCE(d.status_doacao,'Realizada') AS status_doacao
                 FROM Doacao d
                 JOIN Parceiro p ON d.id_parceiro = p.id_parceiro
                 ORDER BY d.data_doacao DESC
@@ -5235,13 +5254,18 @@ elif menu == "Entrada de Recursos":
                         _dv          = row['data_doacao'].date()
                         nova_data    = eb.date_input("Data", value=_dv)
                         novo_projeto = ec.text_input("Projeto", value=row['nome_projeto'] or "")
+                        _st_atual    = str(row.get('status_doacao') or 'Realizada')
+                        _st_opts     = ["Realizada", "Prevista"]
+                        novo_status  = st.selectbox("Status", _st_opts,
+                                                    index=_st_opts.index(_st_atual) if _st_atual in _st_opts else 0,
+                                                    help="Mude de Prevista para Realizada quando o valor for efetivamente recebido (e ajuste o valor real).")
                         nova_desc    = st.text_area("Observações", value=row['descricao'] or "")
 
                         cb1, cb2 = st.columns(2)
                         if cb1.form_submit_button("Salvar alterações", use_container_width=True, type="primary"):
                             run_exec(
-                                "UPDATE Doacao SET valor_estimado=%s, data_doacao=%s, nome_projeto=%s, descricao=%s WHERE id_doacao=%s",
-                                (novo_valor, str(nova_data), novo_projeto.upper(), nova_desc.upper() if nova_desc else "", int(_id_sel)),
+                                "UPDATE Doacao SET valor_estimado=%s, data_doacao=%s, nome_projeto=%s, descricao=%s, status_doacao=%s WHERE id_doacao=%s",
+                                (novo_valor, str(nova_data), novo_projeto.upper(), nova_desc.upper() if nova_desc else "", novo_status, int(_id_sel)),
                             )
                             st.success("Registro atualizado com sucesso!")
                             st.rerun()
