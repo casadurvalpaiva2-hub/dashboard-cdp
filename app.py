@@ -2881,7 +2881,7 @@ if menu == "Painel Geral":
                 for _tabx, _sttx in [(_tab_a, "Ativo"), (_tab_p, "Prospecção"), (_tab_i, "Inativo")]:
                     with _tabx:
                         _dfx = run_query_cached(
-                            "SELECT p.nome_instituicao AS \"Parceiro\", c.nome_categoria AS \"Categoria\", p.subcategoria AS \"Subcategoria\" "
+                            "SELECT UPPER(p.nome_instituicao) AS \"Parceiro\", c.nome_categoria AS \"Categoria\", p.subcategoria AS \"Subcategoria\" "
                             "FROM Parceiro p LEFT JOIN Categoria_Parceiro c ON p.id_categoria=c.id_categoria "
                             "WHERE p.status=%s ORDER BY p.nome_instituicao", (_sttx,)
                         )
@@ -2895,7 +2895,7 @@ if menu == "Painel Geral":
         # ════════════════════════════════════════════════════════════════════════
         section("Maiores doadores do ano")
         df_top = run_query_slow(
-            "SELECT p.nome_instituicao AS \"Parceiro\", SUM(d.valor_estimado) AS \"Total\", COUNT(*) AS \"Repasses\" "
+            "SELECT UPPER(p.nome_instituicao) AS \"Parceiro\", SUM(d.valor_estimado) AS \"Total\", COUNT(*) AS \"Repasses\" "
             "FROM Doacao d JOIN Parceiro p ON d.id_parceiro=p.id_parceiro "
             "WHERE EXTRACT(YEAR FROM d.data_doacao)=%s AND d.tipo_doacao IN ('Financeira','Projetos') "
             "GROUP BY p.nome_instituicao ORDER BY \"Total\" DESC LIMIT 5",
@@ -2955,22 +2955,22 @@ if menu == "Painel Geral":
         st.caption("Média de preenchimento dos parceiros ativos (contato, interação, doação no ano) e do tipo das doações. Cada registro completado faz a barra subir.")
         itens_qd = [
             (n_sd, f"Parceiros ativos sem doação em {ano_sel}",
-             f"SELECT p.nome_instituicao AS \"Parceiro\", c.nome_categoria AS \"Categoria\" "
+             f"SELECT UPPER(p.nome_instituicao) AS \"Parceiro\", c.nome_categoria AS \"Categoria\" "
              f"FROM Parceiro p LEFT JOIN Categoria_Parceiro c ON p.id_categoria=c.id_categoria "
              f"WHERE p.status='Ativo' AND NOT EXISTS (SELECT 1 FROM Doacao d WHERE d.id_parceiro=p.id_parceiro "
              f"AND EXTRACT(YEAR FROM d.data_doacao)={ano_sel}) ORDER BY p.nome_instituicao"),
             (n_st, "Doações sem tipo definido",
-             f"SELECT p.nome_instituicao AS \"Parceiro\", d.valor_estimado AS \"Valor\", d.data_doacao AS \"Data\" "
+             f"SELECT UPPER(p.nome_instituicao) AS \"Parceiro\", d.valor_estimado AS \"Valor\", d.data_doacao AS \"Data\" "
              f"FROM Doacao d LEFT JOIN Parceiro p ON d.id_parceiro=p.id_parceiro "
              f"WHERE (d.tipo_doacao IS NULL OR d.tipo_doacao='' OR d.tipo_doacao='Selecione...') "
              f"AND EXTRACT(YEAR FROM d.data_doacao)={ano_sel} ORDER BY p.nome_instituicao"),
             (n_sc, "Parceiros sem contato cadastrado",
-             "SELECT p.nome_instituicao AS \"Parceiro\", c.nome_categoria AS \"Categoria\" "
+             "SELECT UPPER(p.nome_instituicao) AS \"Parceiro\", c.nome_categoria AS \"Categoria\" "
              "FROM Parceiro p LEFT JOIN Categoria_Parceiro c ON p.id_categoria=c.id_categoria "
              "WHERE p.status='Ativo' AND NOT EXISTS (SELECT 1 FROM Contato_Direto ct WHERE ct.id_parceiro=p.id_parceiro) "
              "ORDER BY p.nome_instituicao"),
             (n_si, "Parceiros sem interação registrada",
-             "SELECT p.nome_instituicao AS \"Parceiro\", c.nome_categoria AS \"Categoria\" "
+             "SELECT UPPER(p.nome_instituicao) AS \"Parceiro\", c.nome_categoria AS \"Categoria\" "
              "FROM Parceiro p LEFT JOIN Categoria_Parceiro c ON p.id_categoria=c.id_categoria "
              "WHERE p.status='Ativo' AND NOT EXISTS (SELECT 1 FROM Registro_Relacionamento r WHERE r.id_parceiro=p.id_parceiro) "
              "ORDER BY p.nome_instituicao"),
@@ -2994,7 +2994,7 @@ if menu == "Painel Geral":
             format_func=lambda d: f"{d} dias", key="painel_limiar_frios"
         )
         _df_frios = run_query_cached(
-            "SELECT p.nome_instituicao AS \"Parceiro\", "
+            "SELECT UPPER(p.nome_instituicao) AS \"Parceiro\", "
             "MAX(r.data_interacao) AS \"Última interação\", "
             "(CURRENT_DATE - MAX(r.data_interacao)) AS \"Dias sem contato\" "
             "FROM Parceiro p JOIN Registro_Relacionamento r ON r.id_parceiro = p.id_parceiro "
@@ -4423,6 +4423,10 @@ elif menu == "Parcerias":
             for _col in ['Status', 'Categoria', 'Subcategoria', 'Parceiro']:
                 if _col in df_show.columns:
                     df_show[_col] = df_show[_col].fillna("—").replace({"": "—", "None": "—"})
+            # Nomes de parceiros/empresas e subcategoria em CAIXA ALTA
+            for _col in ['Parceiro', 'Subcategoria']:
+                if _col in df_show.columns:
+                    df_show[_col] = df_show[_col].astype(str).str.upper()
             colunas_exibir = [c for c in ['Parceiro', 'Status', 'Categoria', 'Subcategoria', 'Adesão'] if c in df_show.columns]
             st.dataframe(
                 df_show[colunas_exibir],
@@ -4430,6 +4434,13 @@ elif menu == "Parcerias":
                 column_config={
                     "Adesão": st.column_config.DateColumn("Adesão", format="DD/MM/YYYY"),
                 }
+            )
+            _cpa1, _cpa2 = st.columns([3, 1])
+            _cpa1.caption(f"Mostrando {len(df_show)} de {len(df_p)} parceiros.")
+            _cpa2.download_button(
+                "Exportar CSV",
+                df_show[colunas_exibir].to_csv(index=False).encode("utf-8-sig"),
+                "parceiros.csv", "text/csv", use_container_width=True, key="exp_parc"
             )
         else:
             empty_state("—", "Nada encontrado", "Ajuste a busca ou cadastre um novo parceiro.")
@@ -4450,7 +4461,10 @@ elif menu == "Parcerias":
             df_contatos_parceiro = run_query(query_contatos)
 
             if not df_contatos_parceiro.empty:
-                st.write(f"**Pessoas de contato em {parceiro_selecionado}:**")
+                for _c in ['Nome', 'Cargo']:
+                    if _c in df_contatos_parceiro.columns:
+                        df_contatos_parceiro[_c] = df_contatos_parceiro[_c].fillna("—").replace({"": "—", "None": "—", "(sem nome)": "—"}).astype(str).str.upper()
+                st.write(f"**Pessoas de contato em {parceiro_selecionado.upper()}:**")
                 st.dataframe(df_contatos_parceiro, hide_index=True, use_container_width=True)
             else:
                 empty_state("—", f"Sem contatos em {parceiro_selecionado}", "Use o botao NOVO no topo do menu para cadastrar um contato.")
@@ -5288,6 +5302,10 @@ elif menu == "Contatos":
                 for _c in ['Empresa', 'Nome', 'Cargo', 'WhatsApp']:
                     if _c in df_filtrado.columns:
                         df_filtrado[_c] = df_filtrado[_c].fillna("—").replace({"": "—", "None": "—", "(sem nome)": "—"})
+                # Nomes, cargos e empresas sempre em CAIXA ALTA
+                for _c in ['Empresa', 'Nome', 'Cargo']:
+                    if _c in df_filtrado.columns:
+                        df_filtrado[_c] = df_filtrado[_c].astype(str).str.upper()
 
                 # 4. Exibição da Tabela com Column Config
                 st.dataframe(
@@ -5304,6 +5322,14 @@ elif menu == "Contatos":
                     },
                     hide_index=True,
                     use_container_width=True
+                )
+                _cct1, _cct2 = st.columns([3, 1])
+                _cct1.caption(f"Mostrando {len(df_filtrado)} de {len(df_contatos)} contatos.")
+                _exp_cols = [c for c in ['Empresa', 'Nome', 'Cargo', 'WhatsApp', 'Email'] if c in df_filtrado.columns]
+                _cct2.download_button(
+                    "Exportar CSV",
+                    df_filtrado[_exp_cols].to_csv(index=False).encode("utf-8-sig"),
+                    "contatos.csv", "text/csv", use_container_width=True, key="exp_cont"
                 )
             else:
                 st.warning("Nenhum contato encontrado na busca.")
@@ -5421,7 +5447,7 @@ elif menu == "Relacionamento":
     if vencidos > 0:
         with st.expander(f"Ver follow-ups vencidos ({vencidos})"):
             _df_fv = run_query_cached(
-                "SELECT p.nome_instituicao AS \"Parceiro\", r.proxima_acao_data AS \"Ação prevista para\", "
+                "SELECT UPPER(p.nome_instituicao) AS \"Parceiro\", r.proxima_acao_data AS \"Ação prevista para\", "
                 "r.descricao_do_que_foi_feito AS \"Último registro\" "
                 "FROM Registro_Relacionamento r JOIN Parceiro p ON r.id_parceiro = p.id_parceiro "
                 "WHERE r.proxima_acao_data IS NOT NULL AND r.proxima_acao_data < CURRENT_DATE "
