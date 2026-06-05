@@ -1625,7 +1625,7 @@ def _rel_tab_registrar(df_parceiros, df_interacoes):
 
             _fi3, _fi4  = st.columns(2)
             _canal_sel  = _fi3.selectbox("Canal", _CANAIS, key="ni_canal")
-            _data_int   = _fi4.date_input("Data *", datetime.now().date(), key="ni_data")
+            _data_int   = _fi4.date_input("Data *", datetime.now().date(), key="ni_data", format="DD/MM/YYYY")
 
             # Tipo público da régua (define quais automações gerar)
             _tipo_pub_atual = None
@@ -1666,7 +1666,7 @@ def _rel_tab_registrar(df_parceiros, df_interacoes):
             )
             _fi5, _fi6  = st.columns(2)
             _prox_acao  = _fi5.text_input("Próxima ação", placeholder="ex: Enviar proposta", key="ni_prox")
-            _prox_data  = _fi6.date_input("Data da próxima ação", value=None, key="ni_prox_data")
+            _prox_data  = _fi6.date_input("Data da próxima ação", value=None, key="ni_prox_data", format="DD/MM/YYYY")
             _resp       = st.text_input("Responsável", placeholder="Quem fez o contato?", key="ni_resp")
 
             _submitted = st.form_submit_button("Registrar", type="primary", use_container_width=True)
@@ -1768,8 +1768,8 @@ def _rel_tab_registrar(df_parceiros, df_interacoes):
         st.info("Nenhuma interação registrada ainda.")
     else:
         for _, _r in _df_ult.iterrows():
-            _nome_p  = _nomes_map.get(_r["id_parceiro"], "—")
-            _data_r  = str(_r["data_interacao"])[:10] if pd.notna(_r["data_interacao"]) else "—"
+            _nome_p  = str(_nomes_map.get(_r["id_parceiro"], "—")).upper()
+            _data_r  = pd.to_datetime(_r["data_interacao"]).strftime("%d/%m/%Y") if pd.notna(_r["data_interacao"]) else "—"
             _tipo_r  = str(_r.get("tipo_interacao", "")) if pd.notna(_r.get("tipo_interacao")) else ""
             _tipo_tag = (f"<span style=\'background:rgba(59,130,246,0.18);color:#93C5FD;"
                          f"padding:1px 8px;border-radius:10px;font-size:0.78rem;margin-right:6px;\'>"
@@ -1848,7 +1848,7 @@ def _rel_tab_parceiros(df_parceiros, hoje):
                     if pd.notna(_sr["_ultimo"]) else "Sem histórico"
                 )
                 action_card(
-                    titulo=str(_sr["nome_instituicao"]),
+                    titulo=str(_sr["nome_instituicao"]).upper(),
                     meta_parts=[str(_sr.get("status", "")), _data_label, _dias_label],
                     tom=_tom_st,
                 )
@@ -1918,7 +1918,7 @@ def _rel_tab_parceiros(df_parceiros, hoje):
                     "data":    pd.to_datetime(r["data"], errors="coerce"),
                     "label":   tipo_r,
                     "desc":    str(r["descricao"]) if pd.notna(r["descricao"]) else "—",
-                    "extra":   (f"Proxima acao: {r['proxima_acao_data']}" if pd.notna(r.get("proxima_acao_data")) else None),
+                    "extra":   (f"Próxima ação: {pd.to_datetime(r['proxima_acao_data']).strftime('%d/%m/%Y')}" if pd.notna(r.get("proxima_acao_data")) else None),
                     "extra2":  f"por {resp_r}" if resp_r else None,
                     "cor":     "#3B82F6",
                 })
@@ -2013,7 +2013,7 @@ def _rel_tab_followups(df_regua_pend, hoje):
                     _fuc1, _fuc2 = st.columns([5, 1])
                     with _fuc1:
                         action_card(
-                            titulo=str(row["nome_instituicao"]),
+                            titulo=str(row["nome_instituicao"]).upper(),
                             meta_parts=[
                                 str(row.get("tipo_interacao","")) or "Follow-up",
                                 f"Prazo: {data_fmt} ({badge})"
@@ -2059,9 +2059,9 @@ def _rel_tab_followups(df_regua_pend, hoje):
             _parceiros_pend = _df_rp["nome_instituicao"].unique() if not _df_rp.empty else []
             for _np in _parceiros_pend:
                 _df_p_rp = _df_rp[_df_rp["nome_instituicao"] == _np]
-                with st.expander(f"{_np}  ({len(_df_p_rp)} pendência(s))", expanded=True):
+                with st.expander(f"{str(_np).upper()}  ({len(_df_p_rp)} pendência(s))", expanded=True):
                     for _, _rp in _df_p_rp.iterrows():
-                        _ds    = str(_rp["data_sugerida"])[:10] if pd.notna(_rp["data_sugerida"]) else "—"
+                        _ds    = pd.to_datetime(_rp["data_sugerida"]).strftime("%d/%m/%Y") if pd.notna(_rp["data_sugerida"]) else "—"
                         _dias_rp = (pd.to_datetime(_rp["data_sugerida"]).date() - hoje).days if pd.notna(_rp["data_sugerida"]) else 0
                         _cor_rp  = "#DC2626" if _dias_rp < 0 else "#D97706" if _dias_rp <= 7 else "#3B82F6"
                         _rp_c1, _rp_c2, _rp_c3 = st.columns([4, 2, 1])
@@ -2071,7 +2071,7 @@ def _rel_tab_followups(df_regua_pend, hoje):
                             unsafe_allow_html=True
                         )
                         _rp_c2.markdown(
-                            f"<div style='font-size:0.82rem;color:{_cor_rp};margin-top:4px;'>ate {_ds}</div>",
+                            f"<div style='font-size:0.82rem;color:{_cor_rp};margin-top:4px;'>até {_ds}</div>",
                             unsafe_allow_html=True
                         )
                         _rp_btn_key = f"rp_feito_{_rp['id']}"
