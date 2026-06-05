@@ -1081,7 +1081,6 @@ run_insert = run_exec
 with st.sidebar.expander("Trocar minha senha"):
     _u_sb = st.session_state.get("user_data") or {}
     _login_cur = next((k for k, v in CONTAS.items() if v.get("nome") == _u_sb.get("nome")), None)
-    run_exec("CREATE TABLE IF NOT EXISTS Usuario_Senhas (login TEXT PRIMARY KEY, senha TEXT NOT NULL)")
     with st.form("form_senha_sidebar", clear_on_submit=True):
         _s1 = st.text_input("Senha atual",         type="password", placeholder="••••••")
         _s2 = st.text_input("Nova senha",          type="password", placeholder="Mínimo 6 caracteres")
