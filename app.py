@@ -1605,13 +1605,89 @@ def _gerar_regua_pendencias(id_parceiro: int, tipo_publico: str):
 
 
 # ── Aba Relacionamento — funções por sub-aba ────────────────────────────
+def _rel_tab_hoje(hoje):
+    """Fila única do dia: follow-ups (vencidos + próximos 7 dias) e ativos esfriando (+60d)."""
+    st.caption("Sua fila de hoje — follow-ups e parceiros ativos esfriando, num lugar só. Resolva e feche o loop em um clique.")
+
+    df_fu = run_query(
+        "SELECT id_parceiro, nome_instituicao, proxima_acao_data, dias FROM ("
+        "  SELECT DISTINCT ON (r.id_parceiro) r.id_parceiro, p.nome_instituicao, "
+        "    r.proxima_acao_data, (CURRENT_DATE - r.proxima_acao_data::date) AS dias "
+        "  FROM Registro_Relacionamento r JOIN Parceiro p ON r.id_parceiro = p.id_parceiro "
+        "  WHERE r.proxima_acao_data IS NOT NULL "
+        "  ORDER BY r.id_parceiro, r.proxima_acao_data DESC"
+        ") s WHERE proxima_acao_data::date <= CURRENT_DATE + 7 ORDER BY proxima_acao_data ASC"
+    )
+    df_frio = run_query(
+        "SELECT p.id_parceiro, p.nome_instituicao, (CURRENT_DATE - MAX(r.data_interacao)::date) AS dias "
+        "FROM Parceiro p JOIN Registro_Relacionamento r ON r.id_parceiro = p.id_parceiro "
+        "WHERE p.status = 'Ativo' GROUP BY p.id_parceiro, p.nome_instituicao "
+        "HAVING MAX(r.data_interacao) < CURRENT_DATE - 60 ORDER BY MAX(r.data_interacao) ASC"
+    )
+
+    _fu_ids = set(df_fu['id_parceiro'].tolist()) if not df_fu.empty else set()
+    itens = []
+    if not df_fu.empty:
+        for _, r in df_fu.iterrows():
+            d = int(r['dias'])
+            if   d > 0:  tom, txt = "danger",  f"Follow-up vencido há {d} dia(s)"
+            elif d == 0: tom, txt = "warning", "Follow-up previsto para hoje"
+            else:        tom, txt = "info",    f"Follow-up em {abs(d)} dia(s)"
+            itens.append({"pid": int(r['id_parceiro']), "nome": str(r['nome_instituicao']).upper(),
+                          "txt": txt, "tom": tom, "ord": d, "tipo": "fu"})
+    if not df_frio.empty:
+        for _, r in df_frio.iterrows():
+            if int(r['id_parceiro']) in _fu_ids:
+                continue
+            d = int(r['dias'])
+            itens.append({"pid": int(r['id_parceiro']), "nome": str(r['nome_instituicao']).upper(),
+                          "txt": f"Ativo sem contato há {d} dias", "tom": "danger" if d > 120 else "warning",
+                          "ord": d, "tipo": "frio"})
+
+    if not itens:
+        st.success("Tudo em dia — nenhuma ação pendente na fila.")
+        return
+
+    _peso = {"danger": 2, "warning": 1, "info": 0}
+    itens.sort(key=lambda x: (-_peso[x["tom"]], -x["ord"]))
+    _cor = {"danger": "#DC2626", "warning": "#D97706", "info": "#3B82F6"}
+    st.caption(f"{len(itens)} ação(ões) na fila.")
+    for it in itens:
+        _c1, _c2 = st.columns([7, 2])
+        with _c1:
+            st.markdown(
+                f"<div style='border-left:3px solid {_cor[it['tom']]};padding:7px 12px;"
+                f"background:rgba(255,255,255,0.03);border-radius:0 6px 6px 0;'>"
+                f"<div style='font-weight:600;color:#E5E7EB;font-size:0.92rem;'>{it['nome']}</div>"
+                f"<div style='font-size:0.8rem;color:#94A3B8;'>{it['txt']}</div></div>",
+                unsafe_allow_html=True
+            )
+        _label = "Concluir" if it["tipo"] == "fu" else "Registrei contato"
+        if _c2.button(_label, key=f"hoje_{it['tipo']}_{it['pid']}", use_container_width=True):
+            _desc = ("Follow-up concluído pela fila de hoje" if it["tipo"] == "fu"
+                     else "Contato registrado pela fila de hoje")
+            run_exec(
+                "INSERT INTO Registro_Relacionamento (id_parceiro, data_interacao, descricao_do_que_foi_feito, tipo_interacao) "
+                "VALUES (%s, %s, %s, %s)", (it['pid'], hoje, _desc, "Contato")
+            )
+            if it["tipo"] == "fu":
+                run_exec(
+                    "UPDATE Registro_Relacionamento SET proxima_acao_data = NULL "
+                    "WHERE id_parceiro = %s AND proxima_acao_data IS NOT NULL "
+                    "AND proxima_acao_data::date < CURRENT_DATE", (it['pid'],)
+                )
+            run_query_cached.clear()
+            st.success(f"{it['nome']} — registrado.")
+            st.rerun()
+
+
 def _rel_tab_registrar(df_parceiros, df_interacoes):
     _rc1, _rc2 = st.columns([3, 2], gap="large")
 
     with _rc1:
         section("Nova interação")
         _TIPOS_INTERACAO = [
-            "Almoço CDP", "Reunião presencial", "Ligação telefônica",
+            "Contato", "Almoço CDP", "Reunião presencial", "Ligação telefônica",
             "WhatsApp", "E-mail", "Visita ao parceiro",
             "Evento externo", "Envio de material", "Agradecimento", "Follow-up", "Outro",
         ]
@@ -1619,15 +1695,17 @@ def _rel_tab_registrar(df_parceiros, df_interacoes):
 
         with st.form("form_nova_interacao", clear_on_submit=True):
             _nomes_parc = sorted(df_parceiros["nome_instituicao"].dropna().tolist())
-            _fi1, _fi2  = st.columns(2)
+            # ── Essencial: parceiro, data e o que foi feito ──
+            _fi1, _fi4  = st.columns([3, 2])
             _parc_sel   = _fi1.selectbox("Parceiro *", ["-- selecione --"] + _nomes_parc, key="ni_parc")
-            _tipo_sel   = _fi2.selectbox("Tipo de interação *", _TIPOS_INTERACAO, key="ni_tipo")
-
-            _fi3, _fi4  = st.columns(2)
-            _canal_sel  = _fi3.selectbox("Canal", _CANAIS, key="ni_canal")
             _data_int   = _fi4.date_input("Data *", datetime.now().date(), key="ni_data", format="DD/MM/YYYY")
+            _descricao  = st.text_area(
+                "O que foi feito / conversado *",
+                placeholder="Descreva o que aconteceu, decisões, encaminhamentos...",
+                height=100, key="ni_desc"
+            )
 
-            # Tipo público da régua (define quais automações gerar)
+            # Parceiro selecionado (necessário para contatos e régua)
             _tipo_pub_atual = None
             _id_p_form_val  = None
             if _parc_sel != "-- selecione --":
@@ -1636,38 +1714,37 @@ def _rel_tab_registrar(df_parceiros, df_interacoes):
                     _id_p_form_val  = int(_row_p["id_parceiro"].values[0])
                     _tipo_pub_atual = _row_p["tipo_publico_regua"].values[0]
 
-            _opts_pub = ["(não definir)"] + list(REGUA_CONFIG.keys())
-            _idx_pub  = 0
-            if _tipo_pub_atual and _tipo_pub_atual in _opts_pub:
-                _idx_pub = _opts_pub.index(_tipo_pub_atual)
-            _tipo_pub_sel = st.selectbox(
-                "Tipo de público (régua) — define automações",
-                options=_opts_pub, index=_idx_pub, key="ni_pub"
-            )
+            # ── Opcional: recolhido por padrão para agilizar o registro diário ──
+            with st.expander("Mais detalhes (opcional)"):
+                _fi2, _fi3  = st.columns(2)
+                _tipo_sel   = _fi2.selectbox("Tipo de interação", _TIPOS_INTERACAO, key="ni_tipo")
+                _canal_sel  = _fi3.selectbox("Canal", _CANAIS, key="ni_canal")
 
-            # Contato envolvido
-            _contatos_disp = [("Nenhum", None)]
-            if _id_p_form_val:
-                _ct = run_query(
-                    "SELECT id_contato, nome_pessoa FROM Contato_Direto "
-                    "WHERE id_parceiro = %s ORDER BY nome_pessoa",
-                    (_id_p_form_val,)
+                _contatos_disp = [("Nenhum", None)]
+                if _id_p_form_val:
+                    _ct = run_query(
+                        "SELECT id_contato, nome_pessoa FROM Contato_Direto "
+                        "WHERE id_parceiro = %s ORDER BY nome_pessoa",
+                        (_id_p_form_val,)
+                    )
+                    if not _ct.empty:
+                        _contatos_disp += [(r["nome_pessoa"], r["id_contato"]) for _, r in _ct.iterrows()]
+                _contato_sel    = st.selectbox("Contato envolvido", [c[0] for c in _contatos_disp], key="ni_contato")
+                _id_contato_form = dict(_contatos_disp).get(_contato_sel)
+
+                _fi5, _fi6  = st.columns(2)
+                _prox_acao  = _fi5.text_input("Próxima ação", placeholder="ex: Enviar proposta", key="ni_prox")
+                _prox_data  = _fi6.date_input("Data da próxima ação", value=None, key="ni_prox_data", format="DD/MM/YYYY")
+                _resp       = st.text_input("Responsável", placeholder="Quem fez o contato?", key="ni_resp")
+
+                _opts_pub = ["(não definir)"] + list(REGUA_CONFIG.keys())
+                _idx_pub  = 0
+                if _tipo_pub_atual and _tipo_pub_atual in _opts_pub:
+                    _idx_pub = _opts_pub.index(_tipo_pub_atual)
+                _tipo_pub_sel = st.selectbox(
+                    "Tipo de público (régua) — define automações",
+                    options=_opts_pub, index=_idx_pub, key="ni_pub"
                 )
-                if not _ct.empty:
-                    _contatos_disp += [(r["nome_pessoa"], r["id_contato"]) for _, r in _ct.iterrows()]
-            _contato_sel    = st.selectbox("Contato envolvido (opcional)",
-                                           [c[0] for c in _contatos_disp], key="ni_contato")
-            _id_contato_form = dict(_contatos_disp).get(_contato_sel)
-
-            _descricao = st.text_area(
-                "O que foi feito / conversado *",
-                placeholder="Descreva o que aconteceu, decisoes, encaminhamentos...",
-                height=100, key="ni_desc"
-            )
-            _fi5, _fi6  = st.columns(2)
-            _prox_acao  = _fi5.text_input("Próxima ação", placeholder="ex: Enviar proposta", key="ni_prox")
-            _prox_data  = _fi6.date_input("Data da próxima ação", value=None, key="ni_prox_data", format="DD/MM/YYYY")
-            _resp       = st.text_input("Responsável", placeholder="Quem fez o contato?", key="ni_resp")
 
             _submitted = st.form_submit_button("Registrar", type="primary", use_container_width=True)
             if _submitted:
@@ -5421,60 +5498,44 @@ elif menu == "Relacionamento":
         "WHERE rp.status = \'PENDENTE\' ORDER BY rp.data_sugerida ASC"
     )
 
-    page_header("Relacionamento", "Registro, automações da régua e histórico de parceiros.")
+    page_header("Relacionamento", "Sua fila de ações do dia, registro rápido e histórico dos parceiros.")
 
 
     hoje = datetime.now().date()
-    m_a  = df_parceiros["status_limpo"].str.fullmatch("ATIVO",   na=False)
-    m_p  = df_parceiros["status_limpo"].str.contains("PROSPEC", na=False)
-    m_i  = df_parceiros["status_limpo"].str.contains("INATIVO", na=False)
 
-    vencidos = 0
-    if not df_interacoes.empty and "proxima_acao_data" in df_interacoes.columns:
-        _d = pd.to_datetime(df_interacoes["proxima_acao_data"], errors="coerce").dt.date
-        vencidos = int((_d < hoje).sum())
-
-    pendencias_regua = len(df_regua_pend) if not df_regua_pend.empty else 0
+    # Métricas de AÇÃO (o retrato da carteira — Ativos/Prospecção/Inativos — vive no Painel Geral)
+    _kpi = run_query_cached(
+        "SELECT "
+        "(SELECT COUNT(*) FROM (SELECT DISTINCT ON (id_parceiro) proxima_acao_data FROM Registro_Relacionamento "
+        " WHERE proxima_acao_data IS NOT NULL ORDER BY id_parceiro, proxima_acao_data DESC) a "
+        " WHERE a.proxima_acao_data::date < CURRENT_DATE) AS vencidas, "
+        "(SELECT COUNT(*) FROM (SELECT DISTINCT ON (id_parceiro) proxima_acao_data FROM Registro_Relacionamento "
+        " WHERE proxima_acao_data IS NOT NULL ORDER BY id_parceiro, proxima_acao_data DESC) b "
+        " WHERE b.proxima_acao_data::date BETWEEN CURRENT_DATE AND CURRENT_DATE + 7) AS semana, "
+        "(SELECT COUNT(*) FROM Parceiro p WHERE p.status = 'Ativo' "
+        " AND (SELECT MAX(r.data_interacao) FROM Registro_Relacionamento r WHERE r.id_parceiro = p.id_parceiro) "
+        "     < CURRENT_DATE - 60) AS frios"
+    )
+    _venc = int(_kpi['vencidas'].iloc[0]) if not _kpi.empty else 0
+    _sem  = int(_kpi['semana'].iloc[0])   if not _kpi.empty else 0
+    _fri  = int(_kpi['frios'].iloc[0])    if not _kpi.empty else 0
 
     kpi_row([
-        {"label": "Ativos",              "value": int(m_a.sum()), "accent": True},
-        {"label": "Prospecção",          "value": int(m_p.sum())},
-        {"label": "Inativos",            "value": int(m_i.sum())},
-        {"label": "Follow-ups vencidos", "value": vencidos},
-        {"label": "Pendências da régua", "value": pendencias_regua, "hint": "ações da régua não realizadas"},
+        {"label": "Vencidas",              "value": _venc, "accent": True},
+        {"label": "Para esta semana",      "value": _sem},
+        {"label": "Ativos sem toque +60d", "value": _fri},
     ])
 
-    if vencidos > 0:
-        with st.expander(f"Ver follow-ups vencidos ({vencidos})"):
-            _df_fv = run_query_cached(
-                "SELECT UPPER(p.nome_instituicao) AS \"Parceiro\", r.proxima_acao_data AS \"Ação prevista para\", "
-                "r.descricao_do_que_foi_feito AS \"Último registro\" "
-                "FROM Registro_Relacionamento r JOIN Parceiro p ON r.id_parceiro = p.id_parceiro "
-                "WHERE r.proxima_acao_data IS NOT NULL AND r.proxima_acao_data < CURRENT_DATE "
-                "ORDER BY r.proxima_acao_data ASC"
-            )
-            if not _df_fv.empty:
-                st.dataframe(
-                    _df_fv, hide_index=True, use_container_width=True,
-                    column_config={"Ação prevista para": st.column_config.DateColumn("Ação prevista para", format="DD/MM/YYYY")}
-                )
-            else:
-                st.caption("Nenhum follow-up vencido encontrado.")
-
-
-    tab_reg, tab_parceiros, tab_followups, tab_regua, tab_relatorio = st.tabs([
-        "Registrar", "Parceiros", "Follow-ups", "Régua", "Relatório"
+    tab_hoje, tab_reg, tab_parceiros, tab_relatorio = st.tabs([
+        "Hoje", "Registrar", "Parceiros", "Relatório"
     ])
 
-
+    with tab_hoje:
+        _rel_tab_hoje(hoje)
     with tab_reg:
         _rel_tab_registrar(df_parceiros, df_interacoes)
     with tab_parceiros:
         _rel_tab_parceiros(df_parceiros, hoje)
-    with tab_followups:
-        _rel_tab_followups(df_regua_pend, hoje)
-    with tab_regua:
-        _rel_tab_regua()
     with tab_relatorio:
         _rel_tab_relatorio(df_rel)
 
