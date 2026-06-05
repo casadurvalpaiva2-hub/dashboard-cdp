@@ -1610,8 +1610,8 @@ def _rel_tab_hoje(hoje):
     st.caption("Sua fila de hoje — follow-ups e parceiros ativos esfriando, num lugar só. Resolva e feche o loop em um clique.")
 
     df_fu = run_query(
-        "SELECT id_parceiro, nome_instituicao, proxima_acao_data, dias FROM ("
-        "  SELECT DISTINCT ON (r.id_parceiro) r.id_parceiro, p.nome_instituicao, "
+        "SELECT id_registro, id_parceiro, nome_instituicao, proxima_acao_data, dias FROM ("
+        "  SELECT DISTINCT ON (r.id_parceiro) r.id_registro, r.id_parceiro, p.nome_instituicao, "
         "    r.proxima_acao_data, (CURRENT_DATE - r.proxima_acao_data::date) AS dias "
         "  FROM Registro_Relacionamento r JOIN Parceiro p ON r.id_parceiro = p.id_parceiro "
         "  WHERE r.proxima_acao_data IS NOT NULL "
@@ -1634,7 +1634,7 @@ def _rel_tab_hoje(hoje):
             elif d == 0: tom, txt = "warning", "Follow-up previsto para hoje"
             else:        tom, txt = "info",    f"Follow-up em {abs(d)} dia(s)"
             itens.append({"pid": int(r['id_parceiro']), "nome": str(r['nome_instituicao']).upper(),
-                          "txt": txt, "tom": tom, "ord": d, "tipo": "fu"})
+                          "txt": txt, "tom": tom, "ord": d, "tipo": "fu", "rid": int(r['id_registro'])})
     if not df_frio.empty:
         for _, r in df_frio.iterrows():
             if int(r['id_parceiro']) in _fu_ids:
@@ -1652,8 +1652,18 @@ def _rel_tab_hoje(hoje):
     itens.sort(key=lambda x: (-_peso[x["tom"]], -x["ord"]))
     _cor = {"danger": "#DC2626", "warning": "#D97706", "info": "#3B82F6"}
     st.caption(f"{len(itens)} ação(ões) na fila.")
+    def _limpar_vencidos(pid):
+        run_exec(
+            "UPDATE Registro_Relacionamento SET proxima_acao_data = NULL "
+            "WHERE id_parceiro = %s AND proxima_acao_data IS NOT NULL "
+            "AND proxima_acao_data::date < CURRENT_DATE", (pid,)
+        )
+
     for it in itens:
-        _c1, _c2 = st.columns([7, 2])
+        if it["tipo"] == "fu":
+            _c1, _cA, _cB, _cC = st.columns([6, 1.3, 1.4, 1.4])
+        else:
+            _c1, _cC = st.columns([8.1, 1.4]); _cA = _cB = None
         with _c1:
             st.markdown(
                 f"<div style='border-left:3px solid {_cor[it['tom']]};padding:7px 12px;"
@@ -1662,23 +1672,44 @@ def _rel_tab_hoje(hoje):
                 f"<div style='font-size:0.8rem;color:#94A3B8;'>{it['txt']}</div></div>",
                 unsafe_allow_html=True
             )
-        _label = "Concluir" if it["tipo"] == "fu" else "Registrei contato"
-        if _c2.button(_label, key=f"hoje_{it['tipo']}_{it['pid']}", use_container_width=True):
-            _desc = ("Follow-up concluído pela fila de hoje" if it["tipo"] == "fu"
-                     else "Contato registrado pela fila de hoje")
-            run_exec(
-                "INSERT INTO Registro_Relacionamento (id_parceiro, data_interacao, descricao_do_que_foi_feito, tipo_interacao) "
-                "VALUES (%s, %s, %s, %s)", (it['pid'], hoje, _desc, "Contato")
-            )
-            if it["tipo"] == "fu":
+
+        if it["tipo"] == "fu":
+            if _cA.button("Concluir", key=f"hoje_ok_{it['pid']}", use_container_width=True):
                 run_exec(
-                    "UPDATE Registro_Relacionamento SET proxima_acao_data = NULL "
-                    "WHERE id_parceiro = %s AND proxima_acao_data IS NOT NULL "
-                    "AND proxima_acao_data::date < CURRENT_DATE", (it['pid'],)
+                    "INSERT INTO Registro_Relacionamento (id_parceiro, data_interacao, descricao_do_que_foi_feito, tipo_interacao) "
+                    "VALUES (%s, %s, %s, %s)", (it['pid'], hoje, "Follow-up concluído pela fila de hoje", "Contato")
                 )
-            run_query_cached.clear()
-            st.success(f"{it['nome']} — registrado.")
-            st.rerun()
+                _limpar_vencidos(it['pid'])
+                run_query_cached.clear()
+                st.success(f"{it['nome']} — concluído.")
+                st.rerun()
+            with _cB.popover("Reagendar", use_container_width=True):
+                _nd = st.date_input("Nova data", value=hoje + timedelta(days=7),
+                                    key=f"hoje_rgd_{it['rid']}", format="DD/MM/YYYY")
+                if st.button("Salvar", key=f"hoje_rgs_{it['rid']}", use_container_width=True):
+                    run_exec("UPDATE Registro_Relacionamento SET proxima_acao_data = %s WHERE id_registro = %s",
+                             (_nd, it['rid']))
+                    run_query_cached.clear()
+                    st.success(f"{it['nome']} — reagendado para {_nd.strftime('%d/%m/%Y')}.")
+                    st.rerun()
+
+        with _cC.popover("Registrar", use_container_width=True):
+            _rdesc = st.text_area("O que foi feito", key=f"hoje_rdt_{it['pid']}", height=80,
+                                  placeholder="Resumo do contato...")
+            _rprox = st.date_input("Próxima ação (opcional)", value=None,
+                                   key=f"hoje_rpx_{it['pid']}", format="DD/MM/YYYY")
+            if st.button("Salvar registro", key=f"hoje_rds_{it['pid']}", use_container_width=True):
+                run_exec(
+                    "INSERT INTO Registro_Relacionamento (id_parceiro, data_interacao, descricao_do_que_foi_feito, proxima_acao_data, tipo_interacao) "
+                    "VALUES (%s, %s, %s, %s, %s)",
+                    (it['pid'], hoje, (_rdesc.strip() or "Contato registrado"),
+                     (_rprox if _rprox else None), "Contato")
+                )
+                if it["tipo"] == "fu" and not _rprox:
+                    _limpar_vencidos(it['pid'])
+                run_query_cached.clear()
+                st.success(f"{it['nome']} — registrado.")
+                st.rerun()
 
 
 def _rel_tab_registrar(df_parceiros, df_interacoes):
