@@ -2864,7 +2864,7 @@ if menu == "Painel Geral":
         section("Parceiros")
         if not df_parceiros_pg.empty:
             s_lp = df_parceiros_pg['status'].fillna("").str.upper()
-            ativos_p   = int(s_lp.str.contains("ATIVO",   na=False).sum())
+            ativos_p   = int(s_lp.str.fullmatch("ATIVO",   na=False).sum())
             prospec_p  = int(s_lp.str.contains("PROSPEC", na=False).sum())
             inativos_p = int(s_lp.str.contains("INATIVO", na=False).sum())
             df_parceiros_pg['_ad'] = pd.to_datetime(df_parceiros_pg['data_adesao'], errors='coerce')
@@ -4395,7 +4395,7 @@ elif menu == "Parcerias":
             s_limpo = df_p['status'].fillna("").str.upper().str.strip()
             kpi_row([
                 {"label": "Total de parceiros", "value": len(df_p)},
-                {"label": "Ativos",       "value": int(s_limpo.str.contains("ATIVO", na=False).sum()), "accent": True},
+                {"label": "Ativos",       "value": int(s_limpo.str.fullmatch("ATIVO", na=False).sum()), "accent": True},
                 {"label": "Prospecção",   "value": int(s_limpo.str.contains("PROSPEC", na=False).sum())},
                 {"label": "Inativos",     "value": int(s_limpo.str.contains("INATIVO", na=False).sum())},
             ])
@@ -4417,6 +4417,12 @@ elif menu == "Parcerias":
                 'subcategoria': 'Subcategoria',
                 'nome_categoria': 'Categoria',
             })
+            # UX: datas nulas ficam em branco; textos vazios viram "—"
+            if 'Adesão' in df_show.columns:
+                df_show['Adesão'] = pd.to_datetime(df_show['Adesão'], errors='coerce')
+            for _col in ['Status', 'Categoria', 'Subcategoria', 'Parceiro']:
+                if _col in df_show.columns:
+                    df_show[_col] = df_show[_col].fillna("—").replace({"": "—", "None": "—"})
             colunas_exibir = [c for c in ['Parceiro', 'Status', 'Categoria', 'Subcategoria', 'Adesão'] if c in df_show.columns]
             st.dataframe(
                 df_show[colunas_exibir],
@@ -4587,7 +4593,7 @@ elif menu == "Parcerias":
         else:
             s = df_funil_all['status'].fillna("").str.upper().str.strip()
             n_prospec  = int(s.str.contains("PROSPEC").sum())
-            n_ativo    = int(s.str.contains("ATIVO").sum())
+            n_ativo    = int(s.str.fullmatch("ATIVO").sum())
             n_inativo  = int(s.str.contains("INATIVO").sum())
             total      = len(df_funil_all)
             tx_conv    = round(n_ativo / total * 100, 1) if total > 0 else 0
@@ -5278,6 +5284,11 @@ elif menu == "Contatos":
                     lambda x: f"https://mail.google.com/mail/?view=cm&fs=1&to={str(x).strip()}" if pd.notnull(x) and x != "" else None
                 )
 
+                # UX: troca None / vazio / "(sem nome)" por "—" nas colunas visíveis
+                for _c in ['Empresa', 'Nome', 'Cargo', 'WhatsApp']:
+                    if _c in df_filtrado.columns:
+                        df_filtrado[_c] = df_filtrado[_c].fillna("—").replace({"": "—", "None": "—", "(sem nome)": "—"})
+
                 # 4. Exibição da Tabela com Column Config
                 st.dataframe(
                     df_filtrado,
@@ -5388,7 +5399,7 @@ elif menu == "Relacionamento":
 
 
     hoje = datetime.now().date()
-    m_a  = df_parceiros["status_limpo"].str.contains("ATIVO",   na=False)
+    m_a  = df_parceiros["status_limpo"].str.fullmatch("ATIVO",   na=False)
     m_p  = df_parceiros["status_limpo"].str.contains("PROSPEC", na=False)
     m_i  = df_parceiros["status_limpo"].str.contains("INATIVO", na=False)
 
@@ -5406,6 +5417,23 @@ elif menu == "Relacionamento":
         {"label": "Follow-ups vencidos", "value": vencidos},
         {"label": "Pendências da régua", "value": pendencias_regua, "hint": "ações da régua não realizadas"},
     ])
+
+    if vencidos > 0:
+        with st.expander(f"Ver follow-ups vencidos ({vencidos})"):
+            _df_fv = run_query_cached(
+                "SELECT p.nome_instituicao AS \"Parceiro\", r.proxima_acao_data AS \"Ação prevista para\", "
+                "r.descricao_do_que_foi_feito AS \"Último registro\" "
+                "FROM Registro_Relacionamento r JOIN Parceiro p ON r.id_parceiro = p.id_parceiro "
+                "WHERE r.proxima_acao_data IS NOT NULL AND r.proxima_acao_data < CURRENT_DATE "
+                "ORDER BY r.proxima_acao_data ASC"
+            )
+            if not _df_fv.empty:
+                st.dataframe(
+                    _df_fv, hide_index=True, use_container_width=True,
+                    column_config={"Ação prevista para": st.column_config.DateColumn("Ação prevista para", format="DD/MM/YYYY")}
+                )
+            else:
+                st.caption("Nenhum follow-up vencido encontrado.")
 
 
     tab_reg, tab_parceiros, tab_followups, tab_regua, tab_relatorio = st.tabs([
