@@ -1,4 +1,4 @@
-# ============================================================
+# ===========================================================
 #  SISTEMA INTERNO DI CDP
 #  Versão refatorada — dívida técnica limpa
 #  (login unificado, CSS centralizado, imports consolidados)
