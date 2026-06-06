@@ -750,6 +750,41 @@ div[data-testid="stMetricLabel"] p {
     margin-bottom: 10px;
     border: 1px solid var(--ds-border-soft);
 }
+
+/* ============================================================
+   POLISH — refinamentos visuais (aditivos e seguros)
+   ============================================================ */
+.stButton > button {
+    transition: transform .12s ease, background-color .15s ease, border-color .15s ease !important;
+    border-radius: var(--ds-radius-sm) !important;
+}
+.stButton > button:hover { transform: translateY(-1px); }
+.stButton > button:active { transform: translateY(0); }
+
+/* Abas com acento institucional (CDP) */
+[data-baseweb="tab-highlight"] { background-color: var(--cdp-red) !important; }
+[data-baseweb="tab-list"] { gap: 2px; }
+button[data-baseweb="tab"][aria-selected="true"] { color: #fff !important; font-weight: 600; }
+
+/* Expanders mais limpos e com feedback ao passar o mouse */
+[data-testid="stExpander"] details {
+    border-radius: var(--ds-radius-md) !important;
+    border: 1px solid var(--ds-border-soft) !important;
+    transition: border-color .15s ease, background-color .15s ease;
+}
+[data-testid="stExpander"] details:hover { border-color: var(--ds-border) !important; }
+
+/* Cantos consistentes em campos de entrada */
+[data-testid="stTextInput"] input,
+[data-testid="stNumberInput"] input,
+[data-testid="stDateInput"] input,
+[data-baseweb="select"] > div { border-radius: var(--ds-radius-sm) !important; }
+
+/* Linhas de tabela com leve destaque no hover */
+[data-testid="stDataFrame"] [role="row"]:hover { background: rgba(255,255,255,0.035) !important; }
+
+/* Menos espaço morto no topo — o conteúdo aparece mais cedo */
+[data-testid="stMain"] .block-container { padding-top: 2.4rem !important; }
 </style>
 """
 st.markdown(CSS_GLOBAL, unsafe_allow_html=True)
@@ -1609,7 +1644,7 @@ def _rel_tab_hoje(hoje):
     """Fila única do dia: follow-ups (vencidos + próximos 7 dias) e ativos esfriando (+60d)."""
     st.caption("Sua fila de hoje — follow-ups e parceiros ativos esfriando, num lugar só. Resolva e feche o loop em um clique.")
 
-    df_fu = run_query(
+    df_fu = run_query_cached(
         "SELECT id_registro, id_parceiro, nome_instituicao, proxima_acao_data, dias FROM ("
         "  SELECT DISTINCT ON (r.id_parceiro) r.id_registro, r.id_parceiro, p.nome_instituicao, "
         "    r.proxima_acao_data, (CURRENT_DATE - r.proxima_acao_data::date) AS dias "
@@ -1618,7 +1653,7 @@ def _rel_tab_hoje(hoje):
         "  ORDER BY r.id_parceiro, r.proxima_acao_data DESC"
         ") s WHERE proxima_acao_data::date <= CURRENT_DATE + 7 ORDER BY proxima_acao_data ASC"
     )
-    df_frio = run_query(
+    df_frio = run_query_cached(
         "SELECT p.id_parceiro, p.nome_instituicao, (CURRENT_DATE - MAX(r.data_interacao)::date) AS dias "
         "FROM Parceiro p JOIN Registro_Relacionamento r ON r.id_parceiro = p.id_parceiro "
         "WHERE p.status = 'Ativo' GROUP BY p.id_parceiro, p.nome_instituicao "
@@ -3058,21 +3093,22 @@ if menu == "Painel Geral":
         # BLOCO 5 — QUALIDADE DOS DADOS (compacto)
         # ════════════════════════════════════════════════════════════════════════
         section("Qualidade dos dados")
-        df_qd_sem_contato   = run_query_slow("SELECT COUNT(*) as n FROM Parceiro p WHERE p.status = 'Ativo' AND NOT EXISTS (SELECT 1 FROM Contato_Direto c WHERE c.id_parceiro=p.id_parceiro)")
-        df_qd_sem_interacao = run_query_slow("SELECT COUNT(*) as n FROM Parceiro p WHERE p.status = 'Ativo' AND NOT EXISTS (SELECT 1 FROM Registro_Relacionamento r WHERE r.id_parceiro=p.id_parceiro)")
-        df_qd_sem_doacao    = run_query_slow(f"SELECT COUNT(*) as n FROM Parceiro p WHERE p.status = 'Ativo' AND NOT EXISTS (SELECT 1 FROM Doacao d WHERE d.id_parceiro=p.id_parceiro AND EXTRACT(YEAR FROM d.data_doacao)={ano_sel})")
-        df_qd_sem_tipo_c    = run_query_slow(f"SELECT COUNT(*) as n FROM Doacao WHERE (tipo_doacao IS NULL OR tipo_doacao='' OR tipo_doacao='Selecione...') AND EXTRACT(YEAR FROM data_doacao)={ano_sel}")
-
-        n_sc = int(df_qd_sem_contato['n'].iloc[0])   if not df_qd_sem_contato.empty   else 0
-        n_si = int(df_qd_sem_interacao['n'].iloc[0]) if not df_qd_sem_interacao.empty else 0
-        n_sd = int(df_qd_sem_doacao['n'].iloc[0])    if not df_qd_sem_doacao.empty    else 0
-        n_st = int(df_qd_sem_tipo_c['n'].iloc[0])    if not df_qd_sem_tipo_c.empty    else 0
-
-        # Denominadores para o cálculo proporcional da completude
-        _df_at  = run_query_slow("SELECT COUNT(*) as n FROM Parceiro WHERE status = 'Ativo'")
-        _tot_at = int(_df_at['n'].iloc[0]) if not _df_at.empty else 0
-        _df_d26 = run_query_slow(f"SELECT COUNT(*) as n FROM Doacao WHERE EXTRACT(YEAR FROM data_doacao)={ano_sel}")
-        _tot_d26 = int(_df_d26['n'].iloc[0]) if not _df_d26.empty else 0
+        # Uma única consulta consolidada (era 6 idas ao banco) — mais rápido
+        _qd = run_query_slow(f"""
+            SELECT
+              (SELECT COUNT(*) FROM Parceiro p WHERE p.status='Ativo' AND NOT EXISTS (SELECT 1 FROM Contato_Direto c WHERE c.id_parceiro=p.id_parceiro)) AS sc,
+              (SELECT COUNT(*) FROM Parceiro p WHERE p.status='Ativo' AND NOT EXISTS (SELECT 1 FROM Registro_Relacionamento r WHERE r.id_parceiro=p.id_parceiro)) AS si,
+              (SELECT COUNT(*) FROM Parceiro p WHERE p.status='Ativo' AND NOT EXISTS (SELECT 1 FROM Doacao d WHERE d.id_parceiro=p.id_parceiro AND EXTRACT(YEAR FROM d.data_doacao)={ano_sel})) AS sd,
+              (SELECT COUNT(*) FROM Doacao WHERE (tipo_doacao IS NULL OR tipo_doacao='' OR tipo_doacao='Selecione...') AND EXTRACT(YEAR FROM data_doacao)={ano_sel}) AS st,
+              (SELECT COUNT(*) FROM Parceiro WHERE status='Ativo') AS tot_at,
+              (SELECT COUNT(*) FROM Doacao WHERE EXTRACT(YEAR FROM data_doacao)={ano_sel}) AS tot_d26
+        """)
+        n_sc     = int(_qd['sc'].iloc[0])     if not _qd.empty else 0
+        n_si     = int(_qd['si'].iloc[0])     if not _qd.empty else 0
+        n_sd     = int(_qd['sd'].iloc[0])     if not _qd.empty else 0
+        n_st     = int(_qd['st'].iloc[0])     if not _qd.empty else 0
+        _tot_at  = int(_qd['tot_at'].iloc[0]) if not _qd.empty else 0
+        _tot_d26 = int(_qd['tot_d26'].iloc[0]) if not _qd.empty else 0
 
         # Completude = média das dimensões preenchidas (move suave a cada registro)
         _dims = []
