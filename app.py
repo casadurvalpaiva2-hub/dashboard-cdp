@@ -756,6 +756,35 @@ div[data-testid="stMetricLabel"] p {
 [data-testid="stSidebar"] { display: none !important; }
 [data-testid="stSidebarCollapsedControl"] { display: none !important; }
 [data-testid="stMain"] .block-container { padding-top: 1.1rem !important; }
+
+/* ===== NAVEGAÇÃO SUPERIOR — abas planas (estilo GitHub) ===== */
+/* alvo: botões cuja chave começa com "topnav_" */
+[class*="st-key-topnav_"] button {
+    background: transparent !important;
+    border: none !important;
+    border-radius: 0 !important;
+    border-bottom: 2px solid transparent !important;
+    color: var(--ds-text-muted) !important;
+    font-weight: 500 !important;
+    padding: 8px 6px !important;
+    box-shadow: none !important;
+    transition: color .15s ease, border-color .15s ease !important;
+}
+[class*="st-key-topnav_"] button:hover {
+    background: transparent !important;
+    color: #FFFFFF !important;
+    border-bottom-color: rgba(255,255,255,0.22) !important;
+}
+/* aba ativa (renderizada como primary) — sublinhado vermelho CDP, sem preenchimento */
+[class*="st-key-topnav_"] button[kind="primary"],
+[class*="st-key-topnav_"] [data-testid="stBaseButton-primary"] {
+    background: transparent !important;
+    color: #FFFFFF !important;
+    font-weight: 600 !important;
+    border-bottom: 2px solid var(--cdp-red) !important;
+}
+/* aproxima as abas e remove a linha divisória logo abaixo da barra */
+[class*="st-key-topnav_"] { display: flex; align-items: flex-end; }
 </style>
 """
 st.markdown(CSS_GLOBAL, unsafe_allow_html=True)
@@ -5666,7 +5695,7 @@ with _topbar:
     _ncols = st.columns(len(_NAV_TOPO))
     for _i, (_lbl, _val) in enumerate(_NAV_TOPO):
         _tp = "primary" if st.session_state.current_page == _val else "secondary"
-        if _ncols[_i].button(_lbl, key=f"topnav_{_val}", use_container_width=True, type=_tp):
+        if _ncols[_i].button(_lbl, key=f"topnav_{_i}", use_container_width=True, type=_tp):
             st.session_state.current_page = _val
             st.rerun()
     st.divider()
