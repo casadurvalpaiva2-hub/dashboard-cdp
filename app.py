@@ -750,41 +750,6 @@ div[data-testid="stMetricLabel"] p {
     margin-bottom: 10px;
     border: 1px solid var(--ds-border-soft);
 }
-
-/* ============================================================
-   POLISH — refinamentos visuais (aditivos e seguros)
-   ============================================================ */
-.stButton > button {
-    transition: transform .12s ease, background-color .15s ease, border-color .15s ease !important;
-    border-radius: var(--ds-radius-sm) !important;
-}
-.stButton > button:hover { transform: translateY(-1px); }
-.stButton > button:active { transform: translateY(0); }
-
-/* Abas com acento institucional (CDP) */
-[data-baseweb="tab-highlight"] { background-color: var(--cdp-red) !important; }
-[data-baseweb="tab-list"] { gap: 2px; }
-button[data-baseweb="tab"][aria-selected="true"] { color: #fff !important; font-weight: 600; }
-
-/* Expanders mais limpos e com feedback ao passar o mouse */
-[data-testid="stExpander"] details {
-    border-radius: var(--ds-radius-md) !important;
-    border: 1px solid var(--ds-border-soft) !important;
-    transition: border-color .15s ease, background-color .15s ease;
-}
-[data-testid="stExpander"] details:hover { border-color: var(--ds-border) !important; }
-
-/* Cantos consistentes em campos de entrada */
-[data-testid="stTextInput"] input,
-[data-testid="stNumberInput"] input,
-[data-testid="stDateInput"] input,
-[data-baseweb="select"] > div { border-radius: var(--ds-radius-sm) !important; }
-
-/* Linhas de tabela com leve destaque no hover */
-[data-testid="stDataFrame"] [role="row"]:hover { background: rgba(255,255,255,0.035) !important; }
-
-/* Menos espaço morto no topo — o conteúdo aparece mais cedo */
-[data-testid="stMain"] .block-container { padding-top: 2.4rem !important; }
 </style>
 """
 st.markdown(CSS_GLOBAL, unsafe_allow_html=True)
