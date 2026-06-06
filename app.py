@@ -755,9 +755,13 @@ div[data-testid="stMetricLabel"] p {
 /* Navegação movida para o TOPO — esconde a barra lateral e seu controle */
 [data-testid="stSidebar"] { display: none !important; }
 [data-testid="stSidebarCollapsedControl"] { display: none !important; }
-[data-testid="stMain"] .block-container { padding-top: 0.4rem !important; }
+[data-testid="stMain"] .block-container { padding-top: 0.3rem !important; }
 /* divisórias mais justas (menos espaço vazio) */
-[data-testid="stMain"] hr { margin: 0.35rem 0 0.6rem !important; }
+[data-testid="stMain"] hr { margin: 0.25rem 0 0.5rem !important; }
+/* espaçamento vertical mais denso entre blocos (remove os vãos grandes) */
+[data-testid="stMain"] [data-testid="stVerticalBlock"] { gap: 0.55rem !important; }
+/* logo sem o respiro extra do container de imagem */
+[data-testid="stImage"] { margin-bottom: 0 !important; }
 
 /* ===== NAVEGAÇÃO SUPERIOR — abas planas (estilo GitHub) ===== */
 /* alvo: botões cuja chave começa com "topnav_" */
