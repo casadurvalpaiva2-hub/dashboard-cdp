@@ -755,7 +755,9 @@ div[data-testid="stMetricLabel"] p {
 /* Navegação movida para o TOPO — esconde a barra lateral e seu controle */
 [data-testid="stSidebar"] { display: none !important; }
 [data-testid="stSidebarCollapsedControl"] { display: none !important; }
-[data-testid="stMain"] .block-container { padding-top: 1.1rem !important; }
+[data-testid="stMain"] .block-container { padding-top: 0.4rem !important; }
+/* divisórias mais justas (menos espaço vazio) */
+[data-testid="stMain"] hr { margin: 0.35rem 0 0.6rem !important; }
 
 /* ===== NAVEGAÇÃO SUPERIOR — abas planas (estilo GitHub) ===== */
 /* alvo: botões cuja chave começa com "topnav_" */
@@ -5638,7 +5640,7 @@ def _gerar_backup_completo():
 with _topbar:
     _hc1, _hc2 = st.columns([5, 1.4])
     with _hc1:
-        st.image(LOGO_URL, width=118)
+        st.image(LOGO_URL, width=64)
     with _hc2:
         with st.popover(f"Conta — {_ud.get('nome','')}", use_container_width=True):
             st.markdown(
