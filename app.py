@@ -20,6 +20,7 @@ import streamlit as st
 st.set_page_config(
     page_title="Casa Durval Paiva · DI",
     layout="wide",
+    initial_sidebar_state="collapsed",
     page_icon="https://casadurvalpaiva.org.br/wp-content/themes/durvalpaiva/dist/img/header/logo.png",
 )
 
@@ -750,6 +751,11 @@ div[data-testid="stMetricLabel"] p {
     margin-bottom: 10px;
     border: 1px solid var(--ds-border-soft);
 }
+
+/* Navegação movida para o TOPO — esconde a barra lateral e seu controle */
+[data-testid="stSidebar"] { display: none !important; }
+[data-testid="stSidebarCollapsedControl"] { display: none !important; }
+[data-testid="stMain"] .block-container { padding-top: 1.1rem !important; }
 </style>
 """
 st.markdown(CSS_GLOBAL, unsafe_allow_html=True)
@@ -890,31 +896,17 @@ def empty_state(icone: str, titulo: str, mensagem: str = ""):
 #  LOGO NO SIDEBAR
 # ------------------------------------------------------------
 LOGO_URL = "https://casadurvalpaiva.org.br/wp-content/themes/durvalpaiva/dist/img/header/logo.png"
-st.sidebar.image(LOGO_URL, width=150)
+
+# Contêiner reservado no TOPO da área principal — preenchido no fim do script
+# (quando senha/backup já têm suas funções definidas). Aparece sempre no topo.
+_topbar = st.container()
 
 # ── Identidade do usuário logado ──────────────────────────────────────────────
 _ud = st.session_state.user_data or {}
 _badge_cor = "#C0392B" if _ud.get("perfil") == "gerencia" else "#378ADD"
 _badge_txt = "GERÊNCIA" if _ud.get("perfil") == "gerencia" else "OPERACIONAL"
-st.sidebar.markdown(
-    f'<div style="padding:8px 10px;margin:6px 0 2px;border-radius:8px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);">' +
-    f'<div style="font-size:12px;font-weight:600;color:#E5E7EB;">{_ud.get("nome","")}</div>' +
-    f'<div style="font-size:10px;color:#94A3B8;">{_ud.get("setor","")}</div>' +
-    f'<div style="margin-top:4px;display:inline-block;font-size:9px;font-weight:700;letter-spacing:1px;' +
-    f'padding:2px 7px;border-radius:20px;background:{_badge_cor}22;color:{_badge_cor};border:1px solid {_badge_cor}55;">{_badge_txt}</div>' +
-    f'</div>',
-    unsafe_allow_html=True,
-)
 
-if st.sidebar.button("↩ Sair", key="logout_btn", use_container_width=False,
-                     help="Encerrar sessão", type="secondary"):
-    st.session_state.autenticado = False
-    st.session_state.user_data = None
-    st.rerun()
-
-st.sidebar.markdown("---")
-
-# ── Navegação — inicialização antecipada para o menu renderizar imediatamente ──
+# ── Estado de navegação ───────────────────────────────────────────────────────
 if "current_page" not in st.session_state:
     st.session_state.current_page = "Painel Geral"
 if "open_form" not in st.session_state:
@@ -922,9 +914,17 @@ if "open_form" not in st.session_state:
 if "_qa_nonce" not in st.session_state:
     st.session_state._qa_nonce = 0
 
-_menus_gerencia = ["Painel Geral", "Calendário", "Plano DI 2026", "Parcerias", "Contatos", "Almoço CDP", "Entrada de Recursos", "Relacionamento"]
-_menus_operacional = ["Painel Geral", "Calendário", "Plano DI 2026", "Parcerias", "Contatos", "Almoço CDP", "Entrada de Recursos", "Relacionamento"]
-_opcoes_menu = _menus_gerencia if _is_gerente() else _menus_operacional
+# (label curto, valor real usado no dispatch)
+_NAV_TOPO = [
+    ("Painel",        "Painel Geral"),
+    ("Calendário",    "Calendário"),
+    ("Plano DI",      "Plano DI 2026"),
+    ("Parcerias",     "Parcerias"),
+    ("Contatos",      "Contatos"),
+    ("Almoço",        "Almoço CDP"),
+    ("Recursos",      "Entrada de Recursos"),
+    ("Relacionamento","Relacionamento"),
+]
 
 def _trigger_quick_add(tipo: str):
     """Navega para a página certa e sinaliza abertura de formulário."""
@@ -935,42 +935,6 @@ def _trigger_quick_add(tipo: str):
     }
     st.session_state.current_page = mapa_menu[tipo]
     st.session_state.open_form = tipo
-
-with st.sidebar:
-    # ── Atalho rápido ──────────────────────────────────────────
-    st.markdown("""<p style="font-size:10px;letter-spacing:1.8px;text-transform:uppercase;
-    color:rgba(255,255,255,0.25);font-weight:600;margin:8px 0 6px 4px;">Acesso rápido</p>""",
-    unsafe_allow_html=True)
-    _opcoes_add = {"Criar novo...": None, "Parceiro": "parceiro", "Contato": "contato", "Doação": "doacao"}
-    _qa_key = f"sel_quick_add_{st.session_state._qa_nonce}"
-    _escolha = st.selectbox("Atalho", options=list(_opcoes_add.keys()), index=0, key=_qa_key, label_visibility="collapsed")
-    if _opcoes_add[_escolha] is not None:
-        _trigger_quick_add(_opcoes_add[_escolha])
-        st.session_state._qa_nonce += 1
-        st.rerun()
-
-    # ── Navegação principal ─────────────────────────────────────
-    st.markdown("""<p style="font-size:10px;letter-spacing:1.8px;text-transform:uppercase;
-    color:rgba(255,255,255,0.25);font-weight:600;margin:20px 0 2px 4px;">Navegação</p>""",
-    unsafe_allow_html=True)
-
-    _opcoes_nav = ["Painel Geral", "Calendário", "Plano DI 2026", "Parcerias", "Contatos",
-                   "Almoço CDP", "Entrada de Recursos", "Relacionamento"]
-    _nav_items = [(p, p) for p in _opcoes_nav]
-
-    _nav_idx = _opcoes_nav.index(st.session_state.current_page) \
-               if st.session_state.current_page in _opcoes_nav else 0
-    _nav_choice = st.radio(
-        "nav",
-        options=_opcoes_nav,
-        index=_nav_idx,
-        label_visibility="collapsed",
-        key="sidebar_nav_radio",
-    )
-    if _nav_choice != st.session_state.current_page:
-        st.session_state.current_page = _nav_choice
-
-    _active_page = st.session_state.current_page
 
 menu = st.session_state.current_page
 
@@ -1078,29 +1042,7 @@ run_insert = run_exec
 #  TROCAR SENHA — na barra lateral (movido do antigo "Centro de Ações")
 #  Fica aqui porque depende de run_exec/run_query já definidos acima.
 # ------------------------------------------------------------
-with st.sidebar.expander("Trocar minha senha"):
-    _u_sb = st.session_state.get("user_data") or {}
-    _login_cur = next((k for k, v in CONTAS.items() if v.get("nome") == _u_sb.get("nome")), None)
-    with st.form("form_senha_sidebar", clear_on_submit=True):
-        _s1 = st.text_input("Senha atual",         type="password", placeholder="••••••")
-        _s2 = st.text_input("Nova senha",          type="password", placeholder="Mínimo 6 caracteres")
-        _s3 = st.text_input("Confirmar nova senha", type="password", placeholder="Repita a nova senha")
-        if st.form_submit_button("Salvar", use_container_width=True, type="primary"):
-            _df_s = run_query("SELECT senha FROM Usuario_Senhas WHERE login=%s", (_login_cur,))
-            _senha_ok = _df_s.iloc[0]["senha"] if not _df_s.empty else CONTAS.get(_login_cur, {}).get("senha", "")
-            if not _s1:
-                st.error("Informe a senha atual.")
-            elif _s1 != _senha_ok:
-                st.error("Senha atual incorreta.")
-            elif len(_s2) < 6:
-                st.error("A nova senha deve ter pelo menos 6 caracteres.")
-            elif _s2 != _s3:
-                st.error("As senhas não conferem.")
-            elif _login_cur is None:
-                st.error("Usuário não identificado.")
-            else:
-                run_exec("INSERT INTO Usuario_Senhas (login,senha) VALUES (%s,%s) ON CONFLICT (login) DO UPDATE SET senha=EXCLUDED.senha", (_login_cur, _s2))
-                st.success("Senha alterada com sucesso.")
+# (A função "Trocar minha senha" foi movida para a barra superior — ver fim do script.)
 
 
 # ------------------------------------------------------------
@@ -5659,15 +5601,72 @@ def _gerar_backup_completo():
             zf.writestr(f"{nome}.csv", df.to_csv(index=False))
     return output.getvalue(), "zip", "application/zip"
 
-if _is_gerente():
-    _backup = _gerar_backup_completo()
-    if _backup:
-        dados, ext, mime = _backup
-        hoje = __import__('datetime').date.today().isoformat()
-        st.sidebar.download_button(
-            label="Baixar backup completo",
-            data=dados,
-            file_name=f"backup_cdp_{hoje}.{ext}",
-            mime=mime,
-            use_container_width=True,
-        )
+# ============================================================
+#  BARRA SUPERIOR — logo, navegação horizontal e menu de conta
+#  Renderizada no fim (todas as funções já existem), mas exibida
+#  no TOPO via o contêiner _topbar criado lá em cima.
+# ============================================================
+with _topbar:
+    _hc1, _hc2 = st.columns([5, 1.4])
+    with _hc1:
+        st.image(LOGO_URL, width=118)
+    with _hc2:
+        with st.popover(f"Conta — {_ud.get('nome','')}", use_container_width=True):
+            st.markdown(
+                f'<div style="font-size:13px;font-weight:600;color:#E5E7EB;">{_ud.get("nome","")}</div>'
+                f'<div style="font-size:11px;color:#94A3B8;margin-bottom:6px;">{_ud.get("setor","")}</div>'
+                f'<div style="display:inline-block;font-size:9px;font-weight:700;letter-spacing:1px;'
+                f'padding:2px 7px;border-radius:20px;background:{_badge_cor}22;color:{_badge_cor};border:1px solid {_badge_cor}55;">{_badge_txt}</div>',
+                unsafe_allow_html=True,
+            )
+            st.divider()
+            _opcoes_add = {"Criar novo...": None, "Parceiro": "parceiro", "Contato": "contato", "Doação": "doacao"}
+            _qa_key = f"sel_quick_add_{st.session_state._qa_nonce}"
+            _escolha = st.selectbox("Criar novo", options=list(_opcoes_add.keys()), index=0, key=_qa_key)
+            if _opcoes_add[_escolha] is not None:
+                _trigger_quick_add(_opcoes_add[_escolha])
+                st.session_state._qa_nonce += 1
+                st.rerun()
+            with st.expander("Trocar minha senha"):
+                _login_cur = next((k for k, v in CONTAS.items() if v.get("nome") == _ud.get("nome")), None)
+                with st.form("form_senha_topo", clear_on_submit=True):
+                    _s1 = st.text_input("Senha atual",         type="password")
+                    _s2 = st.text_input("Nova senha",          type="password")
+                    _s3 = st.text_input("Confirmar nova senha", type="password")
+                    if st.form_submit_button("Salvar", use_container_width=True, type="primary"):
+                        _df_s = run_query("SELECT senha FROM Usuario_Senhas WHERE login=%s", (_login_cur,))
+                        _senha_ok = _df_s.iloc[0]["senha"] if not _df_s.empty else CONTAS.get(_login_cur, {}).get("senha", "")
+                        if not _s1:
+                            st.error("Informe a senha atual.")
+                        elif _s1 != _senha_ok:
+                            st.error("Senha atual incorreta.")
+                        elif len(_s2) < 6:
+                            st.error("A nova senha deve ter pelo menos 6 caracteres.")
+                        elif _s2 != _s3:
+                            st.error("As senhas não conferem.")
+                        elif _login_cur is None:
+                            st.error("Usuário não identificado.")
+                        else:
+                            run_exec("INSERT INTO Usuario_Senhas (login,senha) VALUES (%s,%s) ON CONFLICT (login) DO UPDATE SET senha=EXCLUDED.senha", (_login_cur, _s2))
+                            st.success("Senha alterada com sucesso.")
+            if _is_gerente():
+                _bk = _gerar_backup_completo()
+                if _bk:
+                    _d, _e, _m = _bk
+                    _hoje_bk = __import__('datetime').date.today().isoformat()
+                    st.download_button("Baixar backup completo", data=_d,
+                                       file_name=f"backup_cdp_{_hoje_bk}.{_e}", mime=_m, use_container_width=True)
+            st.divider()
+            if st.button("↩ Sair", use_container_width=True, key="logout_topo"):
+                st.session_state.autenticado = False
+                st.session_state.user_data = None
+                st.rerun()
+
+    # ── Navegação horizontal (estilo GitHub) ──
+    _ncols = st.columns(len(_NAV_TOPO))
+    for _i, (_lbl, _val) in enumerate(_NAV_TOPO):
+        _tp = "primary" if st.session_state.current_page == _val else "secondary"
+        if _ncols[_i].button(_lbl, key=f"topnav_{_val}", use_container_width=True, type=_tp):
+            st.session_state.current_page = _val
+            st.rerun()
+    st.divider()
