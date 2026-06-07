@@ -1080,8 +1080,11 @@ run_insert = run_exec
 #  MIGRATIONS IDEMPOTENTES — rodam 1x ao carregar o app
 #  (adicionar colunas ou criar tabelas ausentes sem explodir)
 # ------------------------------------------------------------
+@st.cache_resource(show_spinner=False)
 def setup_schema():
-    """Garante views atualizadas no PostgreSQL a cada deploy."""
+    """Garante views/tabelas no PostgreSQL.
+    @st.cache_resource: roda só 1x por processo do app (não a cada sessão),
+    evitando dezenas de round-trips ao banco em todo login."""
     pool = _pool()
     conn = pool.getconn()
     try:
@@ -1364,10 +1367,8 @@ def setup_schema():
         pool.putconn(conn)
 
 
-# setup_schema roda apenas 1x por sessão (evita round-trips desnecessários ao Supabase)
-if "schema_ok" not in st.session_state:
-    setup_schema()
-    st.session_state.schema_ok = True
+# setup_schema é @st.cache_resource → roda 1x por processo do app (não por sessão)
+setup_schema()
 
 # ── Seed da Regua_Matriz — roda 1x por sessão ────────────────────────────────
 # Garante que todo tipo definido em REGUA_CONFIG exista no banco.
@@ -1488,7 +1489,8 @@ REGUA_CONFIG = {
 # ON CONFLICT DO NOTHING preserva edições manuais feitas pela UI.
 # Sem gate de COUNT: novos tipos adicionados ao REGUA_CONFIG propagam
 # automaticamente na próxima sessão sem precisar de deploy ou reset.
-if "regua_tipo_norm_ok" not in st.session_state:
+@st.cache_resource(show_spinner=False)
+def _seed_regua_norm():
     _tp_renames = [
         ("Parceiros importantes",             "Parceiros importantes"),
         ("Doadores Especiais (nao monetario)","Doadores especiais: não mon."),
@@ -1503,9 +1505,13 @@ if "regua_tipo_norm_ok" not in st.session_state:
     for _old, _new in _tp_renames:
         run_exec("UPDATE Regua_Matriz SET tipo_publico = %s WHERE tipo_publico = %s", (_new, _old))
         run_exec("UPDATE Parceiro SET tipo_publico_regua = %s WHERE tipo_publico_regua = %s", (_new, _old))
-    st.session_state.regua_tipo_norm_ok = True
+    return True
 
-if "regua_seed_v2_ok" not in st.session_state:
+_seed_regua_norm()
+
+
+@st.cache_resource(show_spinner=False)
+def _seed_regua_v2():
     for _rsc_tp, _rsc_acoes in REGUA_CONFIG.items():
         for _rsc_item in _rsc_acoes:
             run_exec(
@@ -1516,7 +1522,9 @@ if "regua_seed_v2_ok" not in st.session_state:
                 (_rsc_tp, _rsc_item["acao"], _rsc_item["periodo_dias"],
                  _rsc_item["canal"], _rsc_item.get("responsavel", "DI"))
             )
-    st.session_state.regua_seed_v2_ok = True
+    return True
+
+_seed_regua_v2()
 
 
 
