@@ -1,0 +1,14 @@
+# ============================================================
+#  Tema fixo (escuro) — o sistema foi desenhado para o modo
+#  noturno. Trava o tema para todos os usuários, evitando o
+#  conflito de cores no tema claro.
+#  OBS: este arquivo PODE (e deve) ir para o GitHub — não tem
+#  segredos. Diferente do secrets.toml, que NUNCA vai ao repo.
+# ============================================================
+[theme]
+base = "dark"
+primaryColor = "#E31D24"            # vermelho institucional CDP (acento)
+backgroundColor = "#111318"         # fundo principal (igual ao CSS do app)
+secondaryBackgroundColor = "#1A1D24" # cards, inputs, expanders
+textColor = "#E6E8EB"               # texto claro
+font = "sans serif"
