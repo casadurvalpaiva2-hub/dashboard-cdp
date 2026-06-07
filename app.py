@@ -755,13 +755,9 @@ div[data-testid="stMetricLabel"] p {
 /* Navegação movida para o TOPO — esconde a barra lateral e seu controle */
 [data-testid="stSidebar"] { display: none !important; }
 [data-testid="stSidebarCollapsedControl"] { display: none !important; }
-[data-testid="stMain"] .block-container { padding-top: 0.3rem !important; }
-/* divisórias mais justas (menos espaço vazio) */
-[data-testid="stMain"] hr { margin: 0.25rem 0 0.5rem !important; }
-/* espaçamento vertical mais denso entre blocos (remove os vãos grandes) */
-[data-testid="stMain"] [data-testid="stVerticalBlock"] { gap: 0.55rem !important; }
-/* logo sem o respiro extra do container de imagem */
-[data-testid="stImage"] { margin-bottom: 0 !important; }
+[data-testid="stMain"] .block-container { padding-top: 0.6rem !important; }
+/* divisórias um pouco mais justas */
+[data-testid="stMain"] hr { margin: 0.4rem 0 0.7rem !important; }
 
 /* ===== NAVEGAÇÃO SUPERIOR — abas planas (estilo GitHub) ===== */
 /* alvo: botões cuja chave começa com "topnav_" */
@@ -1660,7 +1656,7 @@ def _rel_tab_hoje(hoje):
                 run_query_cached.clear()
                 st.success(f"{it['nome']} — concluído.")
                 st.rerun()
-            with _cB.popover("Reagendar", use_container_width=True):
+            with _cB.expander("Reagendar"):
                 _nd = st.date_input("Nova data", value=hoje + timedelta(days=7),
                                     key=f"hoje_rgd_{it['rid']}", format="DD/MM/YYYY")
                 if st.button("Salvar", key=f"hoje_rgs_{it['rid']}", use_container_width=True):
@@ -1670,7 +1666,7 @@ def _rel_tab_hoje(hoje):
                     st.success(f"{it['nome']} — reagendado para {_nd.strftime('%d/%m/%Y')}.")
                     st.rerun()
 
-        with _cC.popover("Registrar", use_container_width=True):
+        with _cC.expander("Registrar"):
             _rdesc = st.text_area("O que foi feito", key=f"hoje_rdt_{it['pid']}", height=80,
                                   placeholder="Resumo do contato...")
             _rprox = st.date_input("Próxima ação (opcional)", value=None,
