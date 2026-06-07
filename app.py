@@ -5638,7 +5638,10 @@ def _gerar_backup_completo():
 #  no TOPO via o contêiner _topbar criado lá em cima.
 # ============================================================
 with _topbar:
-    st.image(LOGO_URL, width=64)
+    st.markdown(
+        f"<div style='text-align:center;margin:2px 0 6px;'><img src='{LOGO_URL}' width='64'></div>",
+        unsafe_allow_html=True,
+    )
 
     # ── Navegação horizontal (estilo GitHub) ──
     _ncols = st.columns(len(_NAV_TOPO))
