@@ -5696,7 +5696,12 @@ with st.expander(f"Conta — {_ud.get('nome','')}", expanded=False):
                     run_exec("INSERT INTO Usuario_Senhas (login,senha) VALUES (%s,%s) ON CONFLICT (login) DO UPDATE SET senha=EXCLUDED.senha", (_login_cur, _s2))
                     st.success("Senha alterada com sucesso.")
     if _is_gerente():
-        _bk = _gerar_backup_completo()
+        # Backup SOB DEMANDA — só gera quando clicado (antes rodava a cada
+        # carregamento, lendo o banco inteiro e travando todas as telas).
+        if st.button("Gerar backup completo", key="btn_gen_backup", use_container_width=True):
+            with st.spinner("Gerando backup do banco..."):
+                st.session_state["_backup_pronto"] = _gerar_backup_completo()
+        _bk = st.session_state.get("_backup_pronto")
         if _bk:
             _d, _e, _m = _bk
             _hoje_bk = __import__('datetime').date.today().isoformat()
