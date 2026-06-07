@@ -5646,7 +5646,7 @@ with _topbar:
     with _hc1:
         st.image(LOGO_URL, width=64)
     with _hc2:
-        with st.popover(f"Conta — {_ud.get('nome','')}", use_container_width=True):
+        with st.expander(f"Conta — {_ud.get('nome','')}", expanded=False):
             st.markdown(
                 f'<div style="font-size:13px;font-weight:600;color:#E5E7EB;">{_ud.get("nome","")}</div>'
                 f'<div style="font-size:11px;color:#94A3B8;margin-bottom:6px;">{_ud.get("setor","")}</div>'
