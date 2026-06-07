@@ -5638,60 +5638,7 @@ def _gerar_backup_completo():
 #  no TOPO via o contêiner _topbar criado lá em cima.
 # ============================================================
 with _topbar:
-    _hc1, _hc2 = st.columns([5, 1.4])
-    with _hc1:
-        st.image(LOGO_URL, width=64)
-    with _hc2:
-        with st.expander(f"Conta — {_ud.get('nome','')}", expanded=False):
-            st.markdown(
-                f'<div style="font-size:13px;font-weight:600;color:#E5E7EB;">{_ud.get("nome","")}</div>'
-                f'<div style="font-size:11px;color:#94A3B8;margin-bottom:6px;">{_ud.get("setor","")}</div>'
-                f'<div style="display:inline-block;font-size:9px;font-weight:700;letter-spacing:1px;'
-                f'padding:2px 7px;border-radius:20px;background:{_badge_cor}22;color:{_badge_cor};border:1px solid {_badge_cor}55;">{_badge_txt}</div>',
-                unsafe_allow_html=True,
-            )
-            st.divider()
-            _opcoes_add = {"Criar novo...": None, "Parceiro": "parceiro", "Contato": "contato", "Doação": "doacao"}
-            _qa_key = f"sel_quick_add_{st.session_state._qa_nonce}"
-            _escolha = st.selectbox("Criar novo", options=list(_opcoes_add.keys()), index=0, key=_qa_key)
-            if _opcoes_add[_escolha] is not None:
-                _trigger_quick_add(_opcoes_add[_escolha])
-                st.session_state._qa_nonce += 1
-                st.rerun()
-            with st.expander("Trocar minha senha"):
-                _login_cur = next((k for k, v in CONTAS.items() if v.get("nome") == _ud.get("nome")), None)
-                with st.form("form_senha_topo", clear_on_submit=True):
-                    _s1 = st.text_input("Senha atual",         type="password")
-                    _s2 = st.text_input("Nova senha",          type="password")
-                    _s3 = st.text_input("Confirmar nova senha", type="password")
-                    if st.form_submit_button("Salvar", use_container_width=True, type="primary"):
-                        _df_s = run_query("SELECT senha FROM Usuario_Senhas WHERE login=%s", (_login_cur,))
-                        _senha_ok = _df_s.iloc[0]["senha"] if not _df_s.empty else CONTAS.get(_login_cur, {}).get("senha", "")
-                        if not _s1:
-                            st.error("Informe a senha atual.")
-                        elif _s1 != _senha_ok:
-                            st.error("Senha atual incorreta.")
-                        elif len(_s2) < 6:
-                            st.error("A nova senha deve ter pelo menos 6 caracteres.")
-                        elif _s2 != _s3:
-                            st.error("As senhas não conferem.")
-                        elif _login_cur is None:
-                            st.error("Usuário não identificado.")
-                        else:
-                            run_exec("INSERT INTO Usuario_Senhas (login,senha) VALUES (%s,%s) ON CONFLICT (login) DO UPDATE SET senha=EXCLUDED.senha", (_login_cur, _s2))
-                            st.success("Senha alterada com sucesso.")
-            if _is_gerente():
-                _bk = _gerar_backup_completo()
-                if _bk:
-                    _d, _e, _m = _bk
-                    _hoje_bk = __import__('datetime').date.today().isoformat()
-                    st.download_button("Baixar backup completo", data=_d,
-                                       file_name=f"backup_cdp_{_hoje_bk}.{_e}", mime=_m, use_container_width=True)
-            st.divider()
-            if st.button("↩ Sair", use_container_width=True, key="logout_topo"):
-                st.session_state.autenticado = False
-                st.session_state.user_data = None
-                st.rerun()
+    st.image(LOGO_URL, width=64)
 
     # ── Navegação horizontal (estilo GitHub) ──
     _ncols = st.columns(len(_NAV_TOPO))
@@ -5701,3 +5648,59 @@ with _topbar:
             st.session_state.current_page = _val
             st.rerun()
     st.divider()
+
+
+# ============================================================
+#  CONTA — no rodapé da tela (perfil, atalhos, senha, backup, sair)
+# ============================================================
+st.divider()
+with st.expander(f"Conta — {_ud.get('nome','')}", expanded=False):
+    st.markdown(
+        f'<div style="font-size:13px;font-weight:600;color:#E5E7EB;">{_ud.get("nome","")}</div>'
+        f'<div style="font-size:11px;color:#94A3B8;margin-bottom:6px;">{_ud.get("setor","")}</div>'
+        f'<div style="display:inline-block;font-size:9px;font-weight:700;letter-spacing:1px;'
+        f'padding:2px 7px;border-radius:20px;background:{_badge_cor}22;color:{_badge_cor};border:1px solid {_badge_cor}55;">{_badge_txt}</div>',
+        unsafe_allow_html=True,
+    )
+    st.divider()
+    _opcoes_add = {"Criar novo...": None, "Parceiro": "parceiro", "Contato": "contato", "Doação": "doacao"}
+    _qa_key = f"sel_quick_add_{st.session_state._qa_nonce}"
+    _escolha = st.selectbox("Criar novo", options=list(_opcoes_add.keys()), index=0, key=_qa_key)
+    if _opcoes_add[_escolha] is not None:
+        _trigger_quick_add(_opcoes_add[_escolha])
+        st.session_state._qa_nonce += 1
+        st.rerun()
+    with st.expander("Trocar minha senha"):
+        _login_cur = next((k for k, v in CONTAS.items() if v.get("nome") == _ud.get("nome")), None)
+        with st.form("form_senha_topo", clear_on_submit=True):
+            _s1 = st.text_input("Senha atual",         type="password")
+            _s2 = st.text_input("Nova senha",          type="password")
+            _s3 = st.text_input("Confirmar nova senha", type="password")
+            if st.form_submit_button("Salvar", use_container_width=True, type="primary"):
+                _df_s = run_query("SELECT senha FROM Usuario_Senhas WHERE login=%s", (_login_cur,))
+                _senha_ok = _df_s.iloc[0]["senha"] if not _df_s.empty else CONTAS.get(_login_cur, {}).get("senha", "")
+                if not _s1:
+                    st.error("Informe a senha atual.")
+                elif _s1 != _senha_ok:
+                    st.error("Senha atual incorreta.")
+                elif len(_s2) < 6:
+                    st.error("A nova senha deve ter pelo menos 6 caracteres.")
+                elif _s2 != _s3:
+                    st.error("As senhas não conferem.")
+                elif _login_cur is None:
+                    st.error("Usuário não identificado.")
+                else:
+                    run_exec("INSERT INTO Usuario_Senhas (login,senha) VALUES (%s,%s) ON CONFLICT (login) DO UPDATE SET senha=EXCLUDED.senha", (_login_cur, _s2))
+                    st.success("Senha alterada com sucesso.")
+    if _is_gerente():
+        _bk = _gerar_backup_completo()
+        if _bk:
+            _d, _e, _m = _bk
+            _hoje_bk = __import__('datetime').date.today().isoformat()
+            st.download_button("Baixar backup completo", data=_d,
+                               file_name=f"backup_cdp_{_hoje_bk}.{_e}", mime=_m, use_container_width=True)
+    st.divider()
+    if st.button("↩ Sair", use_container_width=True, key="logout_topo"):
+        st.session_state.autenticado = False
+        st.session_state.user_data = None
+        st.rerun()
