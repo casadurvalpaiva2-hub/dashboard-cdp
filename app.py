@@ -947,14 +947,14 @@ if "_qa_nonce" not in st.session_state:
 
 # (label curto, valor real usado no dispatch)
 _NAV_TOPO = [
-    ("Painel",        "Painel Geral"),
-    ("Calendário",    "Calendário"),
-    ("Plano DI",      "Plano DI 2026"),
-    ("Parcerias",     "Parcerias"),
-    ("Contatos",      "Contatos"),
-    ("Almoço",        "Almoço CDP"),
-    ("Recursos",      "Entrada de Recursos"),
-    ("Relacionamento","Relacionamento"),
+    ("Painel",         "Painel Geral"),
+    ("Plano DI",       "Plano DI 2026"),
+    ("Recursos",       "Entrada de Recursos"),
+    ("Parcerias",      "Parcerias"),
+    ("Contatos",       "Contatos"),
+    ("Relacionamento", "Relacionamento"),
+    ("Calendário",     "Calendário"),
+    ("Almoço",         "Almoço CDP"),
 ]
 
 def _trigger_quick_add(tipo: str):
