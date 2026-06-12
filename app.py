@@ -4491,12 +4491,19 @@ elif menu == "Almoço CDP":
                 df_ed[['id', 'nome', 'cargo', 'empresa', 'telefone', 'segmento', 'responsavel_convite', 'contato_1', 'contato_2', 'confirmado']],
                 column_config={
                     "id": None,
-                    "confirmado": st.column_config.CheckboxColumn("Confirmou"),
-                    "telefone": st.column_config.TextColumn("WhatsApp"),
-                    "responsavel_convite": st.column_config.TextColumn("Responsável"),
+                    "nome":                st.column_config.TextColumn("Nome", width="medium"),
+                    "cargo":               st.column_config.TextColumn("Cargo/Função", width="medium"),
+                    "empresa":             st.column_config.TextColumn("Empresa", width="medium"),
+                    "telefone":            st.column_config.TextColumn("WhatsApp", width="small"),
+                    "segmento":            st.column_config.TextColumn("Segmento", width="small"),
+                    "responsavel_convite": st.column_config.TextColumn("Responsável", width="small"),
+                    "contato_1":           st.column_config.CheckboxColumn("Contato 1", width="small"),
+                    "contato_2":           st.column_config.CheckboxColumn("Contato 2", width="small"),
+                    "confirmado":          st.column_config.CheckboxColumn("Confirmou", width="small"),
                 },
                 hide_index=True,
-                use_container_width=True
+                use_container_width=True,
+                height=460,
             )
 
             if st.button("Guardar Alterações da Tabela", type="primary"):
