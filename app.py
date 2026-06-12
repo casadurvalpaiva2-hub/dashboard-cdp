@@ -1098,6 +1098,7 @@ def setup_schema():
                 "ALTER TABLE Demandas_Estrategicas ADD COLUMN IF NOT EXISTS is_diaria INTEGER DEFAULT 0",
                 "ALTER TABLE Demandas_Estrategicas ADD COLUMN IF NOT EXISTS data_ultima_conclusao TIMESTAMPTZ",
                 "ALTER TABLE Convidados_Almoco ADD COLUMN IF NOT EXISTS id_parceiro INTEGER REFERENCES Parceiro(id_parceiro)",
+                "ALTER TABLE Convidados_Almoco ADD COLUMN IF NOT EXISTS responsavel_convite TEXT",
             ]:
                 try:
                     cur.execute(ddl)
@@ -4465,11 +4466,15 @@ elif menu == "Almoço CDP":
                 f_c = c2.text_input("Cargo/Função *")
                 e_c = c1.text_input("Empresa")
                 t_c = c2.text_input("WhatsApp")
-                s_c = st.selectbox("Segmento", list(metas.keys()))
+                c3, c4 = st.columns(2)
+                s_c = c3.selectbox("Segmento", list(metas.keys()))
+                r_c = c4.text_input("Responsável pelo convite",
+                                    value=(st.session_state.user_data or {}).get("nome", ""),
+                                    help="Quem está incluindo este convidado no sistema.")
                 if st.form_submit_button("Salvar na lista"):
                     if n_c:
-                        run_insert("INSERT INTO Convidados_Almoco (mes_referencia, segmento, nome, cargo, empresa, telefone) VALUES (?,?,?,?,?,?)",
-                                   (mes_ref, s_c, n_c, f_c, e_c, t_c))
+                        run_insert("INSERT INTO Convidados_Almoco (mes_referencia, segmento, nome, cargo, empresa, telefone, responsavel_convite) VALUES (?,?,?,?,?,?,?)",
+                                   (mes_ref, s_c, n_c, f_c, e_c, t_c, r_c))
                         st.toast(f"{n_c} adicionado ao planejamento!")
                         st.rerun()
 
@@ -4478,27 +4483,71 @@ elif menu == "Almoço CDP":
             df_ed = df_almoco.copy()
             for col in ['contato_1', 'contato_2', 'confirmado']:
                 df_ed[col] = df_ed[col].astype(bool)
+            if 'responsavel_convite' not in df_ed.columns:
+                df_ed['responsavel_convite'] = ""
+            df_ed['responsavel_convite'] = df_ed['responsavel_convite'].fillna("")
 
             edited = st.data_editor(
-                df_ed[['id', 'nome', 'cargo', 'empresa', 'telefone', 'segmento', 'contato_1', 'contato_2', 'confirmado']],
+                df_ed[['id', 'nome', 'cargo', 'empresa', 'telefone', 'segmento', 'responsavel_convite', 'contato_1', 'contato_2', 'confirmado']],
                 column_config={
-                    "id": None, 
+                    "id": None,
                     "confirmado": st.column_config.CheckboxColumn("Confirmou"),
-                    "telefone": st.column_config.TextColumn("WhatsApp")
+                    "telefone": st.column_config.TextColumn("WhatsApp"),
+                    "responsavel_convite": st.column_config.TextColumn("Responsável"),
                 },
-                hide_index=True, 
+                hide_index=True,
                 use_container_width=True
             )
-            
+
             if st.button("Guardar Alterações da Tabela", type="primary"):
                 for _, r in edited.iterrows():
                     run_insert("""
-                        UPDATE Convidados_Almoco 
-                        SET contato_1=?, contato_2=?, confirmado=?, telefone=?, cargo=?, empresa=?, nome=?
+                        UPDATE Convidados_Almoco
+                        SET contato_1=?, contato_2=?, confirmado=?, telefone=?, cargo=?, empresa=?, nome=?, responsavel_convite=?
                         WHERE id=?
-                    """, (bool(r['contato_1']), bool(r['contato_2']), bool(r['confirmado']), r['telefone'], r['cargo'], r['empresa'], r['nome'], r['id']))
+                    """, (bool(r['contato_1']), bool(r['contato_2']), bool(r['confirmado']), r['telefone'], r['cargo'], r['empresa'], r['nome'], r.get('responsavel_convite',''), r['id']))
                 st.success("Tabela atualizada com sucesso!")
                 st.rerun()
+
+            # ── Exportar a lista do mês em PDF ──
+            def _pdf_convidados(_df, _mes):
+                import io as _io
+                from reportlab.lib.pagesizes import A4, landscape
+                from reportlab.lib import colors as _c
+                from reportlab.lib.units import cm as _cm
+                from reportlab.platypus import SimpleDocTemplate, Table as _T, TableStyle as _TS, Paragraph as _P, Spacer as _S
+                from reportlab.lib.styles import getSampleStyleSheet
+                _buf = _io.BytesIO()
+                _doc = SimpleDocTemplate(_buf, pagesize=landscape(A4), topMargin=1.2*_cm, bottomMargin=1*_cm, leftMargin=1*_cm, rightMargin=1*_cm)
+                _st = getSampleStyleSheet()
+                _d = _df.copy()
+                for _col in ['nome','cargo','empresa','telefone','segmento','responsavel_convite','confirmado']:
+                    if _col not in _d.columns: _d[_col] = ''
+                _d = _d.fillna('').sort_values(['segmento','nome'])
+                _rows = [['#','Nome','Cargo','Empresa','WhatsApp','Segmento','Responsável','Confirmou']]
+                for _i,(_,_r) in enumerate(_d.iterrows(),1):
+                    _rows.append([str(_i), str(_r['nome']).upper(), str(_r['cargo']), str(_r['empresa']).upper(),
+                                  str(_r['telefone']), str(_r['segmento']), str(_r['responsavel_convite']),
+                                  'Sim' if bool(_r.get('confirmado')) else ''])
+                _t = _T(_rows, repeatRows=1, colWidths=[1*_cm,5.2*_cm,5*_cm,5*_cm,3*_cm,3.3*_cm,3.3*_cm,2*_cm])
+                _t.setStyle(_TS([
+                    ('BACKGROUND',(0,0),(-1,0),_c.HexColor('#1F3864')),('TEXTCOLOR',(0,0),(-1,0),_c.white),
+                    ('FONTNAME',(0,0),(-1,0),'Helvetica-Bold'),('FONTSIZE',(0,0),(-1,-1),8),
+                    ('GRID',(0,0),(-1,-1),0.3,_c.HexColor('#CCCCCC')),('VALIGN',(0,0),(-1,-1),'MIDDLE'),
+                    ('ROWBACKGROUNDS',(0,1),(-1,-1),[_c.white,_c.HexColor('#F2F4F7')]),
+                    ('TOPPADDING',(0,0),(-1,-1),3),('BOTTOMPADDING',(0,0),(-1,-1),3),
+                ]))
+                _el = [_P(f"<b>Almoço CDP — Convidados {_mes}</b>", _st['Title']), _S(1,8), _t, _S(1,10),
+                       _P(f"Total: {len(_d)} convidados · gerado em {__import__('datetime').date.today().strftime('%d/%m/%Y')}", _st['Normal'])]
+                _doc.build(_el)
+                return _buf.getvalue()
+
+            st.download_button(
+                "Exportar lista em PDF",
+                data=_pdf_convidados(df_almoco, mes_ref),
+                file_name=f"convidados_almoco_{str(mes_ref).replace('/','-')}.pdf",
+                mime="application/pdf",
+            )
 
 # --- 2. PARCEIROS E PROJETOS ---
 elif menu == "Parcerias":
