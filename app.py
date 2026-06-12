@@ -4504,16 +4504,28 @@ elif menu == "Almoço CDP":
                 hide_index=True,
                 use_container_width=True,
                 height=460,
+                num_rows="dynamic",
             )
+            st.caption("Edite os campos direto na tabela. Para **remover**, passe o mouse na linha e use o ícone de lixeira (ou selecione e tecle Delete). Para **adicionar**, preencha a última linha em branco. Depois clique em “Guardar alterações”.")
 
-            if st.button("Guardar Alterações da Tabela", type="primary"):
+            if st.button("Guardar alterações", type="primary"):
+                _orig_ids = set(int(i) for i in df_ed['id'].tolist())
+                _mantidos = set()
+                _seg_pad = list(metas.keys())[0] if metas else "Empresa Privada"
                 for _, r in edited.iterrows():
-                    run_insert("""
-                        UPDATE Convidados_Almoco
-                        SET contato_1=?, contato_2=?, confirmado=?, telefone=?, cargo=?, empresa=?, nome=?, responsavel_convite=?
-                        WHERE id=?
-                    """, (bool(r['contato_1']), bool(r['contato_2']), bool(r['confirmado']), r['telefone'], r['cargo'], r['empresa'], r['nome'], r.get('responsavel_convite',''), r['id']))
-                st.success("Tabela atualizada com sucesso!")
+                    _rid = r.get('id')
+                    if pd.isna(_rid):  # linha nova digitada na tabela
+                        if str(r.get('nome') or '').strip():
+                            run_insert("INSERT INTO Convidados_Almoco (mes_referencia, segmento, nome, cargo, empresa, telefone, responsavel_convite, confirmado) VALUES (?,?,?,?,?,?,?,?)",
+                                       (mes_ref, (r.get('segmento') or _seg_pad), r.get('nome',''), r.get('cargo',''), r.get('empresa',''), r.get('telefone',''), r.get('responsavel_convite',''), bool(r.get('confirmado'))))
+                        continue
+                    _rid = int(_rid); _mantidos.add(_rid)
+                    run_insert("UPDATE Convidados_Almoco SET contato_1=?, contato_2=?, confirmado=?, telefone=?, cargo=?, empresa=?, nome=?, segmento=?, responsavel_convite=? WHERE id=?",
+                               (bool(r['contato_1']), bool(r['contato_2']), bool(r['confirmado']), r['telefone'], r['cargo'], r['empresa'], r['nome'], r.get('segmento',''), r.get('responsavel_convite',''), _rid))
+                _removidos = _orig_ids - _mantidos
+                for _del in _removidos:
+                    run_insert("DELETE FROM Convidados_Almoco WHERE id=?", (_del,))
+                st.success(f"Salvo: {len(_mantidos)} atualizado(s), {len(_removidos)} removido(s).")
                 st.rerun()
 
             # ── Exportar a lista do mês em PDF ──
