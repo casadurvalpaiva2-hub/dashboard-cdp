@@ -4483,12 +4483,51 @@ elif menu == "Almoço CDP":
             df_ed = df_almoco.copy()
             for col in ['contato_1', 'contato_2', 'confirmado']:
                 df_ed[col] = df_ed[col].astype(bool)
-            if 'responsavel_convite' not in df_ed.columns:
-                df_ed['responsavel_convite'] = ""
-            df_ed['responsavel_convite'] = df_ed['responsavel_convite'].fillna("")
+            for _c0 in ['responsavel_convite', 'segmento', 'empresa', 'cargo', 'telefone', 'nome']:
+                if _c0 not in df_ed.columns: df_ed[_c0] = ""
+                df_ed[_c0] = df_ed[_c0].fillna("").astype(str)
+
+            # ── Resumo do mês ──
+            _tot = len(df_ed); _conf = int(df_ed['confirmado'].sum())
+            _nseg = int(df_ed.loc[df_ed['segmento'].str.strip() != '', 'segmento'].nunique())
+            kpi_row([
+                {"label": "Convidados",  "value": _tot},
+                {"label": "Confirmados", "value": _conf, "accent": True},
+                {"label": "Pendentes",   "value": _tot - _conf},
+                {"label": "Segmentos",   "value": _nseg},
+            ])
+
+            # ── Filtros e ordenação ──
+            _fc1, _fc2, _fc3, _fc4 = st.columns([2, 2, 2, 3])
+            _segs = ["Todos"] + sorted({s for s in df_ed['segmento'] if str(s).strip()})
+            _f_seg    = _fc1.selectbox("Segmento", _segs, key="alm_f_seg")
+            _f_status = _fc2.selectbox("Confirmação", ["Todos", "Confirmados", "Pendentes"], key="alm_f_status")
+            _f_ord    = _fc3.selectbox("Ordenar por", ["Segmento e nome", "Nome (A→Z)", "Empresa", "Confirmados primeiro"], key="alm_f_ord")
+            _f_busca  = _fc4.text_input("Buscar (nome ou empresa)", key="alm_f_busca")
+
+            df_view = df_ed.copy()
+            if _f_seg != "Todos":
+                df_view = df_view[df_view['segmento'] == _f_seg]
+            if _f_status == "Confirmados":
+                df_view = df_view[df_view['confirmado']]
+            elif _f_status == "Pendentes":
+                df_view = df_view[~df_view['confirmado']]
+            if _f_busca:
+                _b = _f_busca.lower()
+                df_view = df_view[df_view['nome'].str.lower().str.contains(_b, na=False) | df_view['empresa'].str.lower().str.contains(_b, na=False)]
+            if _f_ord == "Nome (A→Z)":
+                df_view = df_view.sort_values('nome', key=lambda s: s.str.lower())
+            elif _f_ord == "Empresa":
+                df_view = df_view.sort_values(['empresa', 'nome'], key=lambda s: s.str.lower())
+            elif _f_ord == "Confirmados primeiro":
+                df_view = df_view.sort_values(['confirmado', 'segmento', 'nome'], ascending=[False, True, True])
+            else:
+                df_view = df_view.sort_values(['segmento', 'nome'], key=lambda s: s.str.lower())
+
+            st.caption(f"Mostrando {len(df_view)} de {_tot} convidados.")
 
             edited = st.data_editor(
-                df_ed[['id', 'nome', 'cargo', 'empresa', 'telefone', 'segmento', 'responsavel_convite', 'contato_1', 'contato_2', 'confirmado']],
+                df_view[['id', 'nome', 'cargo', 'empresa', 'telefone', 'segmento', 'responsavel_convite', 'contato_1', 'contato_2', 'confirmado']],
                 column_config={
                     "id": None,
                     "nome":                st.column_config.TextColumn("Nome", width="medium"),
@@ -4509,7 +4548,7 @@ elif menu == "Almoço CDP":
             st.caption("Edite os campos direto na tabela. Para **remover**, passe o mouse na linha e use o ícone de lixeira (ou selecione e tecle Delete). Para **adicionar**, preencha a última linha em branco. Depois clique em “Guardar alterações”.")
 
             if st.button("Guardar alterações", type="primary"):
-                _orig_ids = set(int(i) for i in df_ed['id'].tolist())
+                _orig_ids = set(int(i) for i in df_view['id'].tolist())  # escopo: apenas o que está sendo exibido
                 _mantidos = set()
                 _seg_pad = list(metas.keys())[0] if metas else "Empresa Privada"
                 for _, r in edited.iterrows():
