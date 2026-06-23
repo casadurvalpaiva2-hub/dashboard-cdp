@@ -4364,7 +4364,10 @@ elif menu == "Almoço CDP":
                                     color=_GRAY_LINE, spaceAfter=6))
 
                 # ── Tabela ────────────────────────────────────────────────
-                _cw = [_CW * 0.37, _CW * 0.31, _CW * 0.32]
+                _cw = [_CW * 0.34, _CW * 0.34, _CW * 0.32]
+                # Estilos de célula com QUEBRA de texto (evita texto invadindo a coluna vizinha)
+                _cs_nome = _RLParStyle("cs_nome", fontName="Helvetica-Bold", fontSize=8.5, leading=10.5, textColor=_DARK)
+                _cs_cel  = _RLParStyle("cs_cel",  fontName="Helvetica",      fontSize=8.5, leading=10.5, textColor=_DARK)
                 _data = [["NOME", "CARGO / FUNÇÃO", "EMPRESA"]]
 
                 for _, _row in df_c.assign(
@@ -4376,7 +4379,7 @@ elif menu == "Almoço CDP":
                     _emp  = str(_row.get("empresa", "")) if pd.notna(_row.get("empresa", "")) else ""
                     _car  = _car.upper() if _car.lower() not in ["nan", "none", ""] else "-"
                     _emp  = _emp.upper() if _emp.lower() not in ["nan", "none", ""] else "-"
-                    _data.append([_nome, _car, _emp])
+                    _data.append([_RLPar(_nome, _cs_nome), _RLPar(_car, _cs_cel), _RLPar(_emp, _cs_cel)])
 
                 _t = _RLTable(_data, colWidths=_cw, repeatRows=1)
                 _n_rows = len(_data)
